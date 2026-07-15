@@ -73,9 +73,7 @@ export default function ScorerView({
             onScore={(team, delta) => adjustScore(i, team, delta)}
             onEnd={() => endMatch(i)}
             onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
-            onSubstitute={(outgoingId, incomingId, returnOutgoing) =>
-              substitutePlayer(i, outgoingId, incomingId, returnOutgoing)
-            }
+            onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
             canFill={waitingCount >= 4}
           />
         ))}

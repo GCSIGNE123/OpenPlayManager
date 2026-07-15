@@ -21,7 +21,6 @@ export default function CourtCard({
   const [draft, setDraft] = useState({});
   const [subbingId, setSubbingId] = useState(null);
   const [subChoice, setSubChoice] = useState(null);
-  const [subReturn, setSubReturn] = useState(false);
 
   const startEdit = () => {
     const map = {};
@@ -35,7 +34,6 @@ export default function CourtCard({
   const startSub = (id) => {
     setSubbingId(id);
     setSubChoice(null);
-    setSubReturn(false);
     setEditing(false);
   };
 
@@ -43,7 +41,7 @@ export default function CourtCard({
 
   const confirmSub = () => {
     if (!subChoice) return;
-    onSubstitute(subbingId, subChoice, subReturn);
+    onSubstitute(subbingId, subChoice);
     setSubbingId(null);
   };
 
@@ -146,14 +144,9 @@ export default function CourtCard({
               ))}
             </div>
           )}
-          <label style={styles.subReturnLabel}>
-            <input
-              type="checkbox"
-              checked={subReturn}
-              onChange={(e) => setSubReturn(e.target.checked)}
-            />
-            Send {players[subbingId]?.name} back to the waiting queue
-          </label>
+          <p style={styles.subReturnLabel}>
+            {players[subbingId]?.name} will go back to the waiting queue.
+          </p>
           <div style={styles.editActions}>
             <button style={styles.secondaryBtn} onClick={cancelSub}>
               Cancel

@@ -375,13 +375,9 @@ export const styles = {
     padding: 0,
   },
   subReturnLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
     fontSize: 12,
     color: "#5c6157",
     margin: "10px 0 0 0",
-    cursor: "pointer",
   },
   teamName: {
     fontSize: 12.5,

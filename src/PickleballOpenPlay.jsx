@@ -429,14 +429,14 @@ export default function PickleballOpenPlay() {
   };
 
   // swap one player out of a live court for someone from the waiting queue —
-  // for injuries, phone calls, or other mid-game emergencies
-  const substitutePlayer = (courtIdx, outgoingId, incomingId, returnOutgoingToQueue) => {
+  // for injuries, phone calls, or other mid-game emergencies. The outgoing
+  // player automatically goes back to the waiting queue.
+  const substitutePlayer = (courtIdx, outgoingId, incomingId) => {
     const court = state.courts[courtIdx];
     const teamA = court.teamA.map((id) => (id === outgoingId ? incomingId : id));
     const teamB = court.teamB.map((id) => (id === outgoingId ? incomingId : id));
     const courts = state.courts.map((c, i) => (i === courtIdx ? { ...c, teamA, teamB } : c));
-    let queueIds = state.queueIds.filter((id) => id !== incomingId);
-    if (returnOutgoingToQueue) queueIds = [...queueIds, outgoingId];
+    const queueIds = [...state.queueIds.filter((id) => id !== incomingId), outgoingId];
     save({ ...state, courts, queueIds });
   };
 
