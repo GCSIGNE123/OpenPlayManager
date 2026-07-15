@@ -2,16 +2,19 @@
 
 A web app for running pickleball open plays: session check-in with player photos, automatic doubles matchmaking (winners play winners, losers play losers), live scoring by court, standings, and a paid access-code gate for creating new sessions.
 
-This started as a Claude.ai artifact prototype and has been packaged here as a standalone Vite + React project you can run locally.
+This started as a Claude.ai artifact prototype and has been packaged here as a standalone Vite + React project backed by [Supabase](https://supabase.com) for storage and real-time sync.
 
 ## Quick start
 
 ```bash
 npm install
+cp .env.example .env.local   # fill in your Supabase project's URL + anon key
 npm run dev
 ```
 
 Then open the URL Vite prints (usually `http://localhost:5173`).
+
+You'll need a Supabase project and its schema set up first — see `backend/README.md` for the one-time setup (create a project, run `supabase/schema.sql`, copy your API keys).
 
 To build a production bundle:
 
@@ -20,15 +23,13 @@ npm run build
 npm run preview
 ```
 
-## ⚠️ Before you rely on this — read this first
+## Multi-device sync
 
-This package runs locally out of the box, but **one important piece of behavior changed** in the process of taking it out of Claude.ai: the original artifact used a host-provided `window.storage` API that synced data across every device viewing it in real time. That's how two different phones at the courts could both see the same live score.
+The original Claude.ai artifact used a host-provided `window.storage` API that synced data across every device viewing it in real time — that's how two different phones at the courts could both see the same live score.
 
-Outside Claude.ai, there's no such API, so `src/storage.js` stands in for it using your browser's `localStorage`. The app runs and works correctly on a single device/browser, but **it will not sync across multiple phones** the way the original did — each device would have its own isolated session data.
+`src/storage.js` now stands in for that API using Supabase (Postgres + Realtime) instead of a Claude.ai-only feature. Two different phones pointed at the same Supabase project see the same session data, and score/check-in updates show up on every connected device within about a second via Realtime — no polling, no manual refresh. See `backend/README.md` for how the table is structured and what the trust model is.
 
-Read `backend/README.md` for what a real fix looks like (a small backend + swapping out `src/storage.js`, nothing else needs to change).
-
-Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer role (`1234`) and the Organizer/admin role that generates paid access codes (`918273`). Anyone who reads the source code can find these. Fine for testing, not fine for actually taking payments — see `backend/README.md` for what to do before that.
+Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer role (`1234`) and the Organizer/admin role that generates paid access codes (`918273`). Anyone who reads the source code can find these, and Supabase's row-level security currently doesn't enforce them either. Fine for testing, not fine for actually taking payments — see `backend/README.md` for what to do before that.
 
 ## What's included
 
@@ -47,30 +48,38 @@ openplay-manager/
 ├── index.html              Vite entry HTML
 ├── package.json
 ├── vite.config.js
+├── .env.example             Template for your Supabase URL + anon key
 ├── public/
 │   └── favicon.svg
 ├── src/
 │   ├── main.jsx             App entry point — loads the storage shim first
 │   ├── App.jsx               Thin wrapper around the main component
-│   ├── PickleballOpenPlay.jsx   The entire application (UI + logic)
-│   ├── storage.js            localStorage-backed stand-in for window.storage
+│   ├── PickleballOpenPlay.jsx   The top-level app state/logic and screen router
+│   ├── storage.js            Supabase-backed stand-in for window.storage
+│   ├── lib/
+│   │   ├── supabaseClient.js Supabase client setup (reads VITE_ env vars)
+│   │   ├── constants.js      Shared constants and default state shapes
+│   │   └── utils.js          Pure helper functions (matchmaking, codes, etc.)
+│   ├── components/           Extracted screen and UI components
 │   └── index.css
+├── supabase/
+│   └── schema.sql           Run once in the Supabase SQL editor to set up the database
 └── backend/
-    └── README.md            Explains the storage limitation and how to add a real backend
+    └── README.md            Explains the Supabase setup and trust model
 ```
 
-Everything the app does — sessions, players, matches, standings, access codes — lives inside the single `PickleballOpenPlay.jsx` component, using React state plus the `storage.js` persistence layer. There's no build step beyond what Vite does automatically.
+Everything the app does — sessions, players, matches, standings, access codes — is driven from `PickleballOpenPlay.jsx`'s state, persisted through the `storage.js` layer and synced live via Supabase Realtime. There's no build step beyond what Vite does automatically.
 
 ## Tech stack
 
 - [React](https://react.dev/) 18
 - [Vite](https://vitejs.dev/) for dev server and bundling
+- [Supabase](https://supabase.com) (Postgres + Realtime) for storage and live sync
 - [lucide-react](https://lucide.dev/) for icons
-- Plain inline styles (no CSS framework) — all design tokens live at the bottom of `PickleballOpenPlay.jsx`
+- Plain inline styles (no CSS framework) — all design tokens live in `src/styles.js`
 
 ## Known limitations (carried over from the prototype)
 
-- No real authentication — Scorer and Organizer roles are gated by hardcoded PINs, not accounts
-- No true real-time push — the Live Board polls for updates every 3 seconds rather than updating instantly
-- Player photos are stored as compressed base64 thumbnails inside the same storage as everything else, which is fine at open-play scale but wouldn't scale to a large multi-club deployment
-- Access codes and session data currently share the same trust boundary — anyone with basic technical knowledge and browser dev tools could inspect what's in `localStorage`
+- No real authentication — Scorer and Organizer roles are gated by hardcoded PINs, not accounts, and Supabase row-level security doesn't enforce them either (see `backend/README.md`)
+- Player photos are stored as compressed base64 thumbnails inside the same table as everything else, which is fine at open-play scale but wouldn't scale to a large multi-club deployment
+- Access codes and session data currently share the same trust boundary — the Supabase anon key (public in the client bundle) has full read/write access to both
