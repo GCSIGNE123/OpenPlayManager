@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Repeat, RotateCcw, Shuffle, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
+import PlayerPicker from "./PlayerPicker.jsx";
 import TeamRow from "./TeamRow.jsx";
 
 export default function CourtCard({
@@ -125,25 +126,12 @@ export default function CourtCard({
       {isLive && subbingId && (
         <div>
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
-          {waitingPlayers.length === 0 ? (
-            <p style={styles.editWarning}>No one is waiting to sub in right now.</p>
-          ) : (
-            <div style={styles.editGrid}>
-              {waitingPlayers.map((p) => (
-                <button
-                  key={p.id}
-                  style={{
-                    ...styles.editChip,
-                    ...(subChoice === p.id ? styles.editChipA : {}),
-                  }}
-                  onClick={() => setSubChoice(p.id)}
-                >
-                  <Avatar player={p} size={22} />
-                  <span style={styles.editChipName}>{p.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <PlayerPicker
+            players={waitingPlayers}
+            selectedId={subChoice}
+            onSelect={setSubChoice}
+            emptyMessage="No one is waiting to sub in right now."
+          />
           <p style={styles.subReturnLabel}>
             {players[subbingId]?.name} will go back to the waiting queue.
           </p>

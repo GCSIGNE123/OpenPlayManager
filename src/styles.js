@@ -510,6 +510,11 @@ export const styles = {
     color: "#8a8f83",
     margin: "0 0 10px 0",
   },
+  playerSearchInput: {
+    width: "100%",
+    marginBottom: 10,
+    fontSize: 13,
+  },
   editGrid: {
     display: "flex",
     flexDirection: "column",

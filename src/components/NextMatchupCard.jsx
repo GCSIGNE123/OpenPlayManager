@@ -3,6 +3,7 @@ import { Check, Repeat, Shuffle } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerChip from "./PlayerChip.jsx";
+import PlayerPicker from "./PlayerPicker.jsx";
 
 // A pre-built upcoming matchup, editable before it's assigned to a court —
 // mirrors CourtCard's "fix teams" / substitute interactions, minus anything
@@ -94,25 +95,12 @@ export default function NextMatchupCard({ matchup, players, unassignedPlayers, l
       ) : subbingId ? (
         <div>
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
-          {unassignedPlayers.length === 0 ? (
-            <p style={styles.editWarning}>No one else is waiting to sub in right now.</p>
-          ) : (
-            <div style={styles.editGrid}>
-              {unassignedPlayers.map((p) => (
-                <button
-                  key={p.id}
-                  style={{
-                    ...styles.editChip,
-                    ...(subChoice === p.id ? styles.editChipA : {}),
-                  }}
-                  onClick={() => setSubChoice(p.id)}
-                >
-                  <Avatar player={p} size={22} />
-                  <span style={styles.editChipName}>{p.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <PlayerPicker
+            players={unassignedPlayers}
+            selectedId={subChoice}
+            onSelect={setSubChoice}
+            emptyMessage="No one else is waiting to sub in right now."
+          />
           <p style={styles.subReturnLabel}>
             {players[subbingId]?.name} will go back to the waiting queue.
           </p>
