@@ -16,7 +16,7 @@ export const emptyCourt = (number) => ({
 export const defaultState = {
   venue: "",
   courts: [],
-  players: {}, // id -> { id, name, photo, checkedIn, games, wins, losses, streak, lastResult, pointsFor, pointsAgainst }
+  players: {}, // id -> { id, name, photo, checkedIn, games, wins, losses, streak, lastResult, lastPartnerId, pointsFor, pointsAgainst }
   queueIds: [],
   updatedAt: 0,
 };

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { ACCESS_PREFIX, ADMIN_PIN, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
-import { findUniqueAccessCode, findUniqueSessionCode, pickNextGroup, shuffle, uid, resizeImageToAvatar } from "./lib/utils.js";
+import { findUniqueAccessCode, findUniqueSessionCode, pairTeamsAvoidingRematch, pickNextGroup, uid, resizeImageToAvatar } from "./lib/utils.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -139,6 +139,7 @@ export default function PickleballOpenPlay() {
           losses: 0,
           streak: 0,
           lastResult: null,
+          lastPartnerId: null,
           pointsFor: 0,
           pointsAgainst: 0,
         };
@@ -318,6 +319,7 @@ export default function PickleballOpenPlay() {
         losses: 0,
         streak: 0,
         lastResult: null,
+        lastPartnerId: null,
         pointsFor: 0,
         pointsAgainst: 0,
         photo: photoDataUrl || null,
@@ -338,12 +340,10 @@ export default function PickleballOpenPlay() {
 
     const chosen = pickNextGroup(state.queueIds, state.players);
     const remaining = state.queueIds.filter((id) => !chosen.includes(id));
-    const [p1, p2, p3, p4] = shuffle(chosen);
+    const [teamA, teamB] = pairTeamsAvoidingRematch(chosen, state.players);
 
     const courts = state.courts.map((c, i) =>
-      i === courtIdx
-        ? { ...c, status: "live", teamA: [p1, p2], teamB: [p3, p4], scoreA: 0, scoreB: 0 }
-        : c
+      i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 } : c
     );
     save({ ...state, courts, queueIds: remaining });
   };
@@ -355,8 +355,8 @@ export default function PickleballOpenPlay() {
       if (c.status !== "open" || queueIds.length < 4) return c;
       const chosen = pickNextGroup(queueIds, players);
       queueIds = queueIds.filter((id) => !chosen.includes(id));
-      const [p1, p2, p3, p4] = shuffle(chosen);
-      return { ...c, status: "live", teamA: [p1, p2], teamB: [p3, p4], scoreA: 0, scoreB: 0 };
+      const [teamA, teamB] = pairTeamsAvoidingRematch(chosen, players);
+      return { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 };
     });
     save({ ...state, courts, queueIds });
   };
@@ -396,6 +396,9 @@ export default function PickleballOpenPlay() {
         losses: (p.losses || 0) + (bWon ? 1 : 0),
         streak: aWon ? (p.streak || 0) + 1 : 0,
         lastResult: aWon ? "win" : bWon ? "loss" : p.lastResult,
+        // remembered so the next match can avoid reuniting the same pair —
+        // see pairTeamsAvoidingRematch
+        lastPartnerId: teamA.find((otherId) => otherId !== id) ?? p.lastPartnerId,
         pointsFor: (p.pointsFor || 0) + scoreA,
         pointsAgainst: (p.pointsAgainst || 0) + scoreB,
       };
@@ -410,6 +413,7 @@ export default function PickleballOpenPlay() {
         losses: (p.losses || 0) + (aWon ? 1 : 0),
         streak: bWon ? (p.streak || 0) + 1 : 0,
         lastResult: bWon ? "win" : aWon ? "loss" : p.lastResult,
+        lastPartnerId: teamB.find((otherId) => otherId !== id) ?? p.lastPartnerId,
         pointsFor: (p.pointsFor || 0) + scoreB,
         pointsAgainst: (p.pointsAgainst || 0) + scoreA,
       };

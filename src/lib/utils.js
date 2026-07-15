@@ -77,6 +77,24 @@ export function pickNextGroup(queueIds, players) {
   return sortByGames(queueIds, players).slice(0, 4);
 }
 
+// splits a group of exactly 4 players into two new teams, avoiding pairing
+// up anyone with the partner they were just teamed with (players[id].lastPartnerId)
+// — e.g. court 1's winner and court 2's winner get cross-paired instead of the
+// two winning partners from the same court simply playing together again.
+// Falls back to any split when 4 mutual strangers/rematches make it unavoidable
+// (or when nobody has a recorded partner yet, e.g. the first round of the day).
+export function pairTeamsAvoidingRematch(group, players) {
+  const [a, b, c, d] = shuffle(group);
+  const wasPartner = (x, y) => players[x]?.lastPartnerId === y || players[y]?.lastPartnerId === x;
+  const candidates = [
+    [[a, b], [c, d]],
+    [[a, c], [b, d]],
+    [[a, d], [b, c]],
+  ];
+  const clean = candidates.find(([teamA, teamB]) => !wasPartner(...teamA) && !wasPartner(...teamB));
+  return clean || candidates[0];
+}
+
 // tries a handful of random codes and returns the first one not already in
 // use — collisions are astronomically unlikely with a 6-char code, but a
 // quick check costs nothing
@@ -120,9 +138,10 @@ export function buildQueueMatchups(waitingPlayers) {
   while (remainingIds.length >= 4) {
     const group = pickNextGroup(remainingIds, playersById);
     remainingIds = remainingIds.filter((id) => !group.includes(id));
+    const [teamA, teamB] = pairTeamsAvoidingRematch(group, playersById);
     matchups.push({
-      teamA: [playersById[group[0]], playersById[group[1]]],
-      teamB: [playersById[group[2]], playersById[group[3]]],
+      teamA: teamA.map((id) => playersById[id]),
+      teamB: teamB.map((id) => playersById[id]),
     });
   }
   return { matchups, leftover: remainingIds.map((id) => playersById[id]) };
