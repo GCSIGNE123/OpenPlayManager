@@ -45,6 +45,7 @@ export default function PickleballOpenPlay() {
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [nameInput, setNameInput] = useState("");
+  const [skillInput, setSkillInput] = useState("beginner");
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [checkinMsg, setCheckinMsg] = useState("");
@@ -140,6 +141,7 @@ export default function PickleballOpenPlay() {
           id: p.id,
           name: p.name,
           photo: p.photo,
+          skill: p.skill === "intermediate" ? "intermediate" : "beginner",
           checkedIn: false,
           games: 0,
           wins: 0,
@@ -320,6 +322,7 @@ export default function PickleballOpenPlay() {
       [id]: {
         id,
         name,
+        skill: skillInput === "intermediate" ? "intermediate" : "beginner",
         checkedIn: true,
         games: 0,
         wins: 0,
@@ -631,6 +634,8 @@ export default function PickleballOpenPlay() {
                   checkInExisting={checkInExisting}
                   nameInput={nameInput}
                   setNameInput={setNameInput}
+                  skillInput={skillInput}
+                  setSkillInput={setSkillInput}
                   quickAddCheckIn={quickAddCheckIn}
                   checkinMsg={checkinMsg}
                   waitingPlayers={waitingPlayers}

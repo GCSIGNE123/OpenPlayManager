@@ -3,12 +3,15 @@ import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import QueueList from "./QueueList.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import SkillToggle from "./SkillToggle.jsx";
 
 export default function CheckinView({
   registeredNotHere,
   checkInExisting,
   nameInput,
   setNameInput,
+  skillInput,
+  setSkillInput,
   quickAddCheckIn,
   checkinMsg,
   waitingPlayers,
@@ -30,6 +33,7 @@ export default function CheckinView({
             <li key={p.id} style={styles.rosterItem}>
               <Avatar player={p} size={26} />
               <span style={styles.queueName}>{p.name}</span>
+              {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
               <button style={styles.checkInTapBtn} onClick={() => checkInExisting(p.id)}>
                 <LogIn size={12} strokeWidth={2.5} />
                 Check in
@@ -40,6 +44,7 @@ export default function CheckinView({
       )}
 
       <SectionLabel>Walk-in (not registered)</SectionLabel>
+      <SkillToggle value={skillInput} onChange={setSkillInput} />
       <div style={styles.photoRow}>
         <div style={styles.photoPreviewWrap}>
           {photoDataUrl ? (

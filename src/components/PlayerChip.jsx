@@ -10,6 +10,9 @@ export default function PlayerChip({ player, highlight, onSubClick }) {
       <span style={{ ...styles.teamName, ...(highlight ? { color: "var(--ink)" } : {}) }}>
         {player.name}
       </span>
+      {player.skill && (
+        <span style={styles.skillTag(player.skill)}>{player.skill === "intermediate" ? "INT" : "BEG"}</span>
+      )}
       {onSubClick && (
         <button style={styles.subBtn} onClick={onSubClick} aria-label={`substitute ${player.name}`}>
           <Repeat size={11} strokeWidth={2.5} />

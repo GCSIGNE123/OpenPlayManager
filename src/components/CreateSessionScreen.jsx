@@ -4,12 +4,14 @@ import { styles } from "../styles.js";
 import { resizeImageToAvatar, uid } from "../lib/utils.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import SkillToggle from "./SkillToggle.jsx";
 
 export default function CreateSessionScreen({ onStart, onBack, creating, createError }) {
   const [venue, setVenue] = useState("Ormoc City Pickleball — Open Play");
   const [courts, setCourts] = useState(4);
   const [roster, setRoster] = useState([]);
   const [nameInput, setNameInput] = useState("");
+  const [skillInput, setSkillInput] = useState("beginner");
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
 
@@ -29,7 +31,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
   const addPlayer = () => {
     const name = nameInput.trim();
     if (!name) return;
-    setRoster((r) => [...r, { id: uid(), name, photo: photoDataUrl || null }]);
+    setRoster((r) => [...r, { id: uid(), name, skill: skillInput, photo: photoDataUrl || null }]);
     setNameInput("");
     setPhotoDataUrl(null);
   };
@@ -67,7 +69,9 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
       <SectionLabel>3. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
         This is just the guest list — everyone still needs to Check In once they're actually at the courts.
+        Skill level is used to pair a beginner with an intermediate player as teammates.
       </p>
+      <SkillToggle value={skillInput} onChange={setSkillInput} />
       <div style={styles.photoRow}>
         <div style={styles.photoPreviewWrap}>
           {photoDataUrl ? (
@@ -114,6 +118,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
             <li key={p.id} style={styles.rosterItem}>
               <Avatar player={p} size={26} />
               <span style={styles.queueName}>{p.name}</span>
+              <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
               <button
                 style={styles.rosterRemoveBtn}
                 onClick={() => removePlayer(p.id)}

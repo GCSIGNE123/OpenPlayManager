@@ -65,27 +65,65 @@ export function sortByGames(ids, players) {
   return [...ids].sort((a, b) => (players[a]?.games || 0) - (players[b]?.games || 0));
 }
 
+// tries to find 2 beginners + 2 intermediates within a pool, preferring
+// whoever's waited longest (fewest games played) within each skill —
+// returns null when the pool doesn't have enough of both skills, so callers
+// can fall back to a skill-blind pick rather than stalling matchmaking
+function pickBalancedGroup(idsPool, players) {
+  const beginners = sortByGames(
+    idsPool.filter((id) => players[id]?.skill === "beginner"),
+    players
+  );
+  const intermediates = sortByGames(
+    idsPool.filter((id) => players[id]?.skill === "intermediate"),
+    players
+  );
+  if (beginners.length < 2 || intermediates.length < 2) return null;
+  return [...beginners.slice(0, 2), ...intermediates.slice(0, 2)];
+}
+
 // picks the next 4 players for a court: prefers a full group who just won
 // their last match, then a full group who just lost, so winners keep
-// playing winners and losers keep playing losers — falls back to whoever's
-// waited longest (by fewest games played) when there aren't 4 of a kind yet
+// playing winners and losers keep playing losers — and within whichever
+// pool it draws from, prefers an even 2 beginner + 2 intermediate mix so
+// pairTeamsAvoidingRematch can pair each beginner with an intermediate.
+// Falls back to whoever's waited longest (fewest games played) when there
+// aren't 4 of a kind, or not enough of both skill levels, yet.
 export function pickNextGroup(queueIds, players) {
   const winners = queueIds.filter((id) => players[id]?.lastResult === "win");
   const losers = queueIds.filter((id) => players[id]?.lastResult === "loss");
-  if (winners.length >= 4) return sortByGames(winners, players).slice(0, 4);
-  if (losers.length >= 4) return sortByGames(losers, players).slice(0, 4);
-  return sortByGames(queueIds, players).slice(0, 4);
+
+  if (winners.length >= 4) return pickBalancedGroup(winners, players) || sortByGames(winners, players).slice(0, 4);
+  if (losers.length >= 4) return pickBalancedGroup(losers, players) || sortByGames(losers, players).slice(0, 4);
+  return pickBalancedGroup(queueIds, players) || sortByGames(queueIds, players).slice(0, 4);
 }
 
-// splits a group of exactly 4 players into two new teams, avoiding pairing
-// up anyone with the partner they were just teamed with (players[id].lastPartnerId)
-// — e.g. court 1's winner and court 2's winner get cross-paired instead of the
-// two winning partners from the same court simply playing together again.
-// Falls back to any split when 4 mutual strangers/rematches make it unavoidable
-// (or when nobody has a recorded partner yet, e.g. the first round of the day).
+// splits a group of exactly 4 players into two new teams. When the group is
+// an even 2 beginner + 2 intermediate mix, each team always gets one of
+// each (a beginner is always paired with an intermediate) — otherwise falls
+// back to a skill-blind split. Either way, avoids pairing up anyone with the
+// partner they were just teamed with (players[id].lastPartnerId) when
+// possible — e.g. court 1's winner and court 2's winner get cross-paired
+// instead of the two winning partners from the same court simply playing
+// together again. Falls back to any split when avoiding a rematch isn't
+// possible (or when nobody has a recorded partner yet).
 export function pairTeamsAvoidingRematch(group, players) {
-  const [a, b, c, d] = shuffle(group);
   const wasPartner = (x, y) => players[x]?.lastPartnerId === y || players[y]?.lastPartnerId === x;
+
+  const beginners = group.filter((id) => players[id]?.skill === "beginner");
+  const intermediates = group.filter((id) => players[id]?.skill === "intermediate");
+  if (beginners.length === 2 && intermediates.length === 2) {
+    const [b0, b1] = shuffle(beginners);
+    const [i0, i1] = shuffle(intermediates);
+    const skillCandidates = [
+      [[b0, i0], [b1, i1]],
+      [[b0, i1], [b1, i0]],
+    ];
+    const clean = skillCandidates.find(([teamA, teamB]) => !wasPartner(...teamA) && !wasPartner(...teamB));
+    return clean || skillCandidates[0];
+  }
+
+  const [a, b, c, d] = shuffle(group);
   const candidates = [
     [[a, b], [c, d]],
     [[a, c], [b, d]],
