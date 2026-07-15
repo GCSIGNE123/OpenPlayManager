@@ -18,5 +18,6 @@ export const defaultState = {
   courts: [],
   players: {}, // id -> { id, name, photo, checkedIn, games, wins, losses, streak, lastResult, lastPartnerId, pointsFor, pointsAgainst }
   queueIds: [],
+  nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id] }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
   updatedAt: 0,
 };

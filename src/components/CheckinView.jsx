@@ -12,6 +12,8 @@ export default function CheckinView({
   quickAddCheckIn,
   checkinMsg,
   waitingPlayers,
+  players,
+  nextMatchups,
   photoDataUrl,
   setPhotoDataUrl,
   handlePhotoSelect,
@@ -87,7 +89,7 @@ export default function CheckinView({
         </div>
       )}
       <SectionLabel>Currently waiting ({waitingPlayers.length})</SectionLabel>
-      <QueueList waitingPlayers={waitingPlayers} />
+      <QueueList queueIds={waitingPlayers.map((p) => p.id)} players={players} nextMatchups={nextMatchups} />
     </div>
   );
 }

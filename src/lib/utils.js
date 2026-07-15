@@ -127,22 +127,31 @@ export async function findUniqueAccessCode() {
   return generateRandomCode(8);
 }
 
-// groups the waiting list into upcoming 2v2 matchups using the same
-// winner/loser-aware logic used to actually fill a court, so the preview
-// matches what "Fill all open courts" will really do
-export function buildQueueMatchups(waitingPlayers) {
-  const playersById = {};
-  waitingPlayers.forEach((p) => (playersById[p.id] = p));
-  let remainingIds = waitingPlayers.map((p) => p.id);
-  const matchups = [];
-  while (remainingIds.length >= 4) {
-    const group = pickNextGroup(remainingIds, playersById);
-    remainingIds = remainingIds.filter((id) => !group.includes(id));
-    const [teamA, teamB] = pairTeamsAvoidingRematch(group, playersById);
-    matchups.push({
-      teamA: teamA.map((id) => playersById[id]),
-      teamB: teamB.map((id) => playersById[id]),
-    });
+// every player id currently locked into one of the pre-built upcoming
+// matchups (as opposed to still unassigned in the waiting queue)
+export function reservedMatchupIds(nextMatchups) {
+  const ids = new Set();
+  nextMatchups.forEach((m) => {
+    m.teamA.forEach((id) => ids.add(id));
+    m.teamB.forEach((id) => ids.add(id));
+  });
+  return ids;
+}
+
+// appends any additional ready-to-play matchups that can be built from
+// waiting players not already locked into one — existing matchups are left
+// completely untouched, so a scorer's manual "fix teams" / substitute edits
+// (or a matchup already mid-review) never get silently overwritten. Safe to
+// call after every state change; it's a no-op unless 4+ new players are free.
+export function refreshNextMatchups(queueIds, players, existingMatchups) {
+  const reserved = reservedMatchupIds(existingMatchups);
+  let remaining = queueIds.filter((id) => !reserved.has(id));
+  const matchups = [...existingMatchups];
+  while (remaining.length >= 4) {
+    const group = pickNextGroup(remaining, players);
+    remaining = remaining.filter((id) => !group.includes(id));
+    const [teamA, teamB] = pairTeamsAvoidingRematch(group, players);
+    matchups.push({ id: uid(), teamA, teamB });
   }
-  return { matchups, leftover: remainingIds.map((id) => playersById[id]) };
+  return matchups;
 }

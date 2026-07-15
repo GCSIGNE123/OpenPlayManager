@@ -1,30 +1,35 @@
 import { styles } from "../styles.js";
-import { buildQueueMatchups } from "../lib/utils.js";
+import { reservedMatchupIds, sortByGames } from "../lib/utils.js";
 import Avatar from "./Avatar.jsx";
 import PlayerChip from "./PlayerChip.jsx";
 
-export default function QueueList({ waitingPlayers }) {
-  if (waitingPlayers.length === 0) {
+export default function QueueList({ queueIds, players, nextMatchups }) {
+  if (queueIds.length === 0) {
     return <p style={styles.emptyQueue}>No one waiting right now — check in to join.</p>;
   }
 
-  const { matchups, leftover } = buildQueueMatchups(waitingPlayers);
+  const reserved = reservedMatchupIds(nextMatchups);
+  const leftoverIds = sortByGames(
+    queueIds.filter((id) => !reserved.has(id)),
+    players
+  );
+  const leftover = leftoverIds.map((id) => players[id]).filter(Boolean);
 
   return (
     <div>
-      {matchups.map((m, i) => (
-        <div key={i} style={styles.matchupCard(i === 0)}>
+      {nextMatchups.map((m, i) => (
+        <div key={m.id} style={styles.matchupCard(i === 0)}>
           <div style={styles.matchupHeader(i === 0)}>{i === 0 ? "Next up" : `Then · matchup ${i + 1}`}</div>
           <div style={styles.matchupTeams}>
             <div style={styles.matchupTeam}>
-              {m.teamA.map((p) => (
-                <PlayerChip key={p.id} player={p} />
+              {m.teamA.map((id) => (
+                <PlayerChip key={id} player={players[id]} />
               ))}
             </div>
             <span style={styles.matchupVs}>VS</span>
             <div style={styles.matchupTeam}>
-              {m.teamB.map((p) => (
-                <PlayerChip key={p.id} player={p} />
+              {m.teamB.map((id) => (
+                <PlayerChip key={id} player={players[id]} />
               ))}
             </div>
           </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { ACCESS_PREFIX, ADMIN_PIN, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
-import { findUniqueAccessCode, findUniqueSessionCode, pairTeamsAvoidingRematch, pickNextGroup, uid, resizeImageToAvatar } from "./lib/utils.js";
+import { findUniqueAccessCode, findUniqueSessionCode, refreshNextMatchups, uid, resizeImageToAvatar } from "./lib/utils.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -73,7 +73,14 @@ export default function PickleballOpenPlay() {
   const save = useCallback(
     async (next) => {
       if (!sessionCode) return;
-      const withStamp = { ...next, updatedAt: Date.now() };
+      // recomputed on every save: appends any newly-possible matchups from
+      // players not already locked into one, leaving existing (possibly
+      // scorer-edited) matchups untouched — see refreshNextMatchups
+      const withMatchups = {
+        ...next,
+        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || []),
+      };
+      const withStamp = { ...withMatchups, updatedAt: Date.now() };
       setState(withStamp);
       try {
         await window.storage.set(`${STORAGE_PREFIX}${sessionCode}`, JSON.stringify(withStamp), true);
@@ -145,7 +152,7 @@ export default function PickleballOpenPlay() {
         };
       });
       const courts = Array.from({ length: courtsCount }, (_, i) => emptyCourt(i + 1));
-      const initial = { venue, courts, players, queueIds: [], updatedAt: Date.now() };
+      const initial = { venue, courts, players, queueIds: [], nextMatchups: [], updatedAt: Date.now() };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
 
       // consume the access code now that a session was actually created —
@@ -333,32 +340,38 @@ export default function PickleballOpenPlay() {
     setTimeout(() => setCheckinMsg(""), 2500);
   };
 
+  // courts are filled from the front of nextMatchups — pre-built (and
+  // possibly scorer-edited) upcoming matchups — rather than recomputed on
+  // the spot, so what the scorer reviewed is exactly what gets deployed
   const fillCourt = (courtIdx) => {
     const court = state.courts[courtIdx];
     if (court.status !== "open") return;
-    if (state.queueIds.length < 4) return;
+    const [nextMatch, ...restMatchups] = state.nextMatchups || [];
+    if (!nextMatch) return;
 
-    const chosen = pickNextGroup(state.queueIds, state.players);
-    const remaining = state.queueIds.filter((id) => !chosen.includes(id));
-    const [teamA, teamB] = pairTeamsAvoidingRematch(chosen, state.players);
-
+    const { teamA, teamB } = nextMatch;
+    const consumed = new Set([...teamA, ...teamB]);
+    const queueIds = state.queueIds.filter((id) => !consumed.has(id));
     const courts = state.courts.map((c, i) =>
       i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 } : c
     );
-    save({ ...state, courts, queueIds: remaining });
+    save({ ...state, courts, queueIds, nextMatchups: restMatchups });
   };
 
   const fillAllCourts = () => {
     let queueIds = [...state.queueIds];
-    const players = state.players;
+    let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
-      if (c.status !== "open" || queueIds.length < 4) return c;
-      const chosen = pickNextGroup(queueIds, players);
-      queueIds = queueIds.filter((id) => !chosen.includes(id));
-      const [teamA, teamB] = pairTeamsAvoidingRematch(chosen, players);
+      if (c.status !== "open") return c;
+      const [nextMatch, ...rest] = remainingMatchups;
+      if (!nextMatch) return c;
+      remainingMatchups = rest;
+      const { teamA, teamB } = nextMatch;
+      const consumed = new Set([...teamA, ...teamB]);
+      queueIds = queueIds.filter((id) => !consumed.has(id));
       return { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 };
     });
-    save({ ...state, courts, queueIds });
+    save({ ...state, courts, queueIds, nextMatchups: remainingMatchups });
   };
 
   const adjustScore = (courtIdx, team, delta) => {
@@ -438,6 +451,28 @@ export default function PickleballOpenPlay() {
     const courts = state.courts.map((c, i) => (i === courtIdx ? { ...c, teamA, teamB } : c));
     const queueIds = [...state.queueIds.filter((id) => id !== incomingId), outgoingId];
     save({ ...state, courts, queueIds });
+  };
+
+  // ---- next-matchup editing (before a matchup is assigned to a court) ----
+
+  const reassignMatchup = (matchupId, teamA, teamB) => {
+    const nextMatchups = (state.nextMatchups || []).map((m) =>
+      m.id === matchupId ? { ...m, teamA, teamB } : m
+    );
+    save({ ...state, nextMatchups });
+  };
+
+  // swaps a player out of an upcoming (not-yet-deployed) matchup for someone
+  // else still waiting — both players simply stay in the same queueIds the
+  // whole time, since neither one leaves the waiting queue
+  const substituteInMatchup = (matchupId, outgoingId, incomingId) => {
+    const nextMatchups = (state.nextMatchups || []).map((m) => {
+      if (m.id !== matchupId) return m;
+      const teamA = m.teamA.map((id) => (id === outgoingId ? incomingId : id));
+      const teamB = m.teamB.map((id) => (id === outgoingId ? incomingId : id));
+      return { ...m, teamA, teamB };
+    });
+    save({ ...state, nextMatchups });
   };
 
   const tryScorerLogin = () => {
@@ -588,7 +623,7 @@ export default function PickleballOpenPlay() {
             <main style={styles.main}>
               {!loaded && <div style={styles.loading}>Loading session…</div>}
 
-              {loaded && view === "board" && <BoardView state={state} waitingPlayers={waitingPlayers} />}
+              {loaded && view === "board" && <BoardView state={state} />}
 
               {loaded && view === "checkin" && (
                 <CheckinView
@@ -599,6 +634,8 @@ export default function PickleballOpenPlay() {
                   quickAddCheckIn={quickAddCheckIn}
                   checkinMsg={checkinMsg}
                   waitingPlayers={waitingPlayers}
+                  players={state.players}
+                  nextMatchups={state.nextMatchups || []}
                   photoDataUrl={photoDataUrl}
                   setPhotoDataUrl={setPhotoDataUrl}
                   handlePhotoSelect={handlePhotoSelect}
@@ -621,6 +658,8 @@ export default function PickleballOpenPlay() {
                   endMatch={endMatch}
                   reassignTeams={reassignTeams}
                   substitutePlayer={substitutePlayer}
+                  reassignMatchup={reassignMatchup}
+                  substituteInMatchup={substituteInMatchup}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}
