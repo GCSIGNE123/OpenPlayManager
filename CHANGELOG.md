@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #12)
+
+### Added
+- Scorer: "Won" button next to each team on a live court, for casual games that don't need point-by-point scoring — sets the declared winner's score to 11 and the other team's to 0 in one click and marks the court finished, ready for "End match". New `declareWinner(courtIdx, team)` in `PickleballOpenPlay.jsx`; a win recorded this way is indistinguishable from a normally-scored 11-0 game in stats, `matchHistory`, and rotation history, since it goes through the same score/status/`endMatch` flow
+
 ## 2026-07-16 (later, cont'd #11)
 
 ### Added

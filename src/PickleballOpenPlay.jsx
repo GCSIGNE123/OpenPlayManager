@@ -471,6 +471,17 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
+  // quick path for casual games that don't need point-by-point scoring —
+  // sets the score straight to 11-0 for the declared winner (still counts
+  // as a normal win in stats/history, just without the play-by-play) and
+  // marks the court "finished" so "End match" is immediately available
+  const declareWinner = (courtIdx, team) => {
+    const courts = state.courts.map((c, i) =>
+      i === courtIdx ? { ...c, scoreA: team === "A" ? 11 : 0, scoreB: team === "B" ? 11 : 0, status: "finished" } : c
+    );
+    save({ ...state, courts });
+  };
+
   const endMatch = (courtIdx) => {
     // "Undo last round" restores this exact pre-match state (court still
     // live with its original teams/score, players' stats and rotation
@@ -878,6 +889,7 @@ export default function PickleballOpenPlay() {
                   fillCourt={fillCourt}
                   fillAllCourts={fillAllCourts}
                   adjustScore={adjustScore}
+                  declareWinner={declareWinner}
                   endMatch={endMatch}
                   reassignTeams={reassignTeams}
                   substitutePlayer={substitutePlayer}

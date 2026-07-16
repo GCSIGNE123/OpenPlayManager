@@ -13,6 +13,7 @@ export default function ScorerView({
   fillCourt,
   fillAllCourts,
   adjustScore,
+  declareWinner,
   endMatch,
   reassignTeams,
   substitutePlayer,
@@ -190,6 +191,7 @@ export default function ScorerView({
               waitingPlayers={unassignedPlayers}
               onFill={() => fillCourt(i)}
               onScore={(team, delta) => adjustScore(i, team, delta)}
+              onDeclareWinner={(team) => declareWinner(i, team)}
               onEnd={() => endMatch(i)}
               onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
               onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}

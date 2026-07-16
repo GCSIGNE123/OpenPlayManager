@@ -12,6 +12,7 @@ export default function CourtCard({
   readOnly,
   onFill,
   onScore,
+  onDeclareWinner,
   onEnd,
   onReassign,
   onSubstitute,
@@ -184,6 +185,7 @@ export default function CourtCard({
             readOnly={readOnly}
             leading={court.scoreA > court.scoreB}
             onRequestSub={!readOnly ? startSub : null}
+            onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
           />
           <div style={styles.vsLine} />
           <TeamRow
@@ -195,6 +197,7 @@ export default function CourtCard({
             readOnly={readOnly}
             leading={court.scoreB > court.scoreA}
             onRequestSub={!readOnly ? startSub : null}
+            onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
           />
           {!readOnly && (
             <div style={styles.courtActionsRow}>

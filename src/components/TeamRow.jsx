@@ -1,8 +1,8 @@
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 
-export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub }) {
+export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner }) {
   return (
     <div style={styles.teamRow}>
       <div style={styles.teamPlayers}>
@@ -15,6 +15,16 @@ export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly
           />
         ))}
       </div>
+      {onDeclareWinner && (
+        <button
+          style={styles.declareWinnerBtn}
+          onClick={onDeclareWinner}
+          title="Skip point-by-point scoring — mark this team the winner, 11-0"
+        >
+          <Trophy size={12} strokeWidth={2.5} />
+          Won
+        </button>
+      )}
       <div style={styles.scoreControl}>
         {!readOnly && (
           <button style={styles.scoreBtn} onClick={onMinus} aria-label="decrease score">
