@@ -1,7 +1,7 @@
 import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { reservedMatchupIds } from "../lib/utils.js";
-import { getPairPartnerIndex } from "../lib/winnerPoolRound.js";
+import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
 import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
@@ -34,6 +34,7 @@ export default function ScorerView({
   setExpectedGamesPerPlayer,
   progressiveSkillThresholds,
   setProgressiveSkillThresholds,
+  progressiveSkillPhase,
   matchHistory,
   waitingCount,
   addCourt,
@@ -180,27 +181,36 @@ export default function ScorerView({
         )}
       </div>
       <div style={styles.courtGrid}>
-        {state.courts.map((court, i) => {
-          const partnerIdx = rotationMode === "winnerPool" ? getPairPartnerIndex(state.courts, i) : null;
-          const pairPartnerNumber = partnerIdx !== null ? state.courts[partnerIdx]?.number : null;
-          return (
-            <CourtCard
-              key={i}
-              court={court}
-              players={state.players}
-              waitingPlayers={unassignedPlayers}
-              onFill={() => fillCourt(i)}
-              onScore={(team, delta) => adjustScore(i, team, delta)}
-              onDeclareWinner={(team) => declareWinner(i, team)}
-              onEnd={() => endMatch(i)}
-              onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
-              onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
-              canFill={canFillCourt}
-              pairPartnerNumber={pairPartnerNumber}
-              poolingMode={rotationMode === "winnerPool"}
-            />
-          );
-        })}
+        {(() => {
+          // pooling (Winner Pool Rotation, or Progressive Skill Rotation in
+          // Mentorship) gates both the "waiting for its pair" hint and the
+          // Confirm-result button label. A court that's already
+          // "awaitingPair" keeps its pair-partner hint even if the phase has
+          // since moved on — see the matching endMatch fallback in
+          // PickleballOpenPlay.jsx that still resolves that pairing.
+          const poolingActive = isPoolingRotation(rotationMode, progressiveSkillPhase);
+          return state.courts.map((court, i) => {
+            const partnerIdx = poolingActive || court.awaitingPair ? getPairPartnerIndex(state.courts, i) : null;
+            const pairPartnerNumber = partnerIdx !== null ? state.courts[partnerIdx]?.number : null;
+            return (
+              <CourtCard
+                key={i}
+                court={court}
+                players={state.players}
+                waitingPlayers={unassignedPlayers}
+                onFill={() => fillCourt(i)}
+                onScore={(team, delta) => adjustScore(i, team, delta)}
+                onDeclareWinner={(team) => declareWinner(i, team)}
+                onEnd={() => endMatch(i)}
+                onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
+                onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
+                canFill={canFillCourt}
+                pairPartnerNumber={pairPartnerNumber}
+                poolingMode={poolingActive}
+              />
+            );
+          });
+        })()}
       </div>
     </div>
   );

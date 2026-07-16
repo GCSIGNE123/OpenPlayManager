@@ -15,6 +15,19 @@ export function getPairPartnerIndex(courts, courtIdx) {
   return partnerIdx >= 0 && partnerIdx < courts.length ? partnerIdx : null;
 }
 
+// Whether pooling (courts pair up 1&2/3&4/..., winners pool together,
+// losers pool together, see resolveWinnerPoolMatch below) should apply to
+// the court that just finished. True for the standalone "Winner Pool
+// Rotation" mode, and also for Progressive Skill Rotation while it's in the
+// Mentorship phase — the spec for that phase calls for the same pairwise
+// pooling mechanic (still built on BalancedRotationEngine's beginner+
+// intermediate/recency scoring via WinnerPoolRotationEngine, same as
+// standalone Winner Pool Rotation). Transition and Competitive stay on the
+// normal per-court continuous-queue lifecycle.
+export function isPoolingRotation(rotationMode, phase) {
+  return rotationMode === "winnerPool" || (rotationMode === "progressiveSkill" && phase === "mentorship");
+}
+
 // Called right after a court's match is confirmed ended (stats/history
 // already recorded elsewhere — see PickleballOpenPlay.jsx's endMatch). Holds
 // a finished court until its pair partner also finishes, then pools both

@@ -12,7 +12,7 @@ import {
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
-import { resolveWinnerPoolMatch } from "./lib/winnerPoolRound.js";
+import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { calculateSessionProgress, getProgressivePhase } from "./lib/progressiveSkillPhase.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
@@ -548,7 +548,16 @@ export default function PickleballOpenPlay() {
     };
     const matchHistory = [...(state.matchHistory || []), matchRecord];
 
-    if (state.rotationMode === "winnerPool") {
+    // pooling applies to standalone Winner Pool Rotation, and to Progressive
+    // Skill Rotation while it's in the Mentorship phase (see
+    // isPoolingRotation) — plus, regardless of the phase *this* match just
+    // finished under, if this court's pair partner is already sitting
+    // "awaitingPair" (committed to pooling when *it* finished), so a phase
+    // boundary crossed between the two courts finishing can't strand the
+    // partner in that held state forever.
+    const partnerIdx = getPairPartnerIndex(state.courts, courtIdx);
+    const partnerAwaitingPair = partnerIdx !== null && state.courts[partnerIdx]?.awaitingPair;
+    if (isPoolingRotation(state.rotationMode, phasePlayed) || partnerAwaitingPair) {
       // hold this court (and its pair partner, if also done) instead of
       // requeuing everyone individually — see winnerPoolRound.js. Once both
       // courts in the pair are done, their pooled teams go to the BACK of
@@ -910,6 +919,12 @@ export default function PickleballOpenPlay() {
                   setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
                   progressiveSkillThresholds={state.progressiveSkillThresholds}
                   setProgressiveSkillThresholds={setProgressiveSkillThresholds}
+                  progressiveSkillPhase={progressiveSkillPhaseFor(
+                    state.rotationMode,
+                    state.players,
+                    state.expectedGamesPerPlayer,
+                    state.progressiveSkillThresholds
+                  )}
                   matchHistory={state.matchHistory || []}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}

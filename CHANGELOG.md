@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #13)
+
+### Added
+- Progressive Skill Rotation: Winner Pool Rotation's pairwise pooling mechanic now applies during the Mentorship phase. New `isPoolingRotation(rotationMode, phase)` in `lib/winnerPoolRound.js` gates on standalone Winner Pool Rotation OR Progressive Skill Rotation while in Mentorship. Courts pair up 1&2/3&4/..., a court that finishes first holds ("WAITING") until its pair partner also finishes, then both courts' winners pool into one new match and both courts' losers into another (same `WinnerPoolRotationEngine`/`resolveWinnerPoolMatch` standalone Winner Pool Rotation uses), joining the back of the queue rather than redeploying straight onto the same two courts
+
+### Changed
+- `endMatch` now also resolves a held "awaitingPair" court's pooling even if the *current* phase has since moved past Mentorship by the time its partner finishes — otherwise a phase boundary crossed between the two courts finishing could strand the held court forever
+
 ## 2026-07-16 (later, cont'd #12)
 
 ### Added
