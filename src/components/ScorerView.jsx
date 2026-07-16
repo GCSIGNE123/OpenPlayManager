@@ -1,4 +1,4 @@
-import { Minus, Plus, RefreshCw, Shuffle, X } from "lucide-react";
+import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { reservedMatchupIds } from "../lib/utils.js";
 import CourtCard from "./CourtCard.jsx";
@@ -18,6 +18,8 @@ export default function ScorerView({
   substituteInMatchup,
   toggleLockMatchup,
   regenerateMatchups,
+  canUndoRegenerate,
+  undoRegenerate,
   toggleSkipPlayer,
   removePlayer,
   waitingCount,
@@ -86,15 +88,27 @@ export default function ScorerView({
         <>
           <div style={styles.scorerToolbar}>
             <SectionLabel>Next matchups</SectionLabel>
-            <button
-              style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
-              onClick={regenerateMatchups}
-              disabled={!canRegenerate}
-              title="Rebuild every not-locked matchup from scratch"
-            >
-              <RefreshCw size={13} strokeWidth={2.5} />
-              Regenerate
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              {canUndoRegenerate && (
+                <button
+                  style={{ ...styles.secondaryBtn, margin: 0 }}
+                  onClick={undoRegenerate}
+                  title="Restore the matchups from before the last Regenerate"
+                >
+                  <Undo2 size={13} strokeWidth={2.5} />
+                  Undo regenerate
+                </button>
+              )}
+              <button
+                style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
+                onClick={regenerateMatchups}
+                disabled={!canRegenerate}
+                title="Rebuild every not-locked matchup from scratch"
+              >
+                <RefreshCw size={13} strokeWidth={2.5} />
+                Regenerate
+              </button>
+            </div>
           </div>
           {nextMatchups.map((m, i) => (
             <NextMatchupCard

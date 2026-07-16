@@ -58,6 +58,13 @@ export default function PickleballOpenPlay() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [checkinMsg, setCheckinMsg] = useState("");
   const [saveError, setSaveError] = useState("");
+  // one-shot, this-device-only undo for "Regenerate matchups" — not synced
+  // to Supabase, so it only makes sense as a quick "oops" for whoever just
+  // clicked Regenerate, not a durable multi-device feature. Cleared by any
+  // action that could make restoring it unsafe (deploying a matchup to a
+  // court, editing a matchup, another regenerate, skipping/removing a
+  // player) so it can never resurrect a player who's since moved on.
+  const [regenerateSnapshot, setRegenerateSnapshot] = useState(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -220,6 +227,7 @@ export default function PickleballOpenPlay() {
     setPinError("");
     setJoinCode("");
     setJoinError("");
+    setRegenerateSnapshot(null);
   };
 
   const goToLanding = () => {
@@ -388,6 +396,7 @@ export default function PickleballOpenPlay() {
     const courts = state.courts.map((c, i) =>
       i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 } : c
     );
+    setRegenerateSnapshot(null); // a deployed matchup can't be safely resurrected by undo
     save({ ...state, courts, queueIds, nextMatchups: restMatchups });
   };
 
@@ -404,6 +413,7 @@ export default function PickleballOpenPlay() {
       queueIds = queueIds.filter((id) => !consumed.has(id));
       return { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 };
     });
+    setRegenerateSnapshot(null);
     save({ ...state, courts, queueIds, nextMatchups: remainingMatchups });
   };
 
@@ -504,6 +514,7 @@ export default function PickleballOpenPlay() {
     const nextMatchups = (state.nextMatchups || []).map((m) =>
       m.id === matchupId ? { ...m, teamA, teamB } : m
     );
+    setRegenerateSnapshot(null);
     save({ ...state, nextMatchups });
   };
 
@@ -517,6 +528,7 @@ export default function PickleballOpenPlay() {
       const teamB = m.teamB.map((id) => (id === outgoingId ? incomingId : id));
       return { ...m, teamA, teamB };
     });
+    setRegenerateSnapshot(null);
     save({ ...state, nextMatchups });
   };
 
@@ -530,10 +542,22 @@ export default function PickleballOpenPlay() {
   };
 
   // dissolves every not-locked upcoming matchup and reruns the rotation
-  // engine over the full eligible pool — same players, fresh pairings
+  // engine over the full eligible pool — same players, fresh pairings.
+  // Remembers what nextMatchups looked like beforehand (this device only)
+  // so "Undo regenerate" can put it back.
   const regenerateMatchups = () => {
-    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || []);
+    const before = state.nextMatchups || [];
+    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before);
+    setRegenerateSnapshot(before);
     save({ ...state, nextMatchups });
+  };
+
+  // restores nextMatchups to how it looked right before the last
+  // "Regenerate matchups" click on this device
+  const undoRegenerate = () => {
+    if (!regenerateSnapshot) return;
+    save({ ...state, nextMatchups: regenerateSnapshot });
+    setRegenerateSnapshot(null);
   };
 
   // sitting a waiting player out: they stay visible in the waiting list but
@@ -542,6 +566,7 @@ export default function PickleballOpenPlay() {
     const p = state.players[id];
     if (!p) return;
     const players = { ...state.players, [id]: { ...p, skipped: !p.skipped } };
+    setRegenerateSnapshot(null);
     save({ ...state, players });
   };
 
@@ -557,6 +582,7 @@ export default function PickleballOpenPlay() {
     const nextMatchups = (state.nextMatchups || []).filter(
       (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
     );
+    setRegenerateSnapshot(null);
     save({ ...state, players, queueIds, nextMatchups });
   };
 
@@ -749,6 +775,8 @@ export default function PickleballOpenPlay() {
                   substituteInMatchup={substituteInMatchup}
                   toggleLockMatchup={toggleLockMatchup}
                   regenerateMatchups={regenerateMatchups}
+                  canUndoRegenerate={!!regenerateSnapshot}
+                  undoRegenerate={undoRegenerate}
                   toggleSkipPlayer={toggleSkipPlayer}
                   removePlayer={removePlayer}
                   waitingCount={waitingPlayers.length}
