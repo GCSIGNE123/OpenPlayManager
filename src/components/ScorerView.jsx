@@ -2,9 +2,9 @@ import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { reservedMatchupIds } from "../lib/utils.js";
 import { getPairPartnerIndex } from "../lib/winnerPoolRound.js";
-import { calculateSessionProgress, getProgressivePhase } from "../lib/progressiveSkillPhase.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
+import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 
@@ -31,6 +31,9 @@ export default function ScorerView({
   rotationModes,
   expectedGamesPerPlayer,
   setExpectedGamesPerPlayer,
+  progressiveSkillThresholds,
+  setProgressiveSkillThresholds,
+  matchHistory,
   waitingCount,
   addCourt,
   removeCourt,
@@ -49,9 +52,6 @@ export default function ScorerView({
   const lastCourt = state.courts[state.courts.length - 1];
   const canAddCourt = state.courts.length < 8;
   const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
-  const sessionProgress =
-    rotationMode === "progressiveSkill" ? calculateSessionProgress(state.players, expectedGamesPerPlayer) : null;
-  const progressivePhase = sessionProgress !== null ? getProgressivePhase(sessionProgress) : null;
 
   return (
     <div>
@@ -70,23 +70,17 @@ export default function ScorerView({
             ))}
           </select>
         </div>
-        {progressivePhase && (
-          <div style={styles.rotationRow}>
-            <span style={styles.phaseBadge(progressivePhase.key)}>{progressivePhase.label}</span>
-            <span style={styles.toolbarText}>{sessionProgress}% of expected games</span>
-            <label style={styles.rotationRow}>
-              Expected games/player:
-              <input
-                type="number"
-                min={1}
-                style={styles.expectedGamesInput}
-                value={expectedGamesPerPlayer}
-                onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
-              />
-            </label>
-          </div>
-        )}
       </div>
+      {rotationMode === "progressiveSkill" && (
+        <ProgressiveSkillPanel
+          players={state.players}
+          expectedGamesPerPlayer={expectedGamesPerPlayer}
+          setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
+          progressiveSkillThresholds={progressiveSkillThresholds}
+          setProgressiveSkillThresholds={setProgressiveSkillThresholds}
+          matchHistory={matchHistory}
+        />
+      )}
       <div style={styles.scorerToolbar}>
         <div style={styles.toolbarText}>
           <strong>{waitingCount}</strong> players waiting

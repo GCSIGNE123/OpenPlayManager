@@ -43,5 +43,6 @@ export const defaultState = {
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   rotationMode: "continuous", // see ROTATION_MODES
   expectedGamesPerPlayer: 6, // Progressive Skill Rotation only — organizer-configurable, drives session-progress/phase calc, see lib/progressiveSkillPhase.js
+  progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js
   updatedAt: 0,
 };

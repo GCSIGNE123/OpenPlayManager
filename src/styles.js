@@ -9,6 +9,19 @@ export const fontImport = `
   --coral: #E85D4C;
   --line: #C9C4AE;
 }
+@keyframes phasePop {
+  0% { transform: scale(0.82); opacity: 0.3; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes progressMarkerPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(31, 92, 67, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(31, 92, 67, 0); }
+}
+@keyframes settingsSlideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 `;
 
 export const styles = {
@@ -900,6 +913,8 @@ export const styles = {
     borderRadius: 5,
     padding: "3px 7px",
     flexShrink: 0,
+    display: "inline-block",
+    animation: "phasePop 0.35s ease",
   }),
   expectedGamesInput: {
     width: 48,
@@ -911,6 +926,102 @@ export const styles = {
     fontSize: 12.5,
     fontFamily: "'Inter', sans-serif",
   },
+  progressiveSkillPanel: {
+    marginBottom: 16,
+  },
+  progressBarTrack: {
+    position: "relative",
+    display: "flex",
+    height: 10,
+    borderRadius: 6,
+    overflow: "hidden",
+    border: "1.5px solid var(--line)",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  progressBarZone: (phaseKey, active) => ({
+    height: "100%",
+    background:
+      phaseKey === "mentorship"
+        ? active
+          ? "var(--ball)"
+          : "#e9edc7"
+        : phaseKey === "transition"
+        ? active
+          ? "#e8d9a3"
+          : "#efe6cc"
+        : active
+        ? "var(--court)"
+        : "#c7d6cc",
+    transition: "background 0.4s ease",
+  }),
+  progressBarMarker: {
+    position: "absolute",
+    top: -2,
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    background: "var(--court)",
+    border: "2px solid var(--chalk)",
+    transform: "translateX(-50%)",
+    transition: "left 0.5s ease",
+    animation: "progressMarkerPulse 1.8s ease infinite",
+  },
+  progressBarLabels: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 10,
+    color: "#8a8f83",
+    fontFamily: "'Space Mono', monospace",
+    marginBottom: 10,
+  },
+  settingsToggleBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--court)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+  },
+  settingsPanel: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 14,
+    marginTop: 10,
+    padding: "10px 12px",
+    background: "#fff",
+    border: "1.5px solid var(--line)",
+    borderRadius: 8,
+    animation: "settingsSlideDown 0.2s ease",
+  },
+  settingsField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    fontSize: 11.5,
+    color: "#5c6157",
+    fontWeight: 600,
+  },
+  statsRow: {
+    display: "flex",
+    gap: 14,
+    marginTop: 10,
+    fontSize: 12,
+    color: "#5c6157",
+  },
+  statsChip: (phaseKey) => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    color:
+      phaseKey === "mentorship" ? "var(--ink)" : phaseKey === "transition" ? "var(--ink)" : "var(--court)",
+  }),
   awaitingPairText: {
     fontSize: 12,
     color: "#8a8f83",

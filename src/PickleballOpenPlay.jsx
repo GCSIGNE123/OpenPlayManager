@@ -28,10 +28,10 @@ import StandingsView from "./components/StandingsView.jsx";
 // null outside Progressive Skill Rotation — the phase-based pairing
 // (see ProgressiveSkillRotationStrategy) only applies there. See
 // lib/progressiveSkillPhase.js for the phase boundaries.
-function progressiveSkillPhaseFor(rotationMode, players, expectedGamesPerPlayer) {
+function progressiveSkillPhaseFor(rotationMode, players, expectedGamesPerPlayer, progressiveSkillThresholds) {
   if (rotationMode !== "progressiveSkill") return null;
   const progress = calculateSessionProgress(players, expectedGamesPerPlayer || 6);
-  return getProgressivePhase(progress).key;
+  return getProgressivePhase(progress, progressiveSkillThresholds).key;
 }
 
 export default function PickleballOpenPlay() {
@@ -120,7 +120,12 @@ export default function PickleballOpenPlay() {
       // Progressive Skill Rotation, the current phase also shapes pairing
       // (see progressiveSkillPhaseFor below).
       const engine = getRotationEngine(next.rotationMode);
-      const phase = progressiveSkillPhaseFor(next.rotationMode, next.players, next.expectedGamesPerPlayer);
+      const phase = progressiveSkillPhaseFor(
+        next.rotationMode,
+        next.players,
+        next.expectedGamesPerPlayer,
+        next.progressiveSkillThresholds
+      );
       const withMatchups = {
         ...next,
         nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || [], engine, phase),
@@ -509,6 +514,16 @@ export default function PickleballOpenPlay() {
     // scoring for the next round — see recordRotationHistory
     players = recordRotationHistory(players, teamA, teamB, court.number);
 
+    // the phase this match was actually played under — computed from
+    // pre-match progress, since games/wins only increment above, after the
+    // match is already over. Progressive Skill Rotation only; null
+    // otherwise. Feeds the per-phase match counts in Scorer's stats panel.
+    const phasePlayed = progressiveSkillPhaseFor(
+      preMatchState.rotationMode,
+      preMatchState.players,
+      preMatchState.expectedGamesPerPlayer,
+      preMatchState.progressiveSkillThresholds
+    );
     const matchRecord = {
       round: (state.matchHistory || []).length + 1,
       court: court.number,
@@ -518,6 +533,7 @@ export default function PickleballOpenPlay() {
       scoreA,
       scoreB,
       endedAt: Date.now(),
+      phase: phasePlayed,
     };
     const matchHistory = [...(state.matchHistory || []), matchRecord];
 
@@ -562,6 +578,20 @@ export default function PickleballOpenPlay() {
   const setExpectedGamesPerPlayer = (count) => {
     const expectedGamesPerPlayer = Math.max(1, Number(count) || 1);
     save({ ...state, expectedGamesPerPlayer });
+  };
+
+  // Progressive Skill Rotation's phase boundaries (% of expected games) —
+  // buildPhases (lib/progressiveSkillPhase.js) clamps/orders these, so any
+  // input here (partial edits while typing, an inverted pair, etc.) always
+  // resolves to a valid non-zero-width zone once it reaches the engine.
+  const setProgressiveSkillThresholds = (thresholds) => {
+    save({
+      ...state,
+      progressiveSkillThresholds: {
+        ...state.progressiveSkillThresholds,
+        ...thresholds,
+      },
+    });
   };
 
   const reassignTeams = (courtIdx, teamA, teamB) => {
@@ -621,7 +651,12 @@ export default function PickleballOpenPlay() {
   const regenerateMatchups = () => {
     const before = state.nextMatchups || [];
     const engine = getRotationEngine(state.rotationMode);
-    const phase = progressiveSkillPhaseFor(state.rotationMode, state.players, state.expectedGamesPerPlayer);
+    const phase = progressiveSkillPhaseFor(
+      state.rotationMode,
+      state.players,
+      state.expectedGamesPerPlayer,
+      state.progressiveSkillThresholds
+    );
     const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before, engine, phase);
     setRegenerateSnapshot(before);
     save({ ...state, nextMatchups });
@@ -861,6 +896,9 @@ export default function PickleballOpenPlay() {
                   rotationModes={ROTATION_MODES}
                   expectedGamesPerPlayer={state.expectedGamesPerPlayer || 6}
                   setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
+                  progressiveSkillThresholds={state.progressiveSkillThresholds}
+                  setProgressiveSkillThresholds={setProgressiveSkillThresholds}
+                  matchHistory={state.matchHistory || []}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}

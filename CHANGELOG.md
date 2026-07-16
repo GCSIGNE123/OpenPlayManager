@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #11)
+
+### Added
+- Progressive Skill Rotation: new `ProgressiveSkillPanel` in Scorer, replacing the old inline phase badge with a full phase dashboard —
+  - **Animations**: the phase badge pops in on every phase change (CSS `@keyframes phasePop`, restarted via a remount key); the progress bar's position marker glides smoothly (`transition: left 0.5s ease`) and pulses continuously; zone colors and the Settings panel fade/slide in with their own transitions
+  - **Phase indicators**: a 3-zone progress bar (Mentorship/Transition/Competitive) showing the session's current position at a glance, replacing the plain "X% of expected games" text-only readout
+  - **Statistics**: a per-phase match-count row (e.g. "Mentorship: 2 · Transition: 1 · Competitive: 0"), computed from `matchHistory` entries now tagged with the phase they were actually played under
+  - **Settings**: a collapsible panel with the existing "Expected games/player" input plus two new organizer-configurable phase-boundary percentages ("Mentorship ends at", "Transition ends at")
+  - **Configuration**: new `state.progressiveSkillThresholds` (default `{ mentorshipMax: 30, transitionMax: 60 }`), `setProgressiveSkillThresholds` in `PickleballOpenPlay.jsx`, and `buildPhases(thresholds)` in `lib/progressiveSkillPhase.js` — clamps/orders any input into a valid, non-zero-width set of phase zones so the boundaries can never invert or collapse
+- `matchHistory` records now carry a `phase` field (Progressive Skill Rotation only, `null` otherwise), computed from the pre-match state in `endMatch` since a player's games-played count only increments after the match ends
+
 ## 2026-07-16 (later, cont'd #10)
 
 ### Added
