@@ -1,22 +1,12 @@
 import { ACCESS_PREFIX, CODE_CHARS, STORAGE_PREFIX } from "./constants.js";
+import { BalancedRotationEngine } from "../engines/BalancedRotationEngine.js";
 
-export function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
+export { uid, shuffle } from "./random.js";
 
 export function generateRandomCode(length = 6) {
   let code = "";
   for (let i = 0; i < length; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return code;
-}
-
-export function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
 
 // shrink a photo to a small square thumbnail so many player photos stay well
@@ -65,82 +55,6 @@ export function sortByGames(ids, players) {
   return [...ids].sort((a, b) => (players[a]?.games || 0) - (players[b]?.games || 0));
 }
 
-// tries to find 2 beginners + 2 intermediates within a pool, preferring
-// whoever's waited longest (fewest games played) within each skill —
-// returns null when the pool doesn't have enough of both skills, so callers
-// can fall back to a skill-blind pick rather than stalling matchmaking
-function pickBalancedGroup(idsPool, players) {
-  const beginners = sortByGames(
-    idsPool.filter((id) => players[id]?.skill === "beginner"),
-    players
-  );
-  const intermediates = sortByGames(
-    idsPool.filter((id) => players[id]?.skill === "intermediate"),
-    players
-  );
-  if (beginners.length < 2 || intermediates.length < 2) return null;
-  return [...beginners.slice(0, 2), ...intermediates.slice(0, 2)];
-}
-
-// picks the next 4 players for a court: prefers a full group who just won
-// their last match, then a full group who just lost, so winners keep
-// playing winners and losers keep playing losers — falling back to the
-// general waiting queue when the winners/losers pool alone can't supply a
-// valid mix. A match is only ever formed from an even 2 beginner + 2
-// intermediate group (see pickBalancedGroup) — there is no skill-blind
-// fallback, so a beginner-only or intermediate-only group simply keeps
-// waiting rather than playing a same-skill-vs-same-skill match. Returns
-// null when no valid 2+2 group exists anywhere in the queue yet.
-export function pickNextGroup(queueIds, players) {
-  const winners = queueIds.filter((id) => players[id]?.lastResult === "win");
-  const losers = queueIds.filter((id) => players[id]?.lastResult === "loss");
-
-  if (winners.length >= 4) {
-    const group = pickBalancedGroup(winners, players);
-    if (group) return group;
-  }
-  if (losers.length >= 4) {
-    const group = pickBalancedGroup(losers, players);
-    if (group) return group;
-  }
-  return pickBalancedGroup(queueIds, players);
-}
-
-// splits a group of exactly 4 players into two new teams. When the group is
-// an even 2 beginner + 2 intermediate mix, each team always gets one of
-// each (a beginner is always paired with an intermediate) — otherwise falls
-// back to a skill-blind split. Either way, avoids pairing up anyone with the
-// partner they were just teamed with (players[id].lastPartnerId) when
-// possible — e.g. court 1's winner and court 2's winner get cross-paired
-// instead of the two winning partners from the same court simply playing
-// together again. Falls back to any split when avoiding a rematch isn't
-// possible (or when nobody has a recorded partner yet).
-export function pairTeamsAvoidingRematch(group, players) {
-  const wasPartner = (x, y) => players[x]?.lastPartnerId === y || players[y]?.lastPartnerId === x;
-
-  const beginners = group.filter((id) => players[id]?.skill === "beginner");
-  const intermediates = group.filter((id) => players[id]?.skill === "intermediate");
-  if (beginners.length === 2 && intermediates.length === 2) {
-    const [b0, b1] = shuffle(beginners);
-    const [i0, i1] = shuffle(intermediates);
-    const skillCandidates = [
-      [[b0, i0], [b1, i1]],
-      [[b0, i1], [b1, i0]],
-    ];
-    const clean = skillCandidates.find(([teamA, teamB]) => !wasPartner(...teamA) && !wasPartner(...teamB));
-    return clean || skillCandidates[0];
-  }
-
-  const [a, b, c, d] = shuffle(group);
-  const candidates = [
-    [[a, b], [c, d]],
-    [[a, c], [b, d]],
-    [[a, d], [b, c]],
-  ];
-  const clean = candidates.find(([teamA, teamB]) => !wasPartner(...teamA) && !wasPartner(...teamB));
-  return clean || candidates[0];
-}
-
 // tries a handful of random codes and returns the first one not already in
 // use — collisions are astronomically unlikely with a 6-char code, but a
 // quick check costs nothing
@@ -184,24 +98,90 @@ export function reservedMatchupIds(nextMatchups) {
   return ids;
 }
 
-// appends any additional ready-to-play matchups that can be built from
-// waiting players not already locked into one — existing matchups are left
+// The active rotation strategy (Strategy pattern — see src/engines/). Only
+// one concrete engine exists today; swapping this line (or making it
+// swappable from the UI) is how a future mode gets plugged in without
+// touching anything below.
+const defaultEngine = new BalancedRotationEngine();
+
+// appends any additional ready-to-play matchups the active rotation engine
+// can build from waiting players not already locked into one (and not
+// sitting out — players[id].skipped) — existing matchups are left
 // completely untouched, so a scorer's manual "fix teams" / substitute edits
 // (or a matchup already mid-review) never get silently overwritten. Safe to
-// call after every state change; it's a no-op unless a valid 2 beginner + 2
-// intermediate group is newly available (see pickNextGroup) — e.g. 5
-// waiting beginners and 1 waiting intermediate produces zero matchups until
-// another intermediate checks in, rather than pairing beginners together.
-export function refreshNextMatchups(queueIds, players, existingMatchups) {
-  const reserved = reservedMatchupIds(existingMatchups);
-  let remaining = queueIds.filter((id) => !reserved.has(id));
-  const matchups = [...existingMatchups];
-  while (remaining.length >= 4) {
-    const group = pickNextGroup(remaining, players);
-    if (!group) break;
-    remaining = remaining.filter((id) => !group.includes(id));
-    const [teamA, teamB] = pairTeamsAvoidingRematch(group, players);
-    matchups.push({ id: uid(), teamA, teamB });
-  }
-  return matchups;
+// call after every state change; it's a no-op unless the engine finds a
+// newly-possible matchup.
+//
+// Deliberately strict (no same-skill fallback): this runs after every
+// single state change, including each individual check-in, so players
+// almost never arrive in perfectly even beginner/intermediate batches. If a
+// same-skill fallback ran here, the first 2 beginners to check in would get
+// permanently paired together (matchups are immutable once built) before
+// the next intermediate to check in ever got a chance at a proper mixed
+// match. The fallback is opt-in — see regenerateNextMatchups below, for
+// when an organizer deliberately asks for the best match available *right
+// now* with whoever's actually waiting.
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = defaultEngine) {
+  const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups });
+  return [...existingMatchups, ...newMatchups];
+}
+
+// "Regenerate matchups": dissolves every not-locked upcoming matchup and
+// reruns the engine over the full eligible pool (their players simply
+// become available again, since queueIds already contains everyone waiting
+// regardless of matchup membership). Locked matchups are left exactly as
+// they are. Unlike refreshNextMatchups, this allows the same-skill fallback
+// — it's a deliberate, one-off "match up whoever's here now" action, not
+// something that fires silently after every check-in.
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = defaultEngine) {
+  const locked = existingMatchups.filter((m) => m.locked);
+  const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked }, true);
+  return [...locked, ...newMatchups];
+}
+
+// records partner/opponent/court history on all 4 players in a just-ended
+// match — feeds the rotation engine's recency scoring next time it runs.
+// Win/loss/streak/points bookkeeping stays in PickleballOpenPlay.jsx's
+// endMatch since that also needs the score, kept separate here from
+// history that any future rotation engine would also want.
+export function recordRotationHistory(players, teamA, teamB, courtNumber) {
+  const next = { ...players };
+
+  const updateFor = (id, partnerId, opponentIds) => {
+    const p = next[id];
+    if (!p) return;
+
+    const partnerCounts = { ...(p.partnerCounts || {}) };
+    partnerCounts[partnerId] = (partnerCounts[partnerId] || 0) + 1;
+    const recentPartnerIds = [partnerId, ...(p.recentPartnerIds || [])].slice(0, 2);
+
+    const opponentCounts = { ...(p.opponentCounts || {}) };
+    opponentIds.forEach((oid) => {
+      opponentCounts[oid] = (opponentCounts[oid] || 0) + 1;
+    });
+    const recentOpponentIds = [...opponentIds, ...(p.lastOpponentIds || [])].filter(
+      (id, i, arr) => arr.indexOf(id) === i
+    ).slice(0, 4);
+
+    const courtCounts = { ...(p.courtCounts || {}) };
+    if (courtNumber != null) courtCounts[courtNumber] = (courtCounts[courtNumber] || 0) + 1;
+
+    next[id] = {
+      ...p,
+      partnerCounts,
+      recentPartnerIds,
+      opponentCounts,
+      lastOpponentIds: opponentIds,
+      recentOpponentIds,
+      courtCounts,
+      lastCourt: courtNumber ?? p.lastCourt ?? null,
+    };
+  };
+
+  teamA.forEach((id) => updateFor(id, teamA.find((otherId) => otherId !== id), teamB));
+  teamB.forEach((id) => updateFor(id, teamB.find((otherId) => otherId !== id), teamA));
+
+  return next;
 }

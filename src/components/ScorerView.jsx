@@ -1,9 +1,10 @@
-import { Minus, Plus, Shuffle, X } from "lucide-react";
+import { Minus, Plus, RefreshCw, Shuffle, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { reservedMatchupIds } from "../lib/utils.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 
 export default function ScorerView({
   state,
@@ -15,6 +16,10 @@ export default function ScorerView({
   substitutePlayer,
   reassignMatchup,
   substituteInMatchup,
+  toggleLockMatchup,
+  regenerateMatchups,
+  toggleSkipPlayer,
+  removePlayer,
   waitingCount,
   addCourt,
   removeCourt,
@@ -29,6 +34,7 @@ export default function ScorerView({
     .map((id) => state.players[id])
     .filter((p) => p && !reserved.has(p.id));
   const canFillCourt = nextMatchups.length > 0;
+  const canRegenerate = nextMatchups.some((m) => !m.locked);
   const lastCourt = state.courts[state.courts.length - 1];
   const canAddCourt = state.courts.length < 8;
   const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
@@ -78,7 +84,18 @@ export default function ScorerView({
 
       {nextMatchups.length > 0 && (
         <>
-          <SectionLabel>Next matchups</SectionLabel>
+          <div style={styles.scorerToolbar}>
+            <SectionLabel>Next matchups</SectionLabel>
+            <button
+              style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
+              onClick={regenerateMatchups}
+              disabled={!canRegenerate}
+              title="Rebuild every not-locked matchup from scratch"
+            >
+              <RefreshCw size={13} strokeWidth={2.5} />
+              Regenerate
+            </button>
+          </div>
           {nextMatchups.map((m, i) => (
             <NextMatchupCard
               key={m.id}
@@ -88,11 +105,15 @@ export default function ScorerView({
               label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
               onReassign={reassignMatchup}
               onSubstitute={substituteInMatchup}
+              onToggleLock={toggleLockMatchup}
             />
           ))}
         </>
       )}
 
+      <WaitingPlayersPanel players={unassignedPlayers} onToggleSkip={toggleSkipPlayer} onRemove={removePlayer} />
+
+      <SectionLabel>Courts</SectionLabel>
       <div style={styles.courtGrid}>
         {state.courts.map((court, i) => (
           <CourtCard

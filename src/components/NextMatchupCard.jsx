@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Repeat, Shuffle } from "lucide-react";
+import { Check, Lock, Repeat, Shuffle, Unlock } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerChip from "./PlayerChip.jsx";
@@ -8,7 +8,15 @@ import PlayerPicker from "./PlayerPicker.jsx";
 // A pre-built upcoming matchup, editable before it's assigned to a court —
 // mirrors CourtCard's "fix teams" / substitute interactions, minus anything
 // score/court-status related since this matchup isn't live yet.
-export default function NextMatchupCard({ matchup, players, unassignedPlayers, label, onReassign, onSubstitute }) {
+export default function NextMatchupCard({
+  matchup,
+  players,
+  unassignedPlayers,
+  label,
+  onReassign,
+  onSubstitute,
+  onToggleLock,
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [subbingId, setSubbingId] = useState(null);
@@ -56,7 +64,22 @@ export default function NextMatchupCard({ matchup, players, unassignedPlayers, l
 
   return (
     <div style={styles.matchupCard(label === "Next up")}>
-      <div style={styles.matchupHeader(label === "Next up")}>{label}</div>
+      <div style={styles.matchupHeadRow}>
+        <div style={styles.matchupHeader(label === "Next up")}>{label}</div>
+        <button
+          style={styles.lockToggleBtn(!!matchup.locked)}
+          onClick={() => onToggleLock(matchup.id)}
+          aria-label={matchup.locked ? "unlock this matchup" : "lock this matchup"}
+          title={
+            matchup.locked
+              ? "Locked — won't be touched by Regenerate matchups"
+              : "Lock so Regenerate matchups leaves this one alone"
+          }
+        >
+          {matchup.locked ? <Lock size={12} strokeWidth={2.5} /> : <Unlock size={12} strokeWidth={2.5} />}
+          {matchup.locked ? "Locked" : "Lock"}
+        </button>
+      </div>
 
       {editing ? (
         <div>

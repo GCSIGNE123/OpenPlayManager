@@ -2,7 +2,15 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { ACCESS_PREFIX, ADMIN_PIN, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
-import { findUniqueAccessCode, findUniqueSessionCode, refreshNextMatchups, uid, resizeImageToAvatar } from "./lib/utils.js";
+import {
+  findUniqueAccessCode,
+  findUniqueSessionCode,
+  recordRotationHistory,
+  refreshNextMatchups,
+  regenerateNextMatchups,
+  uid,
+  resizeImageToAvatar,
+} from "./lib/utils.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -143,18 +151,33 @@ export default function PickleballOpenPlay() {
           photo: p.photo,
           skill: p.skill === "intermediate" ? "intermediate" : "beginner",
           checkedIn: false,
+          skipped: false,
           games: 0,
           wins: 0,
           losses: 0,
           streak: 0,
           lastResult: null,
-          lastPartnerId: null,
           pointsFor: 0,
           pointsAgainst: 0,
+          partnerCounts: {},
+          recentPartnerIds: [],
+          opponentCounts: {},
+          lastOpponentIds: [],
+          recentOpponentIds: [],
+          courtCounts: {},
+          lastCourt: null,
         };
       });
       const courts = Array.from({ length: courtsCount }, (_, i) => emptyCourt(i + 1));
-      const initial = { venue, courts, players, queueIds: [], nextMatchups: [], updatedAt: Date.now() };
+      const initial = {
+        venue,
+        courts,
+        players,
+        queueIds: [],
+        nextMatchups: [],
+        matchHistory: [],
+        updatedAt: Date.now(),
+      };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
 
       // consume the access code now that a session was actually created —
@@ -324,14 +347,21 @@ export default function PickleballOpenPlay() {
         name,
         skill: skillInput === "intermediate" ? "intermediate" : "beginner",
         checkedIn: true,
+        skipped: false,
         games: 0,
         wins: 0,
         losses: 0,
         streak: 0,
         lastResult: null,
-        lastPartnerId: null,
         pointsFor: 0,
         pointsAgainst: 0,
+        partnerCounts: {},
+        recentPartnerIds: [],
+        opponentCounts: {},
+        lastOpponentIds: [],
+        recentOpponentIds: [],
+        courtCounts: {},
+        lastCourt: null,
         photo: photoDataUrl || null,
       },
     };
@@ -399,7 +429,7 @@ export default function PickleballOpenPlay() {
     const court = state.courts[courtIdx];
     const { teamA, teamB, scoreA, scoreB } = court;
     const playedIds = [...teamA, ...teamB];
-    const players = { ...state.players };
+    let players = { ...state.players };
     const aWon = scoreA > scoreB;
     const bWon = scoreB > scoreA;
     teamA.forEach((id) => {
@@ -412,9 +442,6 @@ export default function PickleballOpenPlay() {
         losses: (p.losses || 0) + (bWon ? 1 : 0),
         streak: aWon ? (p.streak || 0) + 1 : 0,
         lastResult: aWon ? "win" : bWon ? "loss" : p.lastResult,
-        // remembered so the next match can avoid reuniting the same pair —
-        // see pairTeamsAvoidingRematch
-        lastPartnerId: teamA.find((otherId) => otherId !== id) ?? p.lastPartnerId,
         pointsFor: (p.pointsFor || 0) + scoreA,
         pointsAgainst: (p.pointsAgainst || 0) + scoreB,
       };
@@ -429,14 +456,29 @@ export default function PickleballOpenPlay() {
         losses: (p.losses || 0) + (aWon ? 1 : 0),
         streak: bWon ? (p.streak || 0) + 1 : 0,
         lastResult: bWon ? "win" : aWon ? "loss" : p.lastResult,
-        lastPartnerId: teamB.find((otherId) => otherId !== id) ?? p.lastPartnerId,
         pointsFor: (p.pointsFor || 0) + scoreB,
         pointsAgainst: (p.pointsAgainst || 0) + scoreA,
       };
     });
+    // partner/opponent/court history feeds the rotation engine's recency
+    // scoring for the next round — see recordRotationHistory
+    players = recordRotationHistory(players, teamA, teamB, court.number);
+
+    const matchRecord = {
+      round: (state.matchHistory || []).length + 1,
+      court: court.number,
+      teamA,
+      teamB,
+      winner: aWon ? "A" : bWon ? "B" : null,
+      scoreA,
+      scoreB,
+      endedAt: Date.now(),
+    };
+    const matchHistory = [...(state.matchHistory || []), matchRecord];
+
     const queueIds = [...state.queueIds, ...playedIds];
     const courts = state.courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
-    save({ ...state, courts, players, queueIds });
+    save({ ...state, courts, players, queueIds, matchHistory });
   };
 
   const reassignTeams = (courtIdx, teamA, teamB) => {
@@ -476,6 +518,46 @@ export default function PickleballOpenPlay() {
       return { ...m, teamA, teamB };
     });
     save({ ...state, nextMatchups });
+  };
+
+  // locking a matchup protects it from "Regenerate matchups" — everything
+  // else (Fix teams / Substitute) still works on a locked matchup
+  const toggleLockMatchup = (matchupId) => {
+    const nextMatchups = (state.nextMatchups || []).map((m) =>
+      m.id === matchupId ? { ...m, locked: !m.locked } : m
+    );
+    save({ ...state, nextMatchups });
+  };
+
+  // dissolves every not-locked upcoming matchup and reruns the rotation
+  // engine over the full eligible pool — same players, fresh pairings
+  const regenerateMatchups = () => {
+    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || []);
+    save({ ...state, nextMatchups });
+  };
+
+  // sitting a waiting player out: they stay visible in the waiting list but
+  // the rotation engine skips them when building new matchups
+  const toggleSkipPlayer = (id) => {
+    const p = state.players[id];
+    if (!p) return;
+    const players = { ...state.players, [id]: { ...p, skipped: !p.skipped } };
+    save({ ...state, players });
+  };
+
+  // permanently removes a waiting (not currently on a live court) player
+  // from the session — substitute them off a court first if needed
+  const removePlayer = (id) => {
+    const p = state.players[id];
+    if (!p) return;
+    if (!window.confirm(`Remove ${p.name} from this session? This can't be undone.`)) return;
+    const players = { ...state.players };
+    delete players[id];
+    const queueIds = state.queueIds.filter((qid) => qid !== id);
+    const nextMatchups = (state.nextMatchups || []).filter(
+      (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
+    );
+    save({ ...state, players, queueIds, nextMatchups });
   };
 
   const tryScorerLogin = () => {
@@ -665,6 +747,10 @@ export default function PickleballOpenPlay() {
                   substitutePlayer={substitutePlayer}
                   reassignMatchup={reassignMatchup}
                   substituteInMatchup={substituteInMatchup}
+                  toggleLockMatchup={toggleLockMatchup}
+                  regenerateMatchups={regenerateMatchups}
+                  toggleSkipPlayer={toggleSkipPlayer}
+                  removePlayer={removePlayer}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}

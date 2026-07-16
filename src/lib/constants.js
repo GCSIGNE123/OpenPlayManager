@@ -13,11 +13,19 @@ export const emptyCourt = (number) => ({
   scoreB: 0,
 });
 
+// id -> {
+//   id, name, photo, skill ('beginner' | 'intermediate'), checkedIn, skipped,
+//   games, wins, losses, streak, lastResult, pointsFor, pointsAgainst,
+//   partnerCounts ({ id: count }), recentPartnerIds ([id, id] most-recent-first),
+//   opponentCounts ({ id: count }), lastOpponentIds ([id, id]), recentOpponentIds ([id...]),
+//   courtCounts ({ courtNumber: count }), lastCourt,
+// }
 export const defaultState = {
   venue: "",
   courts: [],
-  players: {}, // id -> { id, name, photo, checkedIn, games, wins, losses, streak, lastResult, lastPartnerId, pointsFor, pointsAgainst }
+  players: {},
   queueIds: [],
-  nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id] }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
+  nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
+  matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   updatedAt: 0,
 };
