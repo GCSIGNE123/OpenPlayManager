@@ -1,5 +1,6 @@
 import { Flame } from "lucide-react";
 import { styles } from "../styles.js";
+import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -12,6 +13,7 @@ export default function StandingsView({ players }) {
       losses: p.losses || 0,
       streak: p.streak || 0,
       diff: (p.pointsFor || 0) - (p.pointsAgainst || 0),
+      performance: calculatePerformanceRating(p),
     }))
     .sort((a, b) => b.wins - a.wins || b.diff - a.diff || a.losses - b.losses);
 
@@ -30,6 +32,7 @@ export default function StandingsView({ players }) {
             <span style={styles.standingsStatCol}>W</span>
             <span style={styles.standingsStatCol}>L</span>
             <span style={styles.standingsStatCol}>+/-</span>
+            <span style={styles.standingsRatingCol}>RTG</span>
           </div>
           {rows.map((p, i) => (
             <div key={p.id} style={styles.standingsRow}>
@@ -58,6 +61,14 @@ export default function StandingsView({ players }) {
                 }}
               >
                 {p.diff > 0 ? `+${p.diff}` : p.diff}
+              </span>
+              <span style={styles.standingsRatingCol}>
+                <span
+                  style={styles.ratingBadge(p.performance.rating)}
+                  title={`${Math.round(p.performance.winPct * 100)}% win rate`}
+                >
+                  {p.performance.rating === null ? "—" : p.performance.rating}
+                </span>
               </span>
             </div>
           ))}

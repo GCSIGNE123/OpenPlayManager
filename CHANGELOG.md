@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #7)
+
+### Added
+- Session-only Performance Rating for each player. `src/lib/performanceRating.js` derives a single 0-100 rating from wins, losses, games played, current streak, and point differential (all already tracked per player and already reset to 0 whenever a new session starts) — weighted so win rate dominates, with average point differential and streak as smaller adjustments. Shown as a colored badge in Standings (new RTG column) and in Scorer's waiting players list; hidden for players who haven't finished a game yet
+
 ## 2026-07-16 (later, cont'd #6)
 
 ### Added

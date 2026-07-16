@@ -1,5 +1,6 @@
 import { Pause, Play, X } from "lucide-react";
 import { styles } from "../styles.js";
+import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -15,20 +16,31 @@ export default function WaitingPlayersPanel({ players, onToggleSkip, onRemove })
     <>
       <SectionLabel>Waiting players ({players.length})</SectionLabel>
       <ul style={styles.rosterList}>
-        {players.map((p) => (
-          <li key={p.id} style={styles.rosterItem}>
-            <Avatar player={p} size={26} />
-            <span style={styles.queueName}>{p.name}</span>
-            {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
-            <button style={styles.skipToggleBtn(p.skipped)} onClick={() => onToggleSkip(p.id)}>
-              {p.skipped ? <Play size={11} strokeWidth={2.5} /> : <Pause size={11} strokeWidth={2.5} />}
-              {p.skipped ? "Sitting out" : "Skip"}
-            </button>
-            <button style={styles.rosterRemoveBtn} onClick={() => onRemove(p.id)} aria-label={`remove ${p.name}`}>
-              <X size={11} strokeWidth={3} />
-            </button>
-          </li>
-        ))}
+        {players.map((p) => {
+          const performance = calculatePerformanceRating(p);
+          return (
+            <li key={p.id} style={styles.rosterItem}>
+              <Avatar player={p} size={26} />
+              <span style={styles.queueName}>{p.name}</span>
+              {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
+              {performance.rating !== null && (
+                <span
+                  style={styles.ratingBadge(performance.rating)}
+                  title={`${Math.round(performance.winPct * 100)}% win rate this session`}
+                >
+                  {performance.rating}
+                </span>
+              )}
+              <button style={styles.skipToggleBtn(p.skipped)} onClick={() => onToggleSkip(p.id)}>
+                {p.skipped ? <Play size={11} strokeWidth={2.5} /> : <Pause size={11} strokeWidth={2.5} />}
+                {p.skipped ? "Sitting out" : "Skip"}
+              </button>
+              <button style={styles.rosterRemoveBtn} onClick={() => onRemove(p.id)} aria-label={`remove ${p.name}`}>
+                <X size={11} strokeWidth={3} />
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </>
   );

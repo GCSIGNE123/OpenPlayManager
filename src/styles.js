@@ -629,6 +629,20 @@ export const styles = {
     color: "#a3a89a",
     marginTop: 14,
   },
+  standingsRatingCol: {
+    width: 44,
+    textAlign: "center",
+  },
+  ratingBadge: (rating) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 12,
+    fontWeight: 700,
+    color: rating === null ? "#a3a89a" : rating >= 60 ? "var(--chalk)" : "var(--ink)",
+    background: rating === null ? "transparent" : rating >= 60 ? "var(--court)" : "var(--ball)",
+    borderRadius: 5,
+    padding: rating === null ? 0 : "2px 6px",
+    flexShrink: 0,
+  }),
   endMatchBtn: {
     flex: 1,
     background: "var(--ball)",
