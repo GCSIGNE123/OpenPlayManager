@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #9)
+
+### Added
+- Progressive Skill Rotation: Competitive-phase pairing. New `src/engines/CompetitiveRotationEngine.js`, wired into `ProgressiveSkillRotationStrategy` for `phase === "competitive"`. Beginner/intermediate skill labels are ignored entirely — no bonus, no requirement. Players are paired primarily by current session Performance Rating closeness (weighted ~2x a full partner-recency swing, so it dominates), while a genuine repeated-partner penalty can still outweigh a small rating gap. Repeated opponents are still avoided at the matchup stage, same recency scoring as every other engine in the app
+
+### Changed
+- All three Progressive Skill Rotation phases (Mentorship, Transition, Competitive) now have real pairing logic — the "Random" placeholder pairing that used to back Competitive (and, before that, Transition) is gone
+
 ## 2026-07-16 (later, cont'd #8)
 
 ### Added

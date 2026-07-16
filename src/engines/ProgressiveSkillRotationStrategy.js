@@ -1,7 +1,7 @@
 import { RotationEngine } from "./RotationEngine.js";
 import { BalancedRotationEngine } from "./BalancedRotationEngine.js";
 import { TransitionRotationEngine } from "./TransitionRotationEngine.js";
-import { shuffle, uid } from "../lib/random.js";
+import { CompetitiveRotationEngine } from "./CompetitiveRotationEngine.js";
 
 // "Progressive Skill Rotation" — phase-aware strategy.
 //
@@ -19,17 +19,16 @@ import { shuffle, uid } from "../lib/random.js";
 //   teams are a soft preference (not mandatory), Performance Rating factors
 //   into which two teams face off (balancing match quality), and repeated
 //   partners/opponents are still avoided. See that file for the full scoring.
-// - Competitive: not implemented yet — still the placeholder "Random"
-//   behavior (shuffle the waiting pool, pair 2-and-2, no skill or history
-//   awareness), so the phase remains fully selectable without pretending to
-//   implement matching that isn't built yet. Swap in real logic later; the
-//   RotationEngine interface and the call sites in lib/utils.js won't need
-//   to change.
+// - Competitive: delegated to CompetitiveRotationEngine — beginner/intermediate
+//   skill labels are ignored entirely; players are paired primarily by
+//   current session Performance Rating, while still avoiding repeated
+//   partners and opponents. See that file for the full scoring.
 export class ProgressiveSkillRotationStrategy extends RotationEngine {
   constructor() {
     super();
     this.mentorshipEngine = new BalancedRotationEngine();
     this.transitionEngine = new TransitionRotationEngine();
+    this.competitiveEngine = new CompetitiveRotationEngine();
   }
 
   generateMatchups(context, allowSameSkillFallback = false) {
@@ -39,18 +38,11 @@ export class ProgressiveSkillRotationStrategy extends RotationEngine {
     if (context.phase === "transition") {
       return this.transitionEngine.generateMatchups(context);
     }
-    return this.generateRandomMatchups(context);
-  }
-
-  generateRandomMatchups({ waitingIds, players, existingMatchups }) {
-    const reserved = new Set(existingMatchups.flatMap((m) => [...m.teamA, ...m.teamB]));
-    const pool = shuffle(waitingIds.filter((id) => !reserved.has(id) && players[id]));
-
-    const matchups = [];
-    while (pool.length >= 4) {
-      const [a, b, c, d] = pool.splice(0, 4);
-      matchups.push({ id: uid(), teamA: [a, b], teamB: [c, d] });
+    if (context.phase === "competitive") {
+      return this.competitiveEngine.generateMatchups(context);
     }
-    return matchups;
+    // no phase context (e.g. not yet computed) -- fall back to the
+    // Mentorship engine rather than leaving matchups unbuilt
+    return this.mentorshipEngine.generateMatchups(context, allowSameSkillFallback);
   }
 }
