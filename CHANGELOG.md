@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #10)
+
+### Added
+- Scorer: "Undo last round" button, shown next to the Courts section header right after ending a match — restores the *entire* pre-match state in one click: the court back to live with its original teams/score, players' stats and rotation history reverted, the match removed from `matchHistory`, and `queueIds` back to not having those players requeued. One-shot and device-local (not synced to Supabase), same pattern as "Undo regenerate": cleared by any action that could make restoring it unsafe (deploying a matchup to a court, editing a matchup, another regenerate or end-match, skipping/removing a player, a new check-in, leaving the session)
+
+### Changed
+- Bonus fix while adding the above: ending a match now also invalidates a still-pending "Undo regenerate" snapshot, since a stale pre-regenerate `nextMatchups` list could no longer safely reflect the players a round just requeued
+- Manual swap (Fix teams / Substitute, on both live courts and upcoming matchups), Lock/Unlock a matchup, Regenerate matchups, and previewing generated pairings before deploying them to a court (the "Next matchups" list in Scorer) were already implemented in earlier sessions — this entry rounds out the organizer control set with the one that was missing
+
 ## 2026-07-16 (later, cont'd #9)
 
 ### Added

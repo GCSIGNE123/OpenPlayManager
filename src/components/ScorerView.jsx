@@ -22,6 +22,8 @@ export default function ScorerView({
   regenerateMatchups,
   canUndoRegenerate,
   undoRegenerate,
+  canUndoLastRound,
+  undoLastRound,
   toggleSkipPlayer,
   removePlayer,
   rotationMode,
@@ -169,7 +171,19 @@ export default function ScorerView({
 
       <WaitingPlayersPanel players={unassignedPlayers} onToggleSkip={toggleSkipPlayer} onRemove={removePlayer} />
 
-      <SectionLabel>Courts</SectionLabel>
+      <div style={styles.scorerToolbar}>
+        <SectionLabel>Courts</SectionLabel>
+        {canUndoLastRound && (
+          <button
+            style={{ ...styles.secondaryBtn, margin: 0 }}
+            onClick={undoLastRound}
+            title="Restore the court, players, and stats from right before the last 'End match'"
+          >
+            <Undo2 size={13} strokeWidth={2.5} />
+            Undo last round
+          </button>
+        )}
+      </div>
       <div style={styles.courtGrid}>
         {state.courts.map((court, i) => {
           const partnerIdx = rotationMode === "winnerPool" ? getPairPartnerIndex(state.courts, i) : null;

@@ -77,6 +77,18 @@ export default function PickleballOpenPlay() {
   // court, editing a matchup, another regenerate, skipping/removing a
   // player) so it can never resurrect a player who's since moved on.
   const [regenerateSnapshot, setRegenerateSnapshot] = useState(null);
+  // one-shot, this-device-only undo for the most recently ended match — the
+  // full app state from right before that endMatch call, so restoring it
+  // puts back the court (still live, original teams/score), the players'
+  // stats and rotation history, matchHistory, and queueIds all at once.
+  // Same "unsafe to keep around" invalidation rules as regenerateSnapshot —
+  // see clearOneShotSnapshots — so it can never resurrect a round whose
+  // players have since moved on to something else.
+  const [lastRoundSnapshot, setLastRoundSnapshot] = useState(null);
+  const clearOneShotSnapshots = () => {
+    setRegenerateSnapshot(null);
+    setLastRoundSnapshot(null);
+  };
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -244,7 +256,7 @@ export default function PickleballOpenPlay() {
     setPinError("");
     setJoinCode("");
     setJoinError("");
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
   };
 
   const goToLanding = () => {
@@ -356,6 +368,7 @@ export default function PickleballOpenPlay() {
     if (!p || p.checkedIn) return;
     const players = { ...state.players, [id]: { ...p, checkedIn: true } };
     const queueIds = [...state.queueIds, id];
+    clearOneShotSnapshots(); // a snapshot from before this check-in would silently un-check them
     save({ ...state, players, queueIds });
     setCheckinMsg(`${p.name} is in the queue.`);
     setTimeout(() => setCheckinMsg(""), 2500);
@@ -391,6 +404,7 @@ export default function PickleballOpenPlay() {
       },
     };
     const queueIds = [...state.queueIds, id];
+    clearOneShotSnapshots(); // a snapshot from before this check-in wouldn't know this player exists
     save({ ...state, players, queueIds });
     setNameInput("");
     setPhotoDataUrl(null);
@@ -413,7 +427,7 @@ export default function PickleballOpenPlay() {
     const courts = state.courts.map((c, i) =>
       i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 } : c
     );
-    setRegenerateSnapshot(null); // a deployed matchup can't be safely resurrected by undo
+    clearOneShotSnapshots(); // a deployed matchup can't be safely resurrected by undo
     save({ ...state, courts, queueIds, nextMatchups: restMatchups });
   };
 
@@ -430,7 +444,7 @@ export default function PickleballOpenPlay() {
       queueIds = queueIds.filter((id) => !consumed.has(id));
       return { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0 };
     });
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
     save({ ...state, courts, queueIds, nextMatchups: remainingMatchups });
   };
 
@@ -453,6 +467,10 @@ export default function PickleballOpenPlay() {
   };
 
   const endMatch = (courtIdx) => {
+    // "Undo last round" restores this exact pre-match state (court still
+    // live with its original teams/score, players' stats and rotation
+    // history, matchHistory, queueIds) in one shot — see undoLastRound.
+    const preMatchState = state;
     const court = state.courts[courtIdx];
     const { teamA, teamB, scoreA, scoreB } = court;
     const playedIds = [...teamA, ...teamB];
@@ -513,13 +531,28 @@ export default function PickleballOpenPlay() {
       const { courts, requeueIds, newMatchups } = resolveWinnerPoolMatch(state.courts, players, courtIdx);
       const queueIds = [...state.queueIds, ...requeueIds];
       const nextMatchups = [...(state.nextMatchups || []), ...newMatchups];
+      setRegenerateSnapshot(null); // stale after this round's requeue/repool
+      setLastRoundSnapshot(preMatchState);
       save({ ...state, courts, players, queueIds, nextMatchups, matchHistory });
       return;
     }
 
     const queueIds = [...state.queueIds, ...playedIds];
     const courts = state.courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
+    setRegenerateSnapshot(null); // stale after this round's requeue
+    setLastRoundSnapshot(preMatchState);
     save({ ...state, courts, players, queueIds, matchHistory });
+  };
+
+  // restores the full app state from right before the last "End match"
+  // click on this device — court back to live with its original
+  // teams/score, players' stats and rotation history reverted, the match
+  // removed from matchHistory, and queueIds back to not having those
+  // players requeued. One-shot and device-local, same as undoRegenerate.
+  const undoLastRound = () => {
+    if (!lastRoundSnapshot) return;
+    save(lastRoundSnapshot);
+    setLastRoundSnapshot(null);
   };
 
   const setRotationMode = (mode) => {
@@ -554,7 +587,7 @@ export default function PickleballOpenPlay() {
     const nextMatchups = (state.nextMatchups || []).map((m) =>
       m.id === matchupId ? { ...m, teamA, teamB } : m
     );
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
     save({ ...state, nextMatchups });
   };
 
@@ -568,7 +601,7 @@ export default function PickleballOpenPlay() {
       const teamB = m.teamB.map((id) => (id === outgoingId ? incomingId : id));
       return { ...m, teamA, teamB };
     });
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
     save({ ...state, nextMatchups });
   };
 
@@ -608,7 +641,7 @@ export default function PickleballOpenPlay() {
     const p = state.players[id];
     if (!p) return;
     const players = { ...state.players, [id]: { ...p, skipped: !p.skipped } };
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
     save({ ...state, players });
   };
 
@@ -624,7 +657,7 @@ export default function PickleballOpenPlay() {
     const nextMatchups = (state.nextMatchups || []).filter(
       (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
     );
-    setRegenerateSnapshot(null);
+    clearOneShotSnapshots();
     save({ ...state, players, queueIds, nextMatchups });
   };
 
@@ -819,6 +852,8 @@ export default function PickleballOpenPlay() {
                   regenerateMatchups={regenerateMatchups}
                   canUndoRegenerate={!!regenerateSnapshot}
                   undoRegenerate={undoRegenerate}
+                  canUndoLastRound={!!lastRoundSnapshot}
+                  undoLastRound={undoLastRound}
                   toggleSkipPlayer={toggleSkipPlayer}
                   removePlayer={removePlayer}
                   rotationMode={state.rotationMode || "continuous"}
