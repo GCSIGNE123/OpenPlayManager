@@ -11,7 +11,20 @@ export const emptyCourt = (number) => ({
   teamB: [],
   scoreA: 0,
   scoreB: 0,
+  awaitingPair: false, // Winner Pool Rotation only — true once this court's finished but its paired court hasn't, see winnerPoolRound.js
 });
+
+// which matchmaking strategy builds the next matches — see src/engines/ and
+// PROJECT.md for how these plug in. "continuous": the default; every court
+// draws independently from one shared waiting queue (BalancedRotationEngine).
+// "winnerPool": courts pair up (1&2, 3&4, ...); when both finish, their
+// winners pool together for a new match and their losers pool together for
+// another, going back on the pair's lower/higher court respectively (see
+// src/lib/winnerPoolRound.js).
+export const ROTATION_MODES = [
+  { value: "continuous", label: "Continuous queue" },
+  { value: "winnerPool", label: "Winner Pool Rotation" },
+];
 
 // id -> {
 //   id, name, photo, skill ('beginner' | 'intermediate'), checkedIn, skipped,
@@ -27,5 +40,6 @@ export const defaultState = {
   queueIds: [],
   nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
+  rotationMode: "continuous", // see ROTATION_MODES
   updatedAt: 0,
 };

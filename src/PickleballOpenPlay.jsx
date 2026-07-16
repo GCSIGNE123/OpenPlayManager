@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
-import { ACCESS_PREFIX, ADMIN_PIN, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
+import { ACCESS_PREFIX, ADMIN_PIN, ROTATION_MODES, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -11,6 +11,7 @@ import {
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
+import { resolveWinnerPoolMatch } from "./lib/winnerPoolRound.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -486,9 +487,22 @@ export default function PickleballOpenPlay() {
     };
     const matchHistory = [...(state.matchHistory || []), matchRecord];
 
+    if (state.rotationMode === "winnerPool") {
+      // hold this court (and its pair partner, if also done) instead of
+      // requeuing everyone individually — see winnerPoolRound.js
+      const { courts, requeueIds } = resolveWinnerPoolMatch(state.courts, players, courtIdx);
+      const queueIds = [...state.queueIds, ...requeueIds];
+      save({ ...state, courts, players, queueIds, matchHistory });
+      return;
+    }
+
     const queueIds = [...state.queueIds, ...playedIds];
     const courts = state.courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
     save({ ...state, courts, players, queueIds, matchHistory });
+  };
+
+  const setRotationMode = (mode) => {
+    save({ ...state, rotationMode: mode });
   };
 
   const reassignTeams = (courtIdx, teamA, teamB) => {
@@ -779,6 +793,9 @@ export default function PickleballOpenPlay() {
                   undoRegenerate={undoRegenerate}
                   toggleSkipPlayer={toggleSkipPlayer}
                   removePlayer={removePlayer}
+                  rotationMode={state.rotationMode || "continuous"}
+                  setRotationMode={setRotationMode}
+                  rotationModes={ROTATION_MODES}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}

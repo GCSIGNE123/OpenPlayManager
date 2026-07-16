@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Repeat, RotateCcw, Shuffle, Trophy } from "lucide-react";
+import { Check, Clock, Repeat, RotateCcw, Shuffle, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -16,6 +16,8 @@ export default function CourtCard({
   onReassign,
   onSubstitute,
   canFill,
+  pairPartnerNumber,
+  poolingMode,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
   const [editing, setEditing] = useState(false);
@@ -67,7 +69,13 @@ export default function CourtCard({
       <div style={styles.courtHeadRow}>
         <span style={styles.courtBadge}>COURT {court.number}</span>
         <span style={styles.statusTag(court.status)}>
-          {court.status === "open" ? "OPEN" : court.status === "finished" ? "MATCH POINT" : "LIVE"}
+          {court.awaitingPair
+            ? "WAITING"
+            : court.status === "open"
+              ? "OPEN"
+              : court.status === "finished"
+                ? "MATCH POINT"
+                : "LIVE"}
         </span>
       </div>
 
@@ -151,7 +159,21 @@ export default function CourtCard({
         </div>
       )}
 
-      {isLive && !editing && !subbingId && (
+      {isLive && court.awaitingPair && (
+        <div>
+          <TeamRow ids={court.teamA} players={players} score={court.scoreA} readOnly leading={court.scoreA > court.scoreB} />
+          <div style={styles.vsLine} />
+          <TeamRow ids={court.teamB} players={players} score={court.scoreB} readOnly leading={court.scoreB > court.scoreA} />
+          <p style={styles.awaitingPairText}>
+            <Clock size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
+            {pairPartnerNumber
+              ? `Waiting for Court ${pairPartnerNumber} to finish — winners and losers will regroup automatically.`
+              : "Waiting to regroup with its paired court."}
+          </p>
+        </div>
+      )}
+
+      {isLive && !court.awaitingPair && !editing && !subbingId && (
         <div>
           <TeamRow
             ids={court.teamA}
@@ -189,7 +211,8 @@ export default function CourtCard({
               >
                 {court.status === "finished" ? (
                   <>
-                    <Trophy size={14} strokeWidth={2.5} /> End match & requeue players
+                    <Trophy size={14} strokeWidth={2.5} />
+                    {poolingMode ? "Confirm result" : "End match & requeue players"}
                   </>
                 ) : (
                   <>

@@ -1,6 +1,7 @@
 import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { reservedMatchupIds } from "../lib/utils.js";
+import { getPairPartnerIndex } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
 import SectionLabel from "./SectionLabel.jsx";
@@ -22,6 +23,9 @@ export default function ScorerView({
   undoRegenerate,
   toggleSkipPlayer,
   removePlayer,
+  rotationMode,
+  setRotationMode,
+  rotationModes,
   waitingCount,
   addCourt,
   removeCourt,
@@ -43,6 +47,22 @@ export default function ScorerView({
 
   return (
     <div>
+      <div style={styles.scorerToolbar}>
+        <div style={styles.rotationRow}>
+          Rotation:
+          <select
+            style={styles.rotationSelect}
+            value={rotationMode}
+            onChange={(e) => setRotationMode(e.target.value)}
+          >
+            {rotationModes.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div style={styles.scorerToolbar}>
         <div style={styles.toolbarText}>
           <strong>{waitingCount}</strong> players waiting
@@ -129,20 +149,26 @@ export default function ScorerView({
 
       <SectionLabel>Courts</SectionLabel>
       <div style={styles.courtGrid}>
-        {state.courts.map((court, i) => (
-          <CourtCard
-            key={i}
-            court={court}
-            players={state.players}
-            waitingPlayers={unassignedPlayers}
-            onFill={() => fillCourt(i)}
-            onScore={(team, delta) => adjustScore(i, team, delta)}
-            onEnd={() => endMatch(i)}
-            onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
-            onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
-            canFill={canFillCourt}
-          />
-        ))}
+        {state.courts.map((court, i) => {
+          const partnerIdx = rotationMode === "winnerPool" ? getPairPartnerIndex(state.courts, i) : null;
+          const pairPartnerNumber = partnerIdx !== null ? state.courts[partnerIdx]?.number : null;
+          return (
+            <CourtCard
+              key={i}
+              court={court}
+              players={state.players}
+              waitingPlayers={unassignedPlayers}
+              onFill={() => fillCourt(i)}
+              onScore={(team, delta) => adjustScore(i, team, delta)}
+              onEnd={() => endMatch(i)}
+              onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
+              onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
+              canFill={canFillCourt}
+              pairPartnerNumber={pairPartnerNumber}
+              poolingMode={rotationMode === "winnerPool"}
+            />
+          );
+        })}
       </div>
     </div>
   );
