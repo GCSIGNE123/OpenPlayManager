@@ -1,4 +1,5 @@
 import { emptyCourt } from "./constants.js";
+import { uid } from "./random.js";
 import { WinnerPoolRotationEngine } from "../engines/WinnerPoolRotationEngine.js";
 
 const defaultEngine = new WinnerPoolRotationEngine();
@@ -18,14 +19,22 @@ export function getPairPartnerIndex(courts, courtIdx) {
 // already recorded elsewhere — see PickleballOpenPlay.jsx's endMatch). Holds
 // a finished court until its pair partner also finishes, then pools both
 // courts' winners into one new match and both courts' losers into another —
-// see WinnerPoolRotationEngine for how those new teams get built. The
-// winner pool's match goes on the pair's lower-numbered court, the loser
-// pool's on the higher-numbered one.
+// see WinnerPoolRotationEngine for how those new teams get built.
 //
-// Returns { courts, requeueIds } — requeueIds is only non-empty for the odd
-// court out (no pair partner), which just falls back to requeuing its
-// players normally rather than pooling, per the spec's "handle gracefully"
-// note for odd numbers of courts.
+// The freshly-pooled teams do NOT go straight back onto courts 1/2 — both
+// courts in the pair open up instead, and the new teams join the BACK of
+// the waiting queue (as pre-built matchups) so anyone else who's been
+// waiting gets first crack at the now-open courts. Otherwise the same 8
+// players on courts 1&2 would just keep replaying each other forever while
+// everyone else sat out.
+//
+// Returns { courts, requeueIds, newMatchups }:
+//   - requeueIds: player ids to append to the back of queueIds
+//   - newMatchups: pre-built matchup objects to append to the back of
+//     nextMatchups (empty unless both courts in the pair just resolved)
+// requeueIds is also how the odd court out (no pair partner) gets handled —
+// it just requeues its players normally rather than pooling, per the
+// spec's "handle gracefully" note for odd numbers of courts.
 export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defaultEngine) {
   const thisCourt = courts[courtIdx];
   const partnerIdx = getPairPartnerIndex(courts, courtIdx);
@@ -33,7 +42,7 @@ export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defau
   if (partnerIdx === null) {
     const requeueIds = [...thisCourt.teamA, ...thisCourt.teamB];
     const newCourts = courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
-    return { courts: newCourts, requeueIds };
+    return { courts: newCourts, requeueIds, newMatchups: [] };
   }
 
   const partnerCourt = courts[partnerIdx];
@@ -42,11 +51,12 @@ export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defau
   if (!partnerCourt.awaitingPair) {
     // partner hasn't finished yet — hold this court's final score and wait
     const newCourts = courts.map((c, i) => (i === courtIdx ? markedThis : c));
-    return { courts: newCourts, requeueIds: [] };
+    return { courts: newCourts, requeueIds: [], newMatchups: [] };
   }
 
-  // both courts in the pair are done — pool winners and losers, then
-  // rebuild fresh teams for each pool
+  // both courts in the pair are done — pool winners and losers, rebuild
+  // fresh teams for each pool, open up both courts, and send the new teams
+  // to the back of the queue instead of straight back onto court/partner
   const winners = [];
   const losers = [];
   for (const c of [markedThis, partnerCourt]) {
@@ -61,32 +71,11 @@ export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defau
 
   const lowerIdx = Math.min(courtIdx, partnerIdx);
   const higherIdx = Math.max(courtIdx, partnerIdx);
+  const newCourts = courts.map((c, i) => (i === lowerIdx || i === higherIdx ? emptyCourt(c.number) : c));
 
-  const newCourts = courts.map((c, i) => {
-    if (i === lowerIdx && winnerMatch) {
-      return {
-        ...c,
-        status: "live",
-        teamA: winnerMatch.teamA,
-        teamB: winnerMatch.teamB,
-        scoreA: 0,
-        scoreB: 0,
-        awaitingPair: false,
-      };
-    }
-    if (i === higherIdx && loserMatch) {
-      return {
-        ...c,
-        status: "live",
-        teamA: loserMatch.teamA,
-        teamB: loserMatch.teamB,
-        scoreA: 0,
-        scoreB: 0,
-        awaitingPair: false,
-      };
-    }
-    return c;
-  });
+  const newMatchups = [];
+  if (winnerMatch) newMatchups.push({ id: uid(), teamA: winnerMatch.teamA, teamB: winnerMatch.teamB });
+  if (loserMatch) newMatchups.push({ id: uid(), teamA: loserMatch.teamA, teamB: loserMatch.teamB });
 
-  return { courts: newCourts, requeueIds: [] };
+  return { courts: newCourts, requeueIds: [...winners, ...losers], newMatchups };
 }

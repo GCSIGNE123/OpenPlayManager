@@ -489,10 +489,15 @@ export default function PickleballOpenPlay() {
 
     if (state.rotationMode === "winnerPool") {
       // hold this court (and its pair partner, if also done) instead of
-      // requeuing everyone individually — see winnerPoolRound.js
-      const { courts, requeueIds } = resolveWinnerPoolMatch(state.courts, players, courtIdx);
+      // requeuing everyone individually — see winnerPoolRound.js. Once both
+      // courts in the pair are done, their pooled teams go to the BACK of
+      // the queue/nextMatchups (not straight back onto the same 2 courts),
+      // so other waiting players get first turn on the courts that just
+      // opened up.
+      const { courts, requeueIds, newMatchups } = resolveWinnerPoolMatch(state.courts, players, courtIdx);
       const queueIds = [...state.queueIds, ...requeueIds];
-      save({ ...state, courts, players, queueIds, matchHistory });
+      const nextMatchups = [...(state.nextMatchups || []), ...newMatchups];
+      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory });
       return;
     }
 

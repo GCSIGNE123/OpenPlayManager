@@ -167,7 +167,7 @@ export default function CourtCard({
           <p style={styles.awaitingPairText}>
             <Clock size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
             {pairPartnerNumber
-              ? `Waiting for Court ${pairPartnerNumber} to finish — winners and losers will regroup automatically.`
+              ? `Waiting for Court ${pairPartnerNumber} to finish — winners and losers will then join the back of the queue.`
               : "Waiting to regroup with its paired court."}
           </p>
         </div>
