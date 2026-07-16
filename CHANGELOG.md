@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #6)
+
+### Added
+- Progressive Skill Rotation: Mentorship-phase pairing. When the session's phase (see `progressiveSkillPhase.js`) is Mentorship, `ProgressiveSkillRotationStrategy` now delegates matchup generation to `BalancedRotationEngine` — prioritizing beginner+intermediate teams, avoiding a player's most recently repeated partner, and minimizing repeated opponents, same scoring as Continuous queue mode. The active phase is threaded through `refreshNextMatchups`/`regenerateNextMatchups` as a new `phase` field in the engine's `generateMatchups` context
+
+### Changed
+- Transition and Competitive phases are unaffected — pairing there is still the random placeholder from before; only Mentorship-phase pairing changed
+
 ## 2026-07-16 (later, cont'd #5)
 
 ### Added

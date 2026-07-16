@@ -1,25 +1,39 @@
 import { RotationEngine } from "./RotationEngine.js";
+import { BalancedRotationEngine } from "./BalancedRotationEngine.js";
 import { shuffle, uid } from "../lib/random.js";
 
-// "Progressive Skill Rotation" — placeholder strategy.
+// "Progressive Skill Rotation" — phase-aware strategy.
 //
-// Intended eventual behavior (not implemented yet): gradually escalate
-// matchup difficulty within a session as players rack up games/wins —
-// e.g. pairing players against closer skill/performance as the session
-// progresses, rather than the fixed beginner+intermediate split
-// BalancedRotationEngine always applies. That scoring isn't built yet.
+// The active phase (see src/lib/progressiveSkillPhase.js — Mentorship,
+// Transition, Competitive, based on state.expectedGamesPerPlayer) is passed
+// in via context.phase by src/lib/utils.js's refreshNextMatchups /
+// regenerateNextMatchups.
 //
-// For now this returns the same kind of pairings a bare "Random" strategy
-// would: shuffle the waiting pool and pair players up 2-and-2 with no
-// skill awareness, partner-avoidance, or opponent-avoidance at all — just
-// enough to make the mode fully selectable end-to-end (UI picker, engine
-// wiring, matchup generation, court assignment) without pretending to
-// implement progressive skill matching that isn't there yet. Swap the body
-// of generateMatchups() for the real algorithm when it's ready; the
-// RotationEngine interface and everywhere this plugs in (src/lib/utils.js's
-// refreshNextMatchups/regenerateNextMatchups) won't need to change.
+// - Mentorship: pairing mirrors BalancedRotationEngine — prioritize
+//   beginner+intermediate teams, avoid repeating a player's most recent
+//   partner, and minimize repeated opponents. Delegated to
+//   BalancedRotationEngine rather than duplicated, since that's exactly the
+//   scoring this phase wants.
+// - Transition / Competitive: not implemented yet — still the placeholder
+//   "Random" behavior (shuffle the waiting pool, pair 2-and-2, no skill or
+//   history awareness), so those phases remain fully selectable without
+//   pretending to implement matching that isn't built yet. Swap in real
+//   logic per phase later; the RotationEngine interface and the call sites
+//   in lib/utils.js won't need to change.
 export class ProgressiveSkillRotationStrategy extends RotationEngine {
-  generateMatchups({ waitingIds, players, existingMatchups }) {
+  constructor() {
+    super();
+    this.mentorshipEngine = new BalancedRotationEngine();
+  }
+
+  generateMatchups(context, allowSameSkillFallback = false) {
+    if (context.phase === "mentorship") {
+      return this.mentorshipEngine.generateMatchups(context, allowSameSkillFallback);
+    }
+    return this.generateRandomMatchups(context);
+  }
+
+  generateRandomMatchups({ waitingIds, players, existingMatchups }) {
     const reserved = new Set(existingMatchups.flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = shuffle(waitingIds.filter((id) => !reserved.has(id) && players[id]));
 

@@ -13,6 +13,7 @@ import {
   resizeImageToAvatar,
 } from "./lib/utils.js";
 import { resolveWinnerPoolMatch } from "./lib/winnerPoolRound.js";
+import { calculateSessionProgress, getProgressivePhase } from "./lib/progressiveSkillPhase.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -23,6 +24,15 @@ import CheckinView from "./components/CheckinView.jsx";
 import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
+
+// null outside Progressive Skill Rotation — the phase-based pairing
+// (see ProgressiveSkillRotationStrategy) only applies there. See
+// lib/progressiveSkillPhase.js for the phase boundaries.
+function progressiveSkillPhaseFor(rotationMode, players, expectedGamesPerPlayer) {
+  if (rotationMode !== "progressiveSkill") return null;
+  const progress = calculateSessionProgress(players, expectedGamesPerPlayer || 6);
+  return getProgressivePhase(progress).key;
+}
 
 export default function PickleballOpenPlay() {
   const [screen, setScreen] = useState("landing"); // landing | access | create | admin | app
@@ -94,11 +104,14 @@ export default function PickleballOpenPlay() {
       // recomputed on every save: appends any newly-possible matchups from
       // players not already locked into one, leaving existing (possibly
       // scorer-edited) matchups untouched — see refreshNextMatchups. Which
-      // engine builds them depends on the session's rotation mode.
+      // engine builds them depends on the session's rotation mode; in
+      // Progressive Skill Rotation, the current phase also shapes pairing
+      // (see progressiveSkillPhaseFor below).
       const engine = getRotationEngine(next.rotationMode);
+      const phase = progressiveSkillPhaseFor(next.rotationMode, next.players, next.expectedGamesPerPlayer);
       const withMatchups = {
         ...next,
-        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || [], engine),
+        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || [], engine, phase),
       };
       const withStamp = { ...withMatchups, updatedAt: Date.now() };
       setState(withStamp);
@@ -575,7 +588,8 @@ export default function PickleballOpenPlay() {
   const regenerateMatchups = () => {
     const before = state.nextMatchups || [];
     const engine = getRotationEngine(state.rotationMode);
-    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before, engine);
+    const phase = progressiveSkillPhaseFor(state.rotationMode, state.players, state.expectedGamesPerPlayer);
+    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before, engine, phase);
     setRegenerateSnapshot(before);
     save({ ...state, nextMatchups });
   };

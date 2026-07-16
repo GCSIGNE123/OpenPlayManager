@@ -131,9 +131,9 @@ export function getRotationEngine(rotationMode) {
 // match. The fallback is opt-in — see regenerateNextMatchups below, for
 // when an organizer deliberately asks for the best match available *right
 // now* with whoever's actually waiting.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
   const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups });
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase });
   return [...existingMatchups, ...newMatchups];
 }
 
@@ -144,10 +144,10 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // they are. Unlike refreshNextMatchups, this allows the same-skill fallback
 // — it's a deliberate, one-off "match up whoever's here now" action, not
 // something that fires silently after every check-in.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
   const locked = existingMatchups.filter((m) => m.locked);
   const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked }, true);
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked, phase }, true);
   return [...locked, ...newMatchups];
 }
 
