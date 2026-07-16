@@ -513,6 +513,11 @@ export default function PickleballOpenPlay() {
     save({ ...state, rotationMode: mode });
   };
 
+  const setExpectedGamesPerPlayer = (count) => {
+    const expectedGamesPerPlayer = Math.max(1, Number(count) || 1);
+    save({ ...state, expectedGamesPerPlayer });
+  };
+
   const reassignTeams = (courtIdx, teamA, teamB) => {
     const courts = state.courts.map((c, i) => (i === courtIdx ? { ...c, teamA, teamB } : c));
     save({ ...state, courts });
@@ -805,6 +810,8 @@ export default function PickleballOpenPlay() {
                   rotationMode={state.rotationMode || "continuous"}
                   setRotationMode={setRotationMode}
                   rotationModes={ROTATION_MODES}
+                  expectedGamesPerPlayer={state.expectedGamesPerPlayer || 6}
+                  setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}

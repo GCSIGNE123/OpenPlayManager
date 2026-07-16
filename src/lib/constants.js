@@ -42,5 +42,6 @@ export const defaultState = {
   nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   rotationMode: "continuous", // see ROTATION_MODES
+  expectedGamesPerPlayer: 6, // Progressive Skill Rotation only — organizer-configurable, drives session-progress/phase calc, see lib/progressiveSkillPhase.js
   updatedAt: 0,
 };
