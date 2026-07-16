@@ -1,5 +1,6 @@
 import { RotationEngine } from "./RotationEngine.js";
 import { BalancedRotationEngine } from "./BalancedRotationEngine.js";
+import { TransitionRotationEngine } from "./TransitionRotationEngine.js";
 import { shuffle, uid } from "../lib/random.js";
 
 // "Progressive Skill Rotation" — phase-aware strategy.
@@ -14,21 +15,29 @@ import { shuffle, uid } from "../lib/random.js";
 //   partner, and minimize repeated opponents. Delegated to
 //   BalancedRotationEngine rather than duplicated, since that's exactly the
 //   scoring this phase wants.
-// - Transition / Competitive: not implemented yet — still the placeholder
-//   "Random" behavior (shuffle the waiting pool, pair 2-and-2, no skill or
-//   history awareness), so those phases remain fully selectable without
-//   pretending to implement matching that isn't built yet. Swap in real
-//   logic per phase later; the RotationEngine interface and the call sites
-//   in lib/utils.js won't need to change.
+// - Transition: delegated to TransitionRotationEngine — beginner+intermediate
+//   teams are a soft preference (not mandatory), Performance Rating factors
+//   into which two teams face off (balancing match quality), and repeated
+//   partners/opponents are still avoided. See that file for the full scoring.
+// - Competitive: not implemented yet — still the placeholder "Random"
+//   behavior (shuffle the waiting pool, pair 2-and-2, no skill or history
+//   awareness), so the phase remains fully selectable without pretending to
+//   implement matching that isn't built yet. Swap in real logic later; the
+//   RotationEngine interface and the call sites in lib/utils.js won't need
+//   to change.
 export class ProgressiveSkillRotationStrategy extends RotationEngine {
   constructor() {
     super();
     this.mentorshipEngine = new BalancedRotationEngine();
+    this.transitionEngine = new TransitionRotationEngine();
   }
 
   generateMatchups(context, allowSameSkillFallback = false) {
     if (context.phase === "mentorship") {
       return this.mentorshipEngine.generateMatchups(context, allowSameSkillFallback);
+    }
+    if (context.phase === "transition") {
+      return this.transitionEngine.generateMatchups(context);
     }
     return this.generateRandomMatchups(context);
   }

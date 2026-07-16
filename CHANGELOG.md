@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #8)
+
+### Added
+- Progressive Skill Rotation: Transition-phase pairing. New `src/engines/TransitionRotationEngine.js`, wired into `ProgressiveSkillRotationStrategy` for `phase === "transition"`. Beginner+intermediate teams are now a soft preference (a scoring bonus, not a requirement) so a same-skill pairing is never blocked when it's genuinely the best available option. Performance Rating (from the previous session's `performanceRating.js`) is used as a match-quality factor: the two teams' composite rating is compared when deciding which teams face off, penalizing a big gap so a hot team is less likely to run over a cold one. Repeated partners and repeated opponents are still avoided, same recency scoring as Mentorship/Continuous queue
+
 ## 2026-07-16 (later, cont'd #7)
 
 ### Added
