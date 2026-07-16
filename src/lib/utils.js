@@ -84,18 +84,26 @@ function pickBalancedGroup(idsPool, players) {
 
 // picks the next 4 players for a court: prefers a full group who just won
 // their last match, then a full group who just lost, so winners keep
-// playing winners and losers keep playing losers — and within whichever
-// pool it draws from, prefers an even 2 beginner + 2 intermediate mix so
-// pairTeamsAvoidingRematch can pair each beginner with an intermediate.
-// Falls back to whoever's waited longest (fewest games played) when there
-// aren't 4 of a kind, or not enough of both skill levels, yet.
+// playing winners and losers keep playing losers — falling back to the
+// general waiting queue when the winners/losers pool alone can't supply a
+// valid mix. A match is only ever formed from an even 2 beginner + 2
+// intermediate group (see pickBalancedGroup) — there is no skill-blind
+// fallback, so a beginner-only or intermediate-only group simply keeps
+// waiting rather than playing a same-skill-vs-same-skill match. Returns
+// null when no valid 2+2 group exists anywhere in the queue yet.
 export function pickNextGroup(queueIds, players) {
   const winners = queueIds.filter((id) => players[id]?.lastResult === "win");
   const losers = queueIds.filter((id) => players[id]?.lastResult === "loss");
 
-  if (winners.length >= 4) return pickBalancedGroup(winners, players) || sortByGames(winners, players).slice(0, 4);
-  if (losers.length >= 4) return pickBalancedGroup(losers, players) || sortByGames(losers, players).slice(0, 4);
-  return pickBalancedGroup(queueIds, players) || sortByGames(queueIds, players).slice(0, 4);
+  if (winners.length >= 4) {
+    const group = pickBalancedGroup(winners, players);
+    if (group) return group;
+  }
+  if (losers.length >= 4) {
+    const group = pickBalancedGroup(losers, players);
+    if (group) return group;
+  }
+  return pickBalancedGroup(queueIds, players);
 }
 
 // splits a group of exactly 4 players into two new teams. When the group is
@@ -180,13 +188,17 @@ export function reservedMatchupIds(nextMatchups) {
 // waiting players not already locked into one — existing matchups are left
 // completely untouched, so a scorer's manual "fix teams" / substitute edits
 // (or a matchup already mid-review) never get silently overwritten. Safe to
-// call after every state change; it's a no-op unless 4+ new players are free.
+// call after every state change; it's a no-op unless a valid 2 beginner + 2
+// intermediate group is newly available (see pickNextGroup) — e.g. 5
+// waiting beginners and 1 waiting intermediate produces zero matchups until
+// another intermediate checks in, rather than pairing beginners together.
 export function refreshNextMatchups(queueIds, players, existingMatchups) {
   const reserved = reservedMatchupIds(existingMatchups);
   let remaining = queueIds.filter((id) => !reserved.has(id));
   const matchups = [...existingMatchups];
   while (remaining.length >= 4) {
     const group = pickNextGroup(remaining, players);
+    if (!group) break;
     remaining = remaining.filter((id) => !group.includes(id));
     const [teamA, teamB] = pairTeamsAvoidingRematch(group, players);
     matchups.push({ id: uid(), teamA, teamB });
