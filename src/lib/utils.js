@@ -1,5 +1,6 @@
 import { ACCESS_PREFIX, CODE_CHARS, STORAGE_PREFIX } from "./constants.js";
 import { BalancedRotationEngine } from "../engines/BalancedRotationEngine.js";
+import { ProgressiveSkillRotationStrategy } from "../engines/ProgressiveSkillRotationStrategy.js";
 
 export { uid, shuffle } from "./random.js";
 
@@ -98,11 +99,20 @@ export function reservedMatchupIds(nextMatchups) {
   return ids;
 }
 
-// The active rotation strategy (Strategy pattern — see src/engines/). Only
-// one concrete engine exists today; swapping this line (or making it
-// swappable from the UI) is how a future mode gets plugged in without
-// touching anything below.
-const defaultEngine = new BalancedRotationEngine();
+// Rotation strategies (Strategy pattern — see src/engines/), one instance
+// per mode. state.rotationMode ("continuous" | "winnerPool" |
+// "progressiveSkill", see ROTATION_MODES in constants.js) picks which one
+// generates matchups for the general waiting queue — see getRotationEngine
+// below. "winnerPool" mode still uses balancedEngine here for its general
+// queue (players not currently part of an active court pair); its own
+// pooled-team building is separate, see src/lib/winnerPoolRound.js.
+const balancedEngine = new BalancedRotationEngine();
+const progressiveSkillEngine = new ProgressiveSkillRotationStrategy();
+
+export function getRotationEngine(rotationMode) {
+  if (rotationMode === "progressiveSkill") return progressiveSkillEngine;
+  return balancedEngine;
+}
 
 // appends any additional ready-to-play matchups the active rotation engine
 // can build from waiting players not already locked into one (and not
@@ -121,7 +131,7 @@ const defaultEngine = new BalancedRotationEngine();
 // match. The fallback is opt-in — see regenerateNextMatchups below, for
 // when an organizer deliberately asks for the best match available *right
 // now* with whoever's actually waiting.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = defaultEngine) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine) {
   const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups });
   return [...existingMatchups, ...newMatchups];
@@ -134,7 +144,7 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // they are. Unlike refreshNextMatchups, this allows the same-skill fallback
 // — it's a deliberate, one-off "match up whoever's here now" action, not
 // something that fires silently after every check-in.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = defaultEngine) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine) {
   const locked = existingMatchups.filter((m) => m.locked);
   const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked }, true);

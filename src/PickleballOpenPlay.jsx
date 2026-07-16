@@ -5,6 +5,7 @@ import { ACCESS_PREFIX, ADMIN_PIN, ROTATION_MODES, SCORER_PIN, STORAGE_PREFIX, d
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
+  getRotationEngine,
   recordRotationHistory,
   refreshNextMatchups,
   regenerateNextMatchups,
@@ -92,10 +93,12 @@ export default function PickleballOpenPlay() {
       if (!sessionCode) return;
       // recomputed on every save: appends any newly-possible matchups from
       // players not already locked into one, leaving existing (possibly
-      // scorer-edited) matchups untouched — see refreshNextMatchups
+      // scorer-edited) matchups untouched — see refreshNextMatchups. Which
+      // engine builds them depends on the session's rotation mode.
+      const engine = getRotationEngine(next.rotationMode);
       const withMatchups = {
         ...next,
-        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || []),
+        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || [], engine),
       };
       const withStamp = { ...withMatchups, updatedAt: Date.now() };
       setState(withStamp);
@@ -566,7 +569,8 @@ export default function PickleballOpenPlay() {
   // so "Undo regenerate" can put it back.
   const regenerateMatchups = () => {
     const before = state.nextMatchups || [];
-    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before);
+    const engine = getRotationEngine(state.rotationMode);
+    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before, engine);
     setRegenerateSnapshot(before);
     save({ ...state, nextMatchups });
   };

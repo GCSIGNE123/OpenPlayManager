@@ -24,6 +24,7 @@ export const emptyCourt = (number) => ({
 export const ROTATION_MODES = [
   { value: "continuous", label: "Continuous queue" },
   { value: "winnerPool", label: "Winner Pool Rotation" },
+  { value: "progressiveSkill", label: "Progressive Skill Rotation" },
 ];
 
 // id -> {
