@@ -42,3 +42,14 @@ export function getProgressivePhase(progressPercent, thresholds = DEFAULT_PHASE_
   const phases = buildPhases(thresholds);
   return phases.find((p) => progressPercent >= p.min && progressPercent <= p.max) || phases[phases.length - 1];
 }
+
+// null outside Progressive Skill Rotation — the phase-based pairing (see
+// ProgressiveSkillRotationStrategy) only applies there. Lives here (rather
+// than as a private helper in PickleballOpenPlay.jsx, where it originated)
+// so headless callers — e.g. RotationSimulationEngine — can compute the
+// same phase the live app would, without importing a React component.
+export function progressiveSkillPhaseFor(rotationMode, players, expectedGamesPerPlayer, progressiveSkillThresholds) {
+  if (rotationMode !== "progressiveSkill") return null;
+  const progress = calculateSessionProgress(players, expectedGamesPerPlayer || 6);
+  return getProgressivePhase(progress, progressiveSkillThresholds).key;
+}

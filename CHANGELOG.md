@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #18)
+
+### Added
+- Headless Rotation Simulation Engine (`src/lib/simulation/RotationSimulationEngine.js`) — `runSimulation(config)` plays out a complete simulated Open Play session under Progressive Skill Rotation and returns a structured result (per-player final standings, full match log, per-round log, per-phase match counts, stop reason). Genuinely reuses the live app's matchmaking (`getRotationEngine`/`refreshNextMatchups`, `progressiveSkillPhaseFor`, and the Winner Pool Rotation pooling mechanic Mentorship phase borrows) rather than reimplementing the algorithm; only supplies the round-by-round court-fill/score/end-match orchestration a live UI would normally drive one click at a time. `printSimulationReport(result)` logs a `console.table` report. New CLI entry point `scripts/run-simulation.mjs` (`node scripts/run-simulation.mjs [--players=] [--courts=] [--games=] [--skillSplit=] [--mentorshipMax=] [--transitionMax=]`)
+- No UI added — this is a library module + CLI script only, per this task's scope
+
+### Changed
+- Moved `progressiveSkillPhaseFor` out of `PickleballOpenPlay.jsx` (where it was a private helper) into `lib/progressiveSkillPhase.js` and exported it, so the new headless simulation engine can compute the same phase the live app would without importing a React component. Pure refactor — same logic, same call sites, verified no behavior change
+
 ## 2026-07-16 (later, cont'd #17)
 
 ### Added

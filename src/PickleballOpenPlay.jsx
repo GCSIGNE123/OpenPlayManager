@@ -13,7 +13,7 @@ import {
   resizeImageToAvatar,
 } from "./lib/utils.js";
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
-import { calculateSessionProgress, getProgressivePhase } from "./lib/progressiveSkillPhase.js";
+import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -24,15 +24,6 @@ import CheckinView from "./components/CheckinView.jsx";
 import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
-
-// null outside Progressive Skill Rotation — the phase-based pairing
-// (see ProgressiveSkillRotationStrategy) only applies there. See
-// lib/progressiveSkillPhase.js for the phase boundaries.
-function progressiveSkillPhaseFor(rotationMode, players, expectedGamesPerPlayer, progressiveSkillThresholds) {
-  if (rotationMode !== "progressiveSkill") return null;
-  const progress = calculateSessionProgress(players, expectedGamesPerPlayer || 6);
-  return getProgressivePhase(progress, progressiveSkillThresholds).key;
-}
 
 export default function PickleballOpenPlay() {
   const [screen, setScreen] = useState("landing"); // landing | access | create | admin | app
