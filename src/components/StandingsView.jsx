@@ -1,10 +1,47 @@
+import { useState } from "react";
 import { Flame } from "lucide-react";
 import { styles } from "../styles.js";
 import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
+// sortable columns: click cycles ascending -> descending -> back to the
+// default standings order (see SORT_COLUMNS below for value getters)
+const SORT_COLUMNS = [
+  { key: "gp", label: "GP", getValue: (p) => p.gp },
+  { key: "wins", label: "W", getValue: (p) => p.wins },
+  { key: "losses", label: "L", getValue: (p) => p.losses },
+  { key: "diff", label: "+/-", getValue: (p) => p.diff },
+  { key: "rating", label: "RTG", getValue: (p) => p.performance.rating ?? 0 },
+];
+
+// default order (no active sort): highest rating, then highest wins, then
+// highest point differential, then alphabetical name as the final tie-break
+function defaultCompare(a, b) {
+  return (
+    (b.performance.rating ?? 0) - (a.performance.rating ?? 0) ||
+    b.wins - a.wins ||
+    b.diff - a.diff ||
+    a.name.localeCompare(b.name)
+  );
+}
+
 export default function StandingsView({ players }) {
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState(null); // "asc" | "desc" | null
+
+  const handleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      setSortKey(null);
+      setSortDir(null);
+    }
+  };
+
   const rows = Object.values(players)
     .filter((p) => (p.games || 0) > 0)
     .map((p) => ({
@@ -12,10 +49,18 @@ export default function StandingsView({ players }) {
       wins: p.wins || 0,
       losses: p.losses || 0,
       streak: p.streak || 0,
+      gp: (p.wins || 0) + (p.losses || 0),
       diff: (p.pointsFor || 0) - (p.pointsAgainst || 0),
       performance: calculatePerformanceRating(p),
-    }))
-    .sort((a, b) => b.wins - a.wins || b.diff - a.diff || a.losses - b.losses);
+    }));
+
+  const activeColumn = SORT_COLUMNS.find((c) => c.key === sortKey);
+  if (activeColumn) {
+    const dirMultiplier = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => dirMultiplier * (activeColumn.getValue(a) - activeColumn.getValue(b)) || a.name.localeCompare(b.name));
+  } else {
+    rows.sort(defaultCompare);
+  }
 
   const notPlayed = Object.values(players).filter((p) => !(p.games > 0));
 
@@ -29,10 +74,24 @@ export default function StandingsView({ players }) {
           <div style={styles.standingsHeadRow}>
             <span style={styles.standingsRankCol}>#</span>
             <span style={styles.standingsNameCol}>Player</span>
-            <span style={styles.standingsStatCol}>W</span>
-            <span style={styles.standingsStatCol}>L</span>
-            <span style={styles.standingsStatCol}>+/-</span>
-            <span style={styles.standingsRatingCol}>RTG</span>
+            {SORT_COLUMNS.map((col) => (
+              <span
+                key={col.key}
+                style={col.key === "rating" ? styles.standingsRatingCol : styles.standingsStatCol}
+              >
+                <button
+                  style={styles.standingsSortBtn(sortKey === col.key)}
+                  onClick={() => handleSort(col.key)}
+                  aria-label={`Sort by ${col.label}`}
+                  title={`Sort by ${col.label}`}
+                >
+                  {col.label}
+                  {sortKey === col.key && (
+                    <span style={styles.standingsSortArrow}>{sortDir === "asc" ? "▲" : "▼"}</span>
+                  )}
+                </button>
+              </span>
+            ))}
           </div>
           {rows.map((p, i) => (
             <div key={p.id} style={styles.standingsRow}>
@@ -51,6 +110,7 @@ export default function StandingsView({ players }) {
                   />
                 )}
               </span>
+              <span style={styles.standingsStatCol}>{p.gp}</span>
               <span style={styles.standingsStatCol}>{p.wins}</span>
               <span style={styles.standingsStatCol}>{p.losses}</span>
               <span

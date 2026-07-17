@@ -39,7 +39,7 @@ Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer r
 - **Live Board** — public/spectator view: live scores per court, plus the waiting queue already grouped into upcoming 2v2 matchups
 - **Check In** — registered players tap to check in, or walk-ins register + check in on the spot
 - **Scorer** — PIN-gated; assign matches, adjust scores (first to 11 wins, sudden death), fix mismatched team pairings, substitute a player mid-game (injury/emergency), end matches
-- **Standings** — ranked by wins, then point differential, then fewest losses; players on a 3+ game win streak get a 🔥 icon
+- **Standings** — columns: GP (games played), W, L, +/-, RTG. Default order is highest rating, then wins, then point differential, then alphabetical; click GP/W/L/+/-/RTG to sort by that column instead (ascending → descending → back to default), with a ▲/▼ indicator on the active column. Players on a 3+ game win streak get a 🔥 icon
 - **Installable PWA, CONNECT.PH-branded** — Add to Home Screen on Android/iOS launches standalone (no browser chrome); the app shell (HTML/JS/CSS/icons) is precached so it still opens with no connection. Session data itself always needs the network, same as before
 - **CONNECT.PH theme** — every color in the app traces back to one centralized palette in `src/styles.js`, extracted from the CONNECT.PH logo (navy primary, orange secondary, plus success/warning/error and the usual neutrals)
 

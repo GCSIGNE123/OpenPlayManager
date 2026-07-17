@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #17)
+
+### Added
+- Standings: new **GP** (Games Played, `wins + losses`) column, placed right after Player — recomputed on every render so it's always in sync after a completed match, no new stored field
+- Standings: click any of GP/W/L/+/-/RTG to sort by that column — first click ascending, second descending, third returns to the default order, with a ▲/▼ indicator next to the active column's header; only one column sorts at a time, and sorting is instant (plain client-side `.sort()`, no reload)
+- Standings: formalized the **default order** (no active sort) as highest Rating → highest Wins → highest point differential → alphabetical name — previously wins → point differential → fewest losses; the new tie-break chain leads with Rating since that's now the primary "who's doing well" signal, per this task's spec
+
+### Notes
+- Preserved all existing Standings styling (win/loss diff coloring, rating badges, 🔥 streak icon) and the responsive layout — only the header row and column set changed
+
 ## 2026-07-16 (later, cont'd #16)
 
 ### Added
