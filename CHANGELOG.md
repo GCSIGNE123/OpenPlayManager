@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #15)
+
+### Added
+- Converted Open Play Manager into an installable Progressive Web App, via `vite-plugin-pwa`:
+  - Web App Manifest (`display: "standalone"`, name/short_name/description, theme/background colors matching the app's palette, 192x192 + 512x512 icons with both "any" and "maskable" purposes)
+  - Workbox service worker precaching the built app shell (JS/CSS bundles, `index.html`, icons, favicon) so the app can still open with no connection; `navigateFallback` serves the cached shell for in-app navigation while offline
+  - `CacheFirst` runtime caching for Google Fonts (stylesheet + woff2 files) so custom fonts still render offline after a first load — deliberately no caching rule for Supabase requests, so session/score data always comes from the network when available, never served stale
+  - iOS-specific meta tags in `index.html` (`apple-mobile-web-app-capable`, `apple-touch-icon`, etc.) — iOS doesn't install from the manifest alone, and "Add to Home Screen" needs these to launch standalone
+  - New `scripts/generate-pwa-icons.mjs`: a dependency-free script that hand-encodes the 192x192, 512x512, and 180x180 (`apple-touch-icon`) PNG placeholders, reusing the same pickleball motif and colors as the existing `favicon.svg` (raw RGBA pixels + Node's built-in `zlib.deflateSync` + a small CRC32 table — no image library needed)
+  - No UI or business-logic changes; no `vercel.json` changes needed — the generated `sw.js`/`manifest.webmanifest`/`registerSW.js` are just more static output in `dist/`, which Vercel already serves as-is
+  - Added an `openplay-manager-preview` entry to `.claude/launch.json` (`npm run preview`, port 4173) for testing the real production service worker — `npm run dev` intentionally doesn't register one, so offline behavior can only be verified against a built preview, not the dev server
+
 ## 2026-07-16 (later, cont'd #14)
 
 ### Changed

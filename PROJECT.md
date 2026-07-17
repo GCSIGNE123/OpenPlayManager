@@ -12,10 +12,15 @@ Open Play Manager is a web app for running pickleball open-play sessions: check-
 openplay-manager/
 ├── index.html                    Vite entry HTML
 ├── package.json                  Scripts and dependencies
-├── vite.config.js                Vite configuration
+├── vite.config.js                Vite configuration, incl. the VitePWA plugin (manifest + service worker) — see Architecture below
 ├── .env.example                  Template for your Supabase URL + anon key
 ├── public/
-│   └── favicon.svg
+│   ├── favicon.svg
+│   ├── icon-192.png              PWA icon (purpose "any")
+│   ├── icon-512.png              PWA icon (purpose "any" + "maskable")
+│   └── apple-touch-icon.png      iOS home-screen icon (180x180)
+├── scripts/
+│   └── generate-pwa-icons.mjs    Regenerates the 3 PWA icons above (hand-encoded PNGs, no deps) from the same colors as favicon.svg
 ├── src/
 │   ├── main.jsx                  App entry point — loads the storage shim first
 │   ├── App.jsx                   Thin wrapper around the main component
@@ -67,6 +72,7 @@ openplay-manager/
 - **Session-only Performance Rating.** `src/lib/performanceRating.js`'s `calculatePerformanceRating(player)` derives a single 0-100 number from stats already tracked per player — wins, losses, games played, current streak, and point differential (`pointsFor - pointsAgainst`) — weighted so win rate dominates, with average point differential and streak as smaller adjustments; `null` until a player's first completed game. It's not a real skill rating (like DUPR), just an at-a-glance "who's playing well today" indicator. Shown as a colored badge next to each player in Standings (with a new RTG column) and in Scorer's waiting players list. Session-only by construction — every input stat already resets to 0 when a session is created (see the `players` object built in `createSession`) and nothing persists beyond that session's own storage key, so no separate reset logic was needed.
 - **Organizer controls in Scorer.** Manual swap: `reassignTeams`/`substitutePlayer` edit a *live* court's teams; `reassignMatchup`/`substituteInMatchup` edit an upcoming (not-yet-deployed) matchup — both draw only from players not already locked into something else, so the two features can't fight over the same player. Lock: `toggleLockMatchup` protects one matchup from `regenerateMatchups` (a full "rebuild everything not-locked" rerun of the active rotation engine over the current waiting pool) while everything else about it (Fix teams/Substitute) stays editable. Preview before publishing: `nextMatchups` is a pre-built, scorer-reviewable list — "Assign match"/"Fill all open courts" is the only thing that deploys a matchup from that list onto an actual court, so nothing goes live without appearing in Scorer first. Undo: two one-shot, device-local snapshots (not synced to Supabase, so they're a quick "oops" for whoever just clicked, not a durable multi-device feature) — `regenerateSnapshot` (`undoRegenerate`, restores `nextMatchups` to before the last Regenerate) and `lastRoundSnapshot` (`undoLastRound`, restores the *entire* pre-match state — court back to live with its original teams/score, players' stats and rotation history reverted, `matchHistory` entry removed, `queueIds` back to not having those players requeued — from right before the last "End match"). Both are cleared by `clearOneShotSnapshots()` at every point that could make restoring them unsafe (deploying a matchup, editing a matchup, another regenerate/end-match, skipping/removing a player, a new check-in, leaving the session) so neither can ever silently resurrect a player or round that's since moved on.
 - **Quick "Won" scoring.** `declareWinner(courtIdx, team)` skips point-by-point scoring for casual games — it sets the declared winner's score straight to 11 and the other team's to 0 and marks the court "finished", exactly as if `adjustScore` had been clicked eleven times. A "Won" button (`TeamRow`'s `onDeclareWinner`) sits next to each team; it's a shortcut into the existing score/status/`endMatch` flow, not a separate code path, so wins recorded this way behave identically everywhere (stats, `matchHistory`, rotation history) to a normally-scored 11-0 game.
+- **PWA: installable, offline app shell.** `vite-plugin-pwa` (configured in `vite.config.js`) generates the Web App Manifest (`manifest.webmanifest` — name, icons, `display: "standalone"`, theme/background colors matching `--court`/`--chalk`) and a Workbox service worker (`dist/sw.js`) at build time; both are auto-injected into `index.html` (`injectRegister: "auto"` adds the registration script, no changes needed in `src/main.jsx`). The service worker precaches the built app shell — JS/CSS bundles, `index.html`, icons, `favicon.svg` — via `globPatterns`, and `navigateFallback: "/index.html"` serves that cached shell for any in-app navigation while offline (the app has no server-side routes, so the shell *is* the whole app once React takes over). Google Fonts (stylesheet + woff2 files) get a `CacheFirst` runtime-caching rule so custom fonts still render offline after a first successful load. Deliberately **no** runtime caching rule for Supabase requests — session/score data must always come from the network when available, never served stale; offline just means the shell still opens, not that live data works without a connection. iOS doesn't install from the Web App Manifest alone, so `index.html` also carries the Apple-specific meta tags (`apple-mobile-web-app-capable`, `apple-touch-icon`, etc.) needed for "Add to Home Screen" to launch standalone there. Icons (`public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) are generated by `scripts/generate-pwa-icons.mjs` — a dependency-free script that hand-encodes PNGs (raw RGBA + Node's built-in `zlib.deflateSync` + a small CRC32 table) drawing the same pickleball motif as `favicon.svg`; re-run it if the brand colors ever change. No Vercel config changes needed — `dist/` (including `sw.js`, `manifest.webmanifest`, `registerSW.js`) is just more static output from `vite build`, which Vercel already serves as-is.
 
 ## Tech stack
 
@@ -75,6 +81,7 @@ openplay-manager/
 - [Supabase](https://supabase.com) (`@supabase/supabase-js`) — Postgres storage + Realtime
 - [lucide-react](https://lucide.dev/) — icons
 - Plain inline styles (no CSS framework) — design tokens live in `src/styles.js`
+- [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) — Web App Manifest + Workbox service worker generation
 
 ## Known limitations
 
@@ -87,5 +94,6 @@ openplay-manager/
 - Undo is one level deep and device-local for both "Undo regenerate" and "Undo last round" — neither is a full multi-step history/redo stack, and neither syncs to other devices; substituting or removing a player remains one-way with no undo
 - Winner Pool Rotation's pairwise synchronization (holding a finished court until its pair partner also finishes) is resolved client-side on whichever device clicks "Confirm result" last; two scorers on different devices confirming both paired courts within the same ~1s Realtime sync window could theoretically race — not handled, same trust model as the rest of the app's optimistic concurrency
 - No dedicated stats screen for partner/opponent frequency or court usage — that history is tracked per-player (`partnerCounts`, `opponentCounts`, `courtCounts`) but only Standings (games/wins/losses/streak) is surfaced in the UI today
+- PWA offline support covers the app shell only (it can still *open* with no connection) — live session/score data is never cached and always requires the network, same trust model as the rest of the app; the placeholder icons (`scripts/generate-pwa-icons.mjs`) reuse `favicon.svg`'s pickleball motif rather than a designed app icon
 
 These are documented in more detail in [README.md](README.md) and [backend/README.md](backend/README.md).

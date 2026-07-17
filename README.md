@@ -40,17 +40,23 @@ Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer r
 - **Check In** — registered players tap to check in, or walk-ins register + check in on the spot
 - **Scorer** — PIN-gated; assign matches, adjust scores (first to 11 wins, sudden death), fix mismatched team pairings, substitute a player mid-game (injury/emergency), end matches
 - **Standings** — ranked by wins, then point differential, then fewest losses; players on a 3+ game win streak get a 🔥 icon
+- **Installable PWA** — Add to Home Screen on Android/iOS launches standalone (no browser chrome); the app shell (HTML/JS/CSS/icons) is precached so it still opens with no connection. Session data itself always needs the network, same as before
 
 ## Project structure
 
 ```
 openplay-manager/
-├── index.html              Vite entry HTML
+├── index.html              Vite entry HTML — also carries the iOS PWA meta tags
 ├── package.json
-├── vite.config.js
+├── vite.config.js          Includes the VitePWA plugin config (manifest + service worker)
 ├── .env.example             Template for your Supabase URL + anon key
 ├── public/
-│   └── favicon.svg
+│   ├── favicon.svg
+│   ├── icon-192.png         PWA icon (any)
+│   ├── icon-512.png         PWA icon (any + maskable)
+│   └── apple-touch-icon.png iOS home-screen icon (180x180)
+├── scripts/
+│   └── generate-pwa-icons.mjs  Regenerates the icons above from the favicon's color palette — no deps, hand-encodes PNGs
 ├── src/
 │   ├── main.jsx             App entry point — loads the storage shim first
 │   ├── App.jsx               Thin wrapper around the main component
@@ -77,6 +83,7 @@ Everything the app does — sessions, players, matches, standings, access codes 
 - [Supabase](https://supabase.com) (Postgres + Realtime) for storage and live sync
 - [lucide-react](https://lucide.dev/) for icons
 - Plain inline styles (no CSS framework) — all design tokens live in `src/styles.js`
+- [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) (Workbox under the hood) for the Web App Manifest and service worker
 
 ## Known limitations (carried over from the prototype)
 

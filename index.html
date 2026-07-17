@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open Play Manager — Ormoc City Pickleball</title>
+
+    <!-- PWA: theme color for the browser chrome/OS task-switcher -->
+    <meta name="theme-color" content="#1F5C43" />
+
+    <!-- PWA: iOS doesn't install from the Web App Manifest alone -- these
+         Apple-specific tags are what make "Add to Home Screen" launch
+         standalone (no browser chrome) with the right icon and title -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Open Play" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>
