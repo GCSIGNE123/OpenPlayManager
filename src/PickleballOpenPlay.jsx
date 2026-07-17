@@ -820,7 +820,7 @@ export default function PickleballOpenPlay() {
             <header style={styles.header}>
               <div style={styles.headerInner}>
                 <div>
-                  <div style={styles.kicker}>OPEN PLAY · ORMOC CITY, LEYTE</div>
+                  <div style={styles.kicker}>OPEN PLAY MANAGER - POWERED BY CONNECTPH</div>
                   <h1 style={styles.title}>{state.venue}</h1>
                 </div>
                 <div style={styles.headerStats}>

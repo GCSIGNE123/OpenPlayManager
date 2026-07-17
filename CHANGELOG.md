@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #14)
+
+### Changed
+- Session header kicker text: "OPEN PLAY · ORMOC CITY, LEYTE" → "OPEN PLAY MANAGER - POWERED BY CONNECTPH"
+
 ## 2026-07-16 (later, cont'd #13)
 
 ### Added
