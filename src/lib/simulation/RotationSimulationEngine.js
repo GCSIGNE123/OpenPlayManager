@@ -194,6 +194,28 @@ function releaseStalePairings(state) {
   return { ...state, courts, queueIds };
 }
 
+// How evenly games got spread across the roster — the core "is the
+// rotation fair" question. Population standard deviation (not sample),
+// since playerSummaries is the entire roster for this session, not a
+// sample drawn from a larger population.
+function calculateFairnessStats(playerSummaries) {
+  const gamesPlayed = playerSummaries.map((p) => p.games);
+  if (gamesPlayed.length === 0) {
+    return { minGames: 0, maxGames: 0, avgGames: 0, stdDevGames: 0 };
+  }
+  const minGames = Math.min(...gamesPlayed);
+  const maxGames = Math.max(...gamesPlayed);
+  const avgGames = gamesPlayed.reduce((sum, g) => sum + g, 0) / gamesPlayed.length;
+  const variance = gamesPlayed.reduce((sum, g) => sum + (g - avgGames) ** 2, 0) / gamesPlayed.length;
+  const stdDevGames = Math.sqrt(variance);
+  return {
+    minGames,
+    maxGames,
+    avgGames: Math.round(avgGames * 100) / 100,
+    stdDevGames: Math.round(stdDevGames * 100) / 100,
+  };
+}
+
 // Runs a complete simulated session and returns a structured result. Does
 // not print anything — see printSimulationReport for that.
 export function runSimulation(config = {}) {
@@ -309,6 +331,12 @@ export function runSimulation(config = {}) {
     // the next begins, so everyone who just played is back in the queue
     // at a round boundary); only worth flagging when the session stalled
     finalQueueLength: state.queueIds.length,
+    // fairness: how evenly games got spread across the roster -- min/max/
+    // avg/stdDev of games played per player. A low stdDev (and a small
+    // max-min gap) means the rotation kept everyone playing about the same
+    // number of games; a high one flags a rotation that let some players
+    // sit out disproportionately more than others.
+    fairnessStats: calculateFairnessStats(playerSummaries),
   };
 }
 
@@ -328,6 +356,11 @@ export function printSimulationReport(result) {
   if (!result.endedCleanly && result.finalQueueLength > 0) {
     console.log(`Players left waiting when the simulation stopped: ${result.finalQueueLength}`);
   }
+
+  const f = result.fairnessStats;
+  console.log(
+    `Fairness (games played) — min: ${f.minGames}  max: ${f.maxGames}  avg: ${f.avgGames}  stdDev: ${f.stdDevGames}`
+  );
 
   console.log("\n-- Final standings --");
   console.table(

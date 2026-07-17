@@ -63,6 +63,10 @@ if (courtCounts.length === 1) {
       Mentorship: result.phaseCounts.mentorship,
       Transition: result.phaseCounts.transition,
       Competitive: result.phaseCounts.competitive,
+      "GP min": result.fairnessStats.minGames,
+      "GP max": result.fairnessStats.maxGames,
+      "GP avg": result.fairnessStats.avgGames,
+      "GP stdDev": result.fairnessStats.stdDevGames,
     });
   }
   console.log("=== Court count comparison ===");

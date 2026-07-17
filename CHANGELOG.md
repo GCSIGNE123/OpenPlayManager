@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #20)
+
+### Added
+- Rotation simulator: fairness statistics on games played. New `calculateFairnessStats(playerSummaries)` in `RotationSimulationEngine.js` computes min/max/average/population-standard-deviation of games played across the roster, returned as `result.fairnessStats`. `printSimulationReport` prints a one-line summary, and the `--courts=2,3,4` comparison table gained GP min/max/avg/stdDev columns so fairness is easy to compare across court counts side by side
+
 ## 2026-07-16 (later, cont'd #19)
 
 ### Added
