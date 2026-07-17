@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-17
+
+### Added
+- **Manual Court Assignment** — organizers can now toggle any open court to Manual (per-court Automatic/Manual switch) and hand-pick its 4 players and 2 teams themselves, sourced from the Waiting Queue and Upcoming Matchups (reuses `PlayerPicker`/`buildReplacementCandidates`/`dissolveMatchupIfReserved` from the replacement-sourcing feature), while every other court keeps using the session's active rotation mode automatically. New `manuallyReservedIds` (`lib/utils.js`) keeps the automatic engine from ever touching a player drafted or locked into a manual court — enforced centrally in `save()`, on every state change, not just when explicitly regenerating. "Lock court" validates 4 unique players (2 per side) before deploying the court live with a "🔒 Manual Assignment" badge; "Unlock" (available until the match finishes) reverses it, returning the 4 players to the queue. New "Generate Remaining Courts" button rebuilds and fills every open *automatic* court in one click, leaving manual courts untouched. Completed match history and player statistics are unaffected — this only changes how upcoming courts get filled. New functions in `PickleballOpenPlay.jsx`: `setCourtAssignmentMode`, `setManualCourtPlayer`, `clearManualCourtPlayer`, `lockManualCourt`, `unlockManualCourt`, `generateRemainingCourts`
+
 ## 2026-07-16 (later, cont'd #22)
 
 ### Added

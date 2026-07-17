@@ -108,6 +108,28 @@ export function reservedMatchupIds(nextMatchups) {
   return ids;
 }
 
+// every player id currently drafted or locked into a Manual Court
+// Assignment (see PROJECT.md) — a court in "manual" assignmentMode holds
+// its organizer-picked players directly in teamA/teamB while status is
+// still "open" (an in-progress draft, possibly <2 per side) just the same
+// as once it's locked and "live". Used to keep those players out of the
+// automatic rotation engine's pool (it must "ignore players already
+// assigned to manual courts") and out of other manual courts' own
+// candidate pickers, before they're ever deployed. Live/locked manual
+// courts don't strictly need to be included here too — their players are
+// already out of queueIds once locked, same as any other live court — but
+// including them is harmless and keeps this one function the single
+// source of truth for "is this player spoken for by a manual court."
+export function manuallyReservedIds(courts) {
+  const ids = new Set();
+  (courts || []).forEach((c) => {
+    if (c.assignmentMode !== "manual") return;
+    c.teamA.forEach((id) => id && ids.add(id));
+    c.teamB.forEach((id) => id && ids.add(id));
+  });
+  return ids;
+}
+
 // Real-world Open Play organizers need to pull a replacement from wherever
 // someone's actually available — not just the waiting queue, but also
 // players already scheduled into a later matchup who haven't started yet.

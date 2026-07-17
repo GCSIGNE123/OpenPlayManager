@@ -12,6 +12,8 @@ export const emptyCourt = (number) => ({
   scoreA: 0,
   scoreB: 0,
   awaitingPair: false, // Winner Pool Rotation only — true once this court's finished but its paired court hasn't, see winnerPoolRound.js
+  assignmentMode: "automatic", // "automatic" | "manual" — Manual Court Assignment, see PROJECT.md. While "manual" and status is "open", teamA/teamB hold the organizer's in-progress draft picks (still &lt;2 each is normal, not yet locked)
+  manualLocked: false, // true once the organizer locks a manual court's 4 picks in (status becomes "live"); resets to false/"automatic" when the match ends, same as every other court
 });
 
 // which matchmaking strategy builds the next matches — see src/engines/ and

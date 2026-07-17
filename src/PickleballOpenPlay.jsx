@@ -10,6 +10,7 @@ import {
   refreshNextMatchups,
   regenerateNextMatchups,
   dissolveMatchupIfReserved,
+  manuallyReservedIds,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -111,7 +112,10 @@ export default function PickleballOpenPlay() {
       // scorer-edited) matchups untouched — see refreshNextMatchups. Which
       // engine builds them depends on the session's rotation mode; in
       // Progressive Skill Rotation, the current phase also shapes pairing
-      // (see progressiveSkillPhaseFor below).
+      // (see progressiveSkillPhaseFor below). Players drafted or locked into
+      // a Manual Court Assignment are excluded from this pool entirely —
+      // the automatic engine must never touch them, per Manual Court
+      // Assignment's "ignore players already assigned to manual courts".
       const engine = getRotationEngine(next.rotationMode);
       const phase = progressiveSkillPhaseFor(
         next.rotationMode,
@@ -119,9 +123,11 @@ export default function PickleballOpenPlay() {
         next.expectedGamesPerPlayer,
         next.progressiveSkillThresholds
       );
+      const manualIds = manuallyReservedIds(next.courts);
+      const autoQueueIds = manualIds.size > 0 ? next.queueIds.filter((id) => !manualIds.has(id)) : next.queueIds;
       const withMatchups = {
         ...next,
-        nextMatchups: refreshNextMatchups(next.queueIds, next.players, next.nextMatchups || [], engine, phase),
+        nextMatchups: refreshNextMatchups(autoQueueIds, next.players, next.nextMatchups || [], engine, phase),
       };
       const withStamp = { ...withMatchups, updatedAt: Date.now() };
       setState(withStamp);
@@ -415,7 +421,9 @@ export default function PickleballOpenPlay() {
   // the spot, so what the scorer reviewed is exactly what gets deployed
   const fillCourt = (courtIdx) => {
     const court = state.courts[courtIdx];
-    if (court.status !== "open") return;
+    // manual courts are filled by lockManualCourt (the organizer's own
+    // picks), never by deploying a pre-built rotation-engine matchup
+    if (court.status !== "open" || court.assignmentMode === "manual") return;
     const [nextMatch, ...restMatchups] = state.nextMatchups || [];
     if (!nextMatch) return;
 
@@ -433,7 +441,7 @@ export default function PickleballOpenPlay() {
     let queueIds = [...state.queueIds];
     let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
-      if (c.status !== "open") return c;
+      if (c.status !== "open" || c.assignmentMode === "manual") return c;
       const [nextMatch, ...rest] = remainingMatchups;
       if (!nextMatch) return c;
       remainingMatchups = rest;
@@ -444,6 +452,134 @@ export default function PickleballOpenPlay() {
     });
     clearOneShotSnapshots();
     save({ ...state, courts, queueIds, nextMatchups: remainingMatchups });
+  };
+
+  // ---- Manual Court Assignment ----
+  // Lets the organizer hand-pick a specific court's 4 players and 2 teams
+  // instead of letting the rotation engine fill it — the rest of the
+  // courts keep using whichever rotation mode is active. See
+  // manuallyReservedIds (lib/utils.js) for how the automatic engine is
+  // kept from ever touching these players, and PROJECT.md for the full
+  // design.
+
+  // toggling to "manual" only makes sense for a still-open court (nothing
+  // to switch once it's live); toggling back to "automatic" clears
+  // whatever draft picks were made, since they'd otherwise silently
+  // reserve those players forever without ever becoming a real matchup
+  const setCourtAssignmentMode = (courtIdx, mode) => {
+    const court = state.courts[courtIdx];
+    if (court.status !== "open") return;
+    const courts = state.courts.map((c, i) =>
+      i === courtIdx ? { ...c, assignmentMode: mode, teamA: [], teamB: [] } : c
+    );
+    save({ ...state, courts });
+  };
+
+  // fills one slot (side "teamA"/"teamB", slotIndex 0/1) of a manual
+  // court's draft. If the incoming player is currently reserved in an
+  // upcoming matchup, dissolveMatchupIfReserved frees the rest of that
+  // matchup first — same mechanic substitutePlayer/substituteInMatchup use
+  // — since Manual Court Assignment's player sources are explicitly the
+  // waiting queue AND upcoming matchups, not just the queue.
+  const setManualCourtPlayer = (courtIdx, side, slotIndex, playerId) => {
+    const court = state.courts[courtIdx];
+    if (court.status !== "open" || court.assignmentMode !== "manual") return;
+    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
+    const courts = state.courts.map((c, i) => {
+      if (i !== courtIdx) return c;
+      const nextSide = [...c[side]];
+      nextSide[slotIndex] = playerId;
+      return { ...c, [side]: nextSide };
+    });
+    clearOneShotSnapshots();
+    save({ ...state, courts, nextMatchups });
+  };
+
+  const clearManualCourtPlayer = (courtIdx, side, slotIndex) => {
+    const courts = state.courts.map((c, i) => {
+      if (i !== courtIdx) return c;
+      const nextSide = [...c[side]];
+      nextSide.splice(slotIndex, 1);
+      return { ...c, [side]: nextSide };
+    });
+    save({ ...state, courts });
+  };
+
+  // "Lock court": commits a manual court's 4 draft picks and deploys it —
+  // from here on it behaves exactly like any other live court (same
+  // score/end-match flow). Validates all 4 slots are filled with unique
+  // players ("incomplete courts... from being started" / "duplicate player
+  // assignments" — Manual Court Assignment's required checks) before
+  // allowing it.
+  const lockManualCourt = (courtIdx) => {
+    const court = state.courts[courtIdx];
+    if (court.status !== "open" || court.assignmentMode !== "manual") return;
+    const teamA = court.teamA.filter(Boolean);
+    const teamB = court.teamB.filter(Boolean);
+    const allIds = [...teamA, ...teamB];
+    const allUnique = new Set(allIds).size === allIds.length;
+    if (teamA.length !== 2 || teamB.length !== 2 || !allUnique) return;
+
+    const queueIds = state.queueIds.filter((id) => !allIds.includes(id));
+    const courts = state.courts.map((c, i) =>
+      i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0, manualLocked: true } : c
+    );
+    clearOneShotSnapshots();
+    save({ ...state, courts, queueIds });
+  };
+
+  // "Unlock": reverses a lock before the match is decided — sends its 4
+  // players back to the waiting queue and clears the draft, same as if the
+  // organizer were starting the manual pick over. Once a match is
+  // "finished" (or ended), the lock has already served its purpose and
+  // releases on its own via the normal end-match flow instead.
+  const unlockManualCourt = (courtIdx) => {
+    const court = state.courts[courtIdx];
+    if (!court.manualLocked || court.status !== "live") return;
+    const playedIds = [...court.teamA, ...court.teamB];
+    const queueIds = [...state.queueIds, ...playedIds];
+    const courts = state.courts.map((c, i) =>
+      i === courtIdx
+        ? { ...c, status: "open", teamA: [], teamB: [], scoreA: 0, scoreB: 0, manualLocked: false, assignmentMode: "manual" }
+        : c
+    );
+    clearOneShotSnapshots();
+    save({ ...state, courts, queueIds });
+  };
+
+  // "Generate Remaining Courts": explicitly rebuilds nextMatchups from
+  // scratch (same as Regenerate) using only players not spoken for by a
+  // manual court, then immediately deploys them onto every open automatic
+  // court — the one-click version of the organizer workflow's last step,
+  // for when they've finished setting up their manual court(s) and want
+  // the rest filled in right away rather than waiting on the next
+  // automatic refresh.
+  const generateRemainingCourts = () => {
+    const manualIds = manuallyReservedIds(state.courts);
+    const queueIds = state.queueIds.filter((id) => !manualIds.has(id));
+    const locked = (state.nextMatchups || []).filter((m) => m.locked);
+    const engine = getRotationEngine(state.rotationMode);
+    const phase = progressiveSkillPhaseFor(
+      state.rotationMode,
+      state.players,
+      state.expectedGamesPerPlayer,
+      state.progressiveSkillThresholds
+    );
+    const generated = regenerateNextMatchups(queueIds, state.players, locked, engine, phase);
+
+    let remainingIds = [...state.queueIds];
+    let remainingMatchups = [...generated];
+    const courts = state.courts.map((c) => {
+      if (c.status !== "open" || c.assignmentMode === "manual") return c;
+      const [nextMatch, ...rest] = remainingMatchups;
+      if (!nextMatch) return c;
+      remainingMatchups = rest;
+      const consumed = new Set([...nextMatch.teamA, ...nextMatch.teamB]);
+      remainingIds = remainingIds.filter((id) => !consumed.has(id));
+      return { ...c, status: "live", teamA: nextMatch.teamA, teamB: nextMatch.teamB, scoreA: 0, scoreB: 0 };
+    });
+    setRegenerateSnapshot(state.nextMatchups || []);
+    save({ ...state, courts, queueIds: remainingIds, nextMatchups: remainingMatchups });
   };
 
   const adjustScore = (courtIdx, team, delta) => {
@@ -931,6 +1067,12 @@ export default function PickleballOpenPlay() {
                   reassignMatchup={reassignMatchup}
                   substituteInMatchup={substituteInMatchup}
                   moveToQueue={moveToQueue}
+                  setCourtAssignmentMode={setCourtAssignmentMode}
+                  setManualCourtPlayer={setManualCourtPlayer}
+                  clearManualCourtPlayer={clearManualCourtPlayer}
+                  lockManualCourt={lockManualCourt}
+                  unlockManualCourt={unlockManualCourt}
+                  generateRemainingCourts={generateRemainingCourts}
                   toggleLockMatchup={toggleLockMatchup}
                   regenerateMatchups={regenerateMatchups}
                   canUndoRegenerate={!!regenerateSnapshot}

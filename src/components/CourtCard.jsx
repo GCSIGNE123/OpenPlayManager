@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Clock, Repeat, RotateCcw, Shuffle, Trophy } from "lucide-react";
+import { Check, Clock, Lock, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -16,15 +16,28 @@ export default function CourtCard({
   onEnd,
   onReassign,
   onSubstitute,
+  onSetAssignmentMode,
+  onSetManualPlayer,
+  onClearManualPlayer,
+  onLock,
+  onUnlock,
   canFill,
   pairPartnerNumber,
   poolingMode,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
+  const isManual = court.assignmentMode === "manual";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [subbingId, setSubbingId] = useState(null);
   const [subChoice, setSubChoice] = useState(null);
+  const [manualSlot, setManualSlot] = useState(null); // { side, slotIndex } — which empty slot is currently being filled
+
+  const manualAllIds = [...court.teamA, ...court.teamB];
+  const manualComplete =
+    court.teamA.length === 2 &&
+    court.teamB.length === 2 &&
+    new Set(manualAllIds).size === manualAllIds.length;
 
   const startEdit = () => {
     const map = {};
@@ -69,18 +82,42 @@ export default function CourtCard({
     <div style={styles.courtCard(court.status)}>
       <div style={styles.courtHeadRow}>
         <span style={styles.courtBadge}>COURT {court.number}</span>
-        <span style={styles.statusTag(court.status)}>
-          {court.awaitingPair
-            ? "WAITING"
-            : court.status === "open"
-              ? "OPEN"
-              : court.status === "finished"
-                ? "MATCH POINT"
-                : "LIVE"}
-        </span>
+        {court.manualLocked ? (
+          <span style={styles.manualBadge}>
+            <Lock size={10} strokeWidth={3} />
+            Manual Assignment
+          </span>
+        ) : (
+          <span style={styles.statusTag(court.status)}>
+            {court.awaitingPair
+              ? "WAITING"
+              : court.status === "open"
+                ? "OPEN"
+                : court.status === "finished"
+                  ? "MATCH POINT"
+                  : "LIVE"}
+          </span>
+        )}
       </div>
 
-      {!isLive && (
+      {!isLive && !readOnly && (
+        <div style={styles.assignmentToggleRow}>
+          <button
+            style={styles.assignmentToggleBtn(!isManual)}
+            onClick={() => onSetAssignmentMode && onSetAssignmentMode("automatic")}
+          >
+            Automatic
+          </button>
+          <button
+            style={styles.assignmentToggleBtn(isManual)}
+            onClick={() => onSetAssignmentMode && onSetAssignmentMode("manual")}
+          >
+            Manual
+          </button>
+        </div>
+      )}
+
+      {!isLive && !isManual && (
         <div style={styles.openCourtBody}>
           <p style={styles.openCourtText}>Court is free</p>
           {!readOnly && (
@@ -92,6 +129,103 @@ export default function CourtCard({
               <Shuffle size={14} strokeWidth={2.5} />
               Assign match
             </button>
+          )}
+        </div>
+      )}
+
+      {!isLive && isManual && (
+        <div>
+          {manualSlot ? (
+            <div>
+              <p style={styles.editHint}>
+                Pick a player for Team {manualSlot.side === "teamA" ? "A" : "B"}
+              </p>
+              <PlayerPicker
+                candidates={candidates}
+                selectedId={null}
+                onSelect={(playerId) => {
+                  onSetManualPlayer && onSetManualPlayer(manualSlot.side, manualSlot.slotIndex, playerId);
+                  setManualSlot(null);
+                }}
+                emptyMessage="No eligible players available right now."
+              />
+              <div style={styles.editActions}>
+                <button style={styles.secondaryBtn} onClick={() => setManualSlot(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={styles.manualTeamLabel}>Team A</p>
+              {[0, 1].map((slotIndex) => {
+                const id = court.teamA[slotIndex];
+                return id ? (
+                  <div key={slotIndex} style={styles.manualSlotFilled}>
+                    <div style={styles.playerChip}>
+                      <Avatar player={players[id]} size={20} />
+                      <span>{players[id]?.name}</span>
+                    </div>
+                    {!readOnly && (
+                      <button
+                        style={styles.subBtn}
+                        onClick={() => onClearManualPlayer && onClearManualPlayer("teamA", slotIndex)}
+                      >
+                        <X size={11} strokeWidth={3} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    key={slotIndex}
+                    style={styles.manualSlotEmpty}
+                    onClick={() => setManualSlot({ side: "teamA", slotIndex })}
+                  >
+                    + Add player
+                  </button>
+                );
+              })}
+              <p style={styles.manualTeamLabel}>Team B</p>
+              {[0, 1].map((slotIndex) => {
+                const id = court.teamB[slotIndex];
+                return id ? (
+                  <div key={slotIndex} style={styles.manualSlotFilled}>
+                    <div style={styles.playerChip}>
+                      <Avatar player={players[id]} size={20} />
+                      <span>{players[id]?.name}</span>
+                    </div>
+                    {!readOnly && (
+                      <button
+                        style={styles.subBtn}
+                        onClick={() => onClearManualPlayer && onClearManualPlayer("teamB", slotIndex)}
+                      >
+                        <X size={11} strokeWidth={3} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    key={slotIndex}
+                    style={styles.manualSlotEmpty}
+                    onClick={() => setManualSlot({ side: "teamB", slotIndex })}
+                  >
+                    + Add player
+                  </button>
+                );
+              })}
+              {!readOnly && (
+                <div style={styles.editActions}>
+                  <button
+                    style={{ ...styles.primaryBtn, ...(!manualComplete ? styles.btnDisabled : {}) }}
+                    onClick={onLock}
+                    disabled={!manualComplete}
+                  >
+                    <Lock size={14} strokeWidth={2.5} />
+                    Lock court
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -205,6 +339,12 @@ export default function CourtCard({
                 <Shuffle size={12} strokeWidth={2.5} />
                 Fix teams
               </button>
+              {court.manualLocked && court.status !== "finished" && (
+                <button style={styles.fixTeamsBtn} onClick={onUnlock}>
+                  <Unlock size={12} strokeWidth={2.5} />
+                  Unlock
+                </button>
+              )}
               <button
                 style={{
                   ...styles.endMatchBtn,

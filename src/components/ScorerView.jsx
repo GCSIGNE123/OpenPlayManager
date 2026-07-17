@@ -1,6 +1,6 @@
-import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
+import { Minus, Plus, RefreshCw, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { reservedMatchupIds, buildReplacementCandidates } from "../lib/utils.js";
+import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
@@ -20,6 +20,12 @@ export default function ScorerView({
   reassignMatchup,
   substituteInMatchup,
   moveToQueue,
+  setCourtAssignmentMode,
+  setManualCourtPlayer,
+  clearManualCourtPlayer,
+  lockManualCourt,
+  unlockManualCourt,
+  generateRemainingCourts,
   toggleLockMatchup,
   regenerateMatchups,
   canUndoRegenerate,
@@ -44,21 +50,26 @@ export default function ScorerView({
 }) {
   const nextMatchups = state.nextMatchups || [];
   const reserved = reservedMatchupIds(nextMatchups);
-  // still-unassigned players — the Waiting Queue half of a substitution's
+  const manualIds = manuallyReservedIds(state.courts);
+  // still-unassigned, not-manually-spoken-for players — the Waiting Queue
+  // half of a substitution's (or a Manual Court Assignment slot's)
   // replacement candidates (see buildReplacementCandidates for the other
   // half: players already scheduled into an upcoming matchup who haven't
   // started yet, real-world Open Play organizers need both)
   const unassignedPlayers = state.queueIds
     .map((id) => state.players[id])
-    .filter((p) => p && !reserved.has(p.id));
-  // live-court substitution can draw from every upcoming matchup (nothing
-  // to exclude — a live court's players aren't in nextMatchups at all)
+    .filter((p) => p && !reserved.has(p.id) && !manualIds.has(p.id));
+  // live-court substitution AND manual court slot-filling share this same
+  // pool — both need "anyone not currently playing and not already spoken
+  // for elsewhere," which is exactly what this is (nothing to exclude by
+  // matchup here — a live court's players aren't in nextMatchups at all)
   const courtCandidates = buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players);
   const canFillCourt = nextMatchups.length > 0;
   const canRegenerate = nextMatchups.some((m) => !m.locked);
   const lastCourt = state.courts[state.courts.length - 1];
   const canAddCourt = state.courts.length < 8;
   const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
+  const hasOpenAutomaticCourt = state.courts.some((c) => c.status === "open" && c.assignmentMode !== "manual");
 
   return (
     <div>
@@ -92,14 +103,25 @@ export default function ScorerView({
         <div style={styles.toolbarText}>
           <strong>{waitingCount}</strong> players waiting
         </div>
-        <button
-          style={{ ...styles.primaryBtn, ...(!canFillCourt ? styles.btnDisabled : {}) }}
-          onClick={fillAllCourts}
-          disabled={!canFillCourt}
-        >
-          <Shuffle size={16} strokeWidth={2.5} />
-          Fill all open courts
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt ? styles.btnDisabled : {}) }}
+            onClick={generateRemainingCourts}
+            disabled={!hasOpenAutomaticCourt}
+            title="Rebuild matchups (ignoring anyone on a Manual court) and fill every open automatic court right away"
+          >
+            <Wand2 size={14} strokeWidth={2.5} />
+            Generate remaining courts
+          </button>
+          <button
+            style={{ ...styles.primaryBtn, ...(!canFillCourt ? styles.btnDisabled : {}) }}
+            onClick={fillAllCourts}
+            disabled={!canFillCourt}
+          >
+            <Shuffle size={16} strokeWidth={2.5} />
+            Fill all open courts
+          </button>
+        </div>
       </div>
       <div style={styles.scorerToolbar}>
         <div style={styles.courtStepper}>
@@ -210,6 +232,11 @@ export default function ScorerView({
                 onEnd={() => endMatch(i)}
                 onReassign={(teamA, teamB) => reassignTeams(i, teamA, teamB)}
                 onSubstitute={(outgoingId, incomingId) => substitutePlayer(i, outgoingId, incomingId)}
+                onSetAssignmentMode={(mode) => setCourtAssignmentMode(i, mode)}
+                onSetManualPlayer={(side, slotIndex, playerId) => setManualCourtPlayer(i, side, slotIndex, playerId)}
+                onClearManualPlayer={(side, slotIndex) => clearManualCourtPlayer(i, side, slotIndex)}
+                onLock={() => lockManualCourt(i)}
+                onUnlock={() => unlockManualCourt(i)}
                 canFill={canFillCourt}
                 pairPartnerNumber={pairPartnerNumber}
                 poolingMode={poolingActive}
