@@ -26,6 +26,7 @@ import CheckinView from "./components/CheckinView.jsx";
 import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
+import HistoryView from "./components/HistoryView.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
@@ -1009,6 +1010,7 @@ export default function PickleballOpenPlay() {
                   { id: "checkin", label: "Check In" },
                   { id: "standings", label: "Standings" },
                   { id: "scorer", label: "Scorer" },
+                  { id: "history", label: "History" },
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1049,6 +1051,10 @@ export default function PickleballOpenPlay() {
               )}
 
               {loaded && view === "standings" && <StandingsView players={state.players} />}
+
+              {loaded && view === "history" && (
+                <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
+              )}
 
               {loaded && view === "scorer" && !scorerAuthed && (
                 <ScorerLogin pin={pin} setPin={setPin} tryScorerLogin={tryScorerLogin} pinError={pinError} />
