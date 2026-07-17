@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #22)
+
+### Added
+- Player replacement now sources from **both** the Waiting Queue and Upcoming Matchups — previously a substitution could only pull from players not yet assigned to any matchup, which was too restrictive for real Open Play usage (organizers often need to grab someone from a later round instead). `PlayerPicker` now shows two labeled sections; each Upcoming Matchups candidate is tagged with which matchup they'd be pulled from ("Next up" / "Then · matchup N"). New `buildReplacementCandidates` (`lib/utils.js`) builds the combined pool, excluding the matchup currently being edited so a substitution never offers a teammate/opponent from its own matchup as a replacement
+- New **"Move to Queue"** organizer action — a button on every player inside an upcoming (not-yet-started) matchup that pulls them out and sends them straight back to the waiting queue, immediately available as a replacement elsewhere. New `moveToQueue(playerId)` in `PickleballOpenPlay.jsx`
+- Both this and picking a replacement from Upcoming Matchups are powered by new `dissolveMatchupIfReserved` (`lib/utils.js`): a matchup can't exist with only 3 players, so pulling one out always dissolves the whole matchup, freeing all 4 players back to the pool. The next automatic `refreshNextMatchups` (every `save()` runs one) rebuilds fresh matchups from that pool through the session's active rotation engine — so Progressive Skill Rotation (or whichever mode is active) still decides the new pairings, nothing is bypassed or hardcoded. Completed matches, `matchHistory`, and player stats are never touched — only `state.nextMatchups`
+
 ## 2026-07-16 (later, cont'd #21)
 
 ### Added

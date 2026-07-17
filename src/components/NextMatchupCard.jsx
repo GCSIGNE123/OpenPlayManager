@@ -11,11 +11,12 @@ import PlayerPicker from "./PlayerPicker.jsx";
 export default function NextMatchupCard({
   matchup,
   players,
-  unassignedPlayers,
+  candidates,
   label,
   onReassign,
   onSubstitute,
   onToggleLock,
+  onMoveToQueue,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -119,10 +120,10 @@ export default function NextMatchupCard({
         <div>
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
           <PlayerPicker
-            players={unassignedPlayers}
+            candidates={candidates}
             selectedId={subChoice}
             onSelect={setSubChoice}
-            emptyMessage="No one else is waiting to sub in right now."
+            emptyMessage="No one else is available to sub in right now."
           />
           <p style={styles.subReturnLabel}>
             {players[subbingId]?.name} will go back to the waiting queue.
@@ -146,13 +147,23 @@ export default function NextMatchupCard({
           <div style={styles.matchupTeams}>
             <div style={styles.matchupTeam}>
               {matchup.teamA.map((id) => (
-                <PlayerChip key={id} player={players[id]} onSubClick={() => startSub(id)} />
+                <PlayerChip
+                  key={id}
+                  player={players[id]}
+                  onSubClick={() => startSub(id)}
+                  onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
+                />
               ))}
             </div>
             <span style={styles.matchupVs}>VS</span>
             <div style={styles.matchupTeam}>
               {matchup.teamB.map((id) => (
-                <PlayerChip key={id} player={players[id]} onSubClick={() => startSub(id)} />
+                <PlayerChip
+                  key={id}
+                  player={players[id]}
+                  onSubClick={() => startSub(id)}
+                  onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
+                />
               ))}
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { Minus, Plus, RefreshCw, Shuffle, Undo2, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { reservedMatchupIds } from "../lib/utils.js";
+import { reservedMatchupIds, buildReplacementCandidates } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
@@ -19,6 +19,7 @@ export default function ScorerView({
   substitutePlayer,
   reassignMatchup,
   substituteInMatchup,
+  moveToQueue,
   toggleLockMatchup,
   regenerateMatchups,
   canUndoRegenerate,
@@ -43,12 +44,16 @@ export default function ScorerView({
 }) {
   const nextMatchups = state.nextMatchups || [];
   const reserved = reservedMatchupIds(nextMatchups);
-  // players not already locked into a pre-built matchup — the only pool
-  // either a live-court substitution or a next-matchup substitution can
-  // draw from, so the two features never fight over the same player
+  // still-unassigned players — the Waiting Queue half of a substitution's
+  // replacement candidates (see buildReplacementCandidates for the other
+  // half: players already scheduled into an upcoming matchup who haven't
+  // started yet, real-world Open Play organizers need both)
   const unassignedPlayers = state.queueIds
     .map((id) => state.players[id])
     .filter((p) => p && !reserved.has(p.id));
+  // live-court substitution can draw from every upcoming matchup (nothing
+  // to exclude — a live court's players aren't in nextMatchups at all)
+  const courtCandidates = buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players);
   const canFillCourt = nextMatchups.length > 0;
   const canRegenerate = nextMatchups.some((m) => !m.locked);
   const lastCourt = state.courts[state.courts.length - 1];
@@ -155,11 +160,12 @@ export default function ScorerView({
               key={m.id}
               matchup={m}
               players={state.players}
-              unassignedPlayers={unassignedPlayers}
+              candidates={buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players, m.id)}
               label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
               onReassign={reassignMatchup}
               onSubstitute={substituteInMatchup}
               onToggleLock={toggleLockMatchup}
+              onMoveToQueue={moveToQueue}
             />
           ))}
         </>
@@ -197,7 +203,7 @@ export default function ScorerView({
                 key={i}
                 court={court}
                 players={state.players}
-                waitingPlayers={unassignedPlayers}
+                candidates={courtCandidates}
                 onFill={() => fillCourt(i)}
                 onScore={(team, delta) => adjustScore(i, team, delta)}
                 onDeclareWinner={(team) => declareWinner(i, team)}

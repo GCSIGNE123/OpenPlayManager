@@ -8,7 +8,7 @@ import TeamRow from "./TeamRow.jsx";
 export default function CourtCard({
   court,
   players,
-  waitingPlayers,
+  candidates,
   readOnly,
   onFill,
   onScore,
@@ -136,10 +136,10 @@ export default function CourtCard({
         <div>
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
           <PlayerPicker
-            players={waitingPlayers}
+            candidates={candidates}
             selectedId={subChoice}
             onSelect={setSubChoice}
-            emptyMessage="No one is waiting to sub in right now."
+            emptyMessage="No one is available to sub in right now."
           />
           <p style={styles.subReturnLabel}>
             {players[subbingId]?.name} will go back to the waiting queue.

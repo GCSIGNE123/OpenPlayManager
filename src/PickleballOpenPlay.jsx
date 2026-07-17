@@ -9,6 +9,7 @@ import {
   recordRotationHistory,
   refreshNextMatchups,
   regenerateNextMatchups,
+  dissolveMatchupIfReserved,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -611,16 +612,24 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
-  // swap one player out of a live court for someone from the waiting queue —
-  // for injuries, phone calls, or other mid-game emergencies. The outgoing
-  // player automatically goes back to the waiting queue.
+  // swap one player out of a live court for someone else not currently
+  // playing — for injuries, phone calls, or other mid-game emergencies.
+  // The replacement can come from the waiting queue OR from an upcoming
+  // (not-yet-started) matchup — see buildReplacementCandidates. If they're
+  // coming from an upcoming matchup, dissolveMatchupIfReserved tears that
+  // matchup down first (freeing its other 3 players back to the pool,
+  // where the next refreshNextMatchups picks them up again) — a no-op if
+  // they were already unassigned. The outgoing player goes back to the
+  // waiting queue either way.
   const substitutePlayer = (courtIdx, outgoingId, incomingId) => {
+    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, incomingId);
     const court = state.courts[courtIdx];
     const teamA = court.teamA.map((id) => (id === outgoingId ? incomingId : id));
     const teamB = court.teamB.map((id) => (id === outgoingId ? incomingId : id));
     const courts = state.courts.map((c, i) => (i === courtIdx ? { ...c, teamA, teamB } : c));
     const queueIds = [...state.queueIds.filter((id) => id !== incomingId), outgoingId];
-    save({ ...state, courts, queueIds });
+    clearOneShotSnapshots();
+    save({ ...state, courts, queueIds, nextMatchups });
   };
 
   // ---- next-matchup editing (before a matchup is assigned to a court) ----
@@ -633,16 +642,38 @@ export default function PickleballOpenPlay() {
     save({ ...state, nextMatchups });
   };
 
-  // swaps a player out of an upcoming (not-yet-deployed) matchup for someone
-  // else still waiting — both players simply stay in the same queueIds the
-  // whole time, since neither one leaves the waiting queue
+  // swaps a player out of an upcoming (not-yet-deployed) matchup for
+  // someone else — from the waiting queue, or from a different upcoming
+  // matchup (dissolveMatchupIfReserved tears that one down first, same as
+  // substitutePlayer; exceptMatchupId keeps it from dissolving the very
+  // matchup being edited). Either way both players stay in queueIds the
+  // whole time, since neither one leaves the waiting pool.
   const substituteInMatchup = (matchupId, outgoingId, incomingId) => {
-    const nextMatchups = (state.nextMatchups || []).map((m) => {
+    const dissolved = dissolveMatchupIfReserved(state.nextMatchups, incomingId, matchupId);
+    const nextMatchups = dissolved.map((m) => {
       if (m.id !== matchupId) return m;
       const teamA = m.teamA.map((id) => (id === outgoingId ? incomingId : id));
       const teamB = m.teamB.map((id) => (id === outgoingId ? incomingId : id));
       return { ...m, teamA, teamB };
     });
+    clearOneShotSnapshots();
+    save({ ...state, nextMatchups });
+  };
+
+  // Organizer-initiated "Move to Queue": pulls a player out of an upcoming
+  // matchup they haven't started yet and sends them straight back to the
+  // waiting queue, available as an immediate replacement for anyone else.
+  // A matchup can't exist with only 3 players, so this dissolves the whole
+  // matchup — freeing its other 3 players back to the pool too, exactly
+  // like dissolveMatchupIfReserved does for a substitution's incoming
+  // player. Nothing here touches completed matches, matchHistory, or
+  // player stats — only state.nextMatchups. The next refreshNextMatchups
+  // (every save() runs one) automatically rebuilds fresh matchups from the
+  // now-larger unassigned pool using the session's active rotation engine,
+  // so Progressive Skill Rotation's pairing logic still decides who plays
+  // whom next — this doesn't bypass or duplicate it.
+  const moveToQueue = (playerId) => {
+    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
     clearOneShotSnapshots();
     save({ ...state, nextMatchups });
   };
@@ -899,6 +930,7 @@ export default function PickleballOpenPlay() {
                   substitutePlayer={substitutePlayer}
                   reassignMatchup={reassignMatchup}
                   substituteInMatchup={substituteInMatchup}
+                  moveToQueue={moveToQueue}
                   toggleLockMatchup={toggleLockMatchup}
                   regenerateMatchups={regenerateMatchups}
                   canUndoRegenerate={!!regenerateSnapshot}

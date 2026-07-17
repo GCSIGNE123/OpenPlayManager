@@ -108,6 +108,47 @@ export function reservedMatchupIds(nextMatchups) {
   return ids;
 }
 
+// Real-world Open Play organizers need to pull a replacement from wherever
+// someone's actually available — not just the waiting queue, but also
+// players already scheduled into a later matchup who haven't started yet.
+// Returns both pools, ready for PlayerPicker: `waiting` (already player
+// objects) and `upcoming` (player objects tagged with which matchup they're
+// currently reserved in and a human label for it, e.g. "Next up" / "Then ·
+// matchup 2" — the same labels Scorer already shows above each matchup card,
+// so a candidate's tag always matches what the organizer sees on screen).
+// `excludeMatchupId` leaves out the matchup currently being edited, so a
+// next-matchup substitution never offers a teammate/opponent from that same
+// matchup as its own replacement.
+export function buildReplacementCandidates(nextMatchups, unassignedPlayers, players, excludeMatchupId = null) {
+  const upcoming = [];
+  nextMatchups.forEach((m, i) => {
+    if (m.id === excludeMatchupId) return;
+    const scheduledLabel = i === 0 ? "Next up" : `Then · matchup ${i + 1}`;
+    [...m.teamA, ...m.teamB].forEach((id) => {
+      const p = players[id];
+      if (p) upcoming.push({ ...p, matchupId: m.id, scheduledLabel });
+    });
+  });
+  return { waiting: unassignedPlayers, upcoming };
+}
+
+// Dissolves whichever upcoming matchup `playerId` is currently reserved in
+// (if any), freeing all 4 of that matchup's players back to the unassigned
+// pool — a matchup can't exist with only 3 players, so pulling one out
+// always tears the whole thing down. The freed players stay in `queueIds`
+// (they never left it — see reservedMatchupIds) and get picked up again the
+// next time refreshNextMatchups runs, via the session's active rotation
+// engine — so re-matching them still goes through the same Progressive
+// Skill Rotation logic as everything else, not a special case. No-op if
+// `playerId` isn't reserved anywhere (already unassigned, or mid-court).
+// `exceptMatchupId` protects a matchup from being dissolved by its own
+// substitution — see buildReplacementCandidates' excludeMatchupId.
+export function dissolveMatchupIfReserved(nextMatchups, playerId, exceptMatchupId = null) {
+  return (nextMatchups || []).filter(
+    (m) => m.id === exceptMatchupId || (!m.teamA.includes(playerId) && !m.teamB.includes(playerId))
+  );
+}
+
 // Rotation strategies (Strategy pattern — see src/engines/), one instance
 // per mode. state.rotationMode ("continuous" | "winnerPool" |
 // "progressiveSkill", see ROTATION_MODES in constants.js) picks which one
