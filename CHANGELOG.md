@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #19)
+
+### Added
+- `scripts/run-simulation.mjs`'s `--courts` flag now accepts a comma-separated list (e.g. `--courts=2,3,4`) to run the same session back-to-back at each court count and print a comparison table (rounds run, total matches, per-phase match counts) alongside each individual report
+
+### Fixed
+- Real deadlock bug in `RotationSimulationEngine`: when `courtCount` couldn't always be fully filled by the player pool (e.g. 4 courts with 12 players — at most 3 matches can run at once), one court in a Winner-Pool-paired pair could get permanently stuck `awaitingPair` because its partner court never received a 4th match to fill it, holding those players out of the queue forever (they'd stop progressing partway through the session, and the simulation would run to the `maxRounds` safety cap without ever finishing cleanly). New `releaseStalePairings`, run once per round after that round's matches end: any court still `awaitingPair` whose partner is (still) `"open"` is force-released back to the queue instead of waiting indefinitely. Verified across courts=2/3/4 × player counts 8-20 (30 combinations, run 5x each for randomness) — all now complete cleanly with every player reaching the expected games count. Simulation-only fix; doesn't touch `resolveWinnerPoolMatch`/`isPoolingRotation` or any pooling behavior the live app relies on
+
 ## 2026-07-16 (later, cont'd #18)
 
 ### Added

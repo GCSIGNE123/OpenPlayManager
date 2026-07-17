@@ -165,6 +165,35 @@ function endMatchAt(state, courtIdx, pointsToWin, matchLog) {
   return { ...state, courts, players, queueIds };
 }
 
+// Winner Pool Rotation's pairwise hold (court finishes, waits for its pair
+// partner) assumes the partner will eventually finish too. That's true in
+// the live app (every court always has enough waiting players eventually),
+// but a simulation can configure more courts than the player count can
+// ever fill simultaneously — e.g. 4 courts with 12 players can only ever
+// run 3 matches at once, so whichever court in a pair doesn't get a 4th
+// match will sit "open" forever, and its partner would otherwise hold its
+// finished players in awaitingPair permanently (they'd never be requeued,
+// so they'd never play again — a real deadlock, not just a slow round).
+// Called once per round after that round's matches end: any court still
+// awaitingPair whose partner is (still) "open" — meaning this round's fill
+// pass already had its chance and the partner didn't get deployed — is
+// released back to the queue instead of holding indefinitely. This is
+// simulation-only orchestration, not a change to how pooling itself works.
+function releaseStalePairings(state) {
+  let queueIds = state.queueIds;
+  const courts = state.courts.map((c, i) => {
+    if (!c.awaitingPair) return c;
+    const partnerIdx = getPairPartnerIndex(state.courts, i);
+    const partner = partnerIdx !== null ? state.courts[partnerIdx] : null;
+    if (!partner || partner.status === "open") {
+      queueIds = [...queueIds, ...c.teamA, ...c.teamB];
+      return emptyCourt(c.number);
+    }
+    return c;
+  });
+  return { ...state, courts, queueIds };
+}
+
 // Runs a complete simulated session and returns a structured result. Does
 // not print anything — see printSimulationReport for that.
 export function runSimulation(config = {}) {
@@ -218,6 +247,7 @@ export function runSimulation(config = {}) {
     for (const idx of liveCourtIdxs) {
       state = endMatchAt(state, idx, cfg.pointsToWin, matchLog);
     }
+    state = releaseStalePairings(state);
 
     roundLog.push({
       round,
