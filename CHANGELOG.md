@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #16)
+
+### Added
+- CONNECT.PH rebrand — new centralized theme in `src/styles.js`'s `fontImport` `:root` block, with the full palette extracted from the CONNECT.PH logo: `--color-primary` (navy), `--color-secondary` (orange), `--color-accent`, `--color-success`, `--color-warning`, `--color-error`, `--color-bg`, `--color-surface`, `--color-border`, `--color-text`, `--color-text-muted`, `--color-text-faint`, `--color-on-primary`, plus per-phase tokens for Progressive Skill Rotation and a rotating avatar palette (`--color-avatar-1..6`). The pre-existing `--ink`/`--court`/`--court-dark`/`--chalk`/`--ball`/`--coral`/`--line` names are kept as aliases onto this new palette, so the whole app (every style object, every screen) picked up the rebrand without rewriting each one individually
+- `--color-secondary-text`: a darkened, WCAG-AA-accessible variant of the brand orange (~4.8:1 vs. the vibrant orange's ~2.4:1 on a light background), used anywhere orange needs to be the text/foreground color on a light surface (the Landing/Access screens' kicker text) rather than a fill/badge background
+- New CONNECT.PH-inspired icon/favicon set: a navy field, an open orange ring evoking the logo's "C", and a small orange connector dot — replaces the old pickleball-ball motif across `favicon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, and two new files, `favicon-16x16.png`/`favicon-32x32.png`, packaged into a new `favicon.ico`. `scripts/generate-pwa-icons.mjs` now also hand-encodes ICO (in addition to PNG), still with no image-processing dependency
+- Manifest/PWA branding updated to match: `name` → "CONNECT.PH Open Play Manager", `theme_color` → navy `#16355E`, `background_color` → `#F5F7FA`; `index.html`'s `theme-color` meta and favicon `<link>` tags updated to match
+
+### Changed
+- Every hardcoded hex color literal outside `styles.js`'s `:root` block was replaced with a `var(--color-...)` reference — covers muted-gray text tones, white fills/borders, the Progressive Skill Rotation phase-zone tint colors, `lib/utils.js`'s avatar-color array, and two stray `color="#..."` props on lucide icons in `CheckinView.jsx`/`CreateSessionScreen.jsx`
+- `resultTag`'s "win" badge and `ratingBadge`'s "high rating" badge now use `--color-success` (green) instead of the primary navy, and `StandingsView`'s point-differential coloring now uses `--color-success`/`--color-error` instead of primary/coral — small semantic correctness improvements that also put the newly-required Success color to actual use
+- `src/index.css`'s `body` background (previously a hardcoded cream hex, outside `styles.js`'s reach) now reads `--color-bg` too, with a matching static fallback for the brief pre-mount window before React injects the theme `<style>` tag
+
+### Notes
+- No layout or functional changes — this is colors/branding/icons only, verified across Landing, session header, Scorer, Court Cards, Standings, and the Progressive Skill Rotation panel, plus a repeat of the earlier offline-PWA test (stopped the server entirely, reloaded, app still rendered fully from cache with the new branding)
+- Apple splash-screen images (the per-device-size `apple-touch-startup-image` matrix) were judged out of scope for this pass — iOS auto-generates a basic splash from the manifest's icon/background_color/name when none is provided
+
 ## 2026-07-16 (later, cont'd #15)
 
 ### Added

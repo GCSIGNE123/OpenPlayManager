@@ -10,17 +10,25 @@ export default defineConfig({
       // no changes needed in src/main.jsx to wire this up
       injectRegister: "auto",
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: [
+        "favicon.svg",
+        "favicon.ico",
+        "favicon-16x16.png",
+        "favicon-32x32.png",
+        "apple-touch-icon.png",
+      ],
       manifest: {
-        name: "Open Play Manager",
+        name: "CONNECT.PH Open Play Manager",
         short_name: "Open Play",
         description:
-          "Run check-ins, auto-matchmaking, and live scores for pickleball open play sessions.",
+          "Run check-ins, auto-matchmaking, and live scores for pickleball open play sessions. A CONNECT.PH product.",
         start_url: "/",
         scope: "/",
         display: "standalone",
-        theme_color: "#1F5C43",
-        background_color: "#F3F1E4",
+        // CONNECT.PH brand palette (keep in sync with styles.js's
+        // --color-primary / --color-bg)
+        theme_color: "#16355E",
+        background_color: "#F5F7FA",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

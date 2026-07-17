@@ -78,7 +78,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
             <img src={photoDataUrl} alt="" style={styles.photoPreview} />
           ) : (
             <div style={styles.photoPlaceholder}>
-              <Camera size={18} strokeWidth={2} color="#a3a89a" />
+              <Camera size={18} strokeWidth={2} color="var(--color-text-faint)" />
             </div>
           )}
           {photoDataUrl && (

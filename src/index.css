@@ -11,7 +11,11 @@ body,
 }
 
 body {
-  background: #ebe8db;
+  /* --color-bg is defined in styles.js's fontImport (:root) — this file
+     loads before that JS-injected <style> tag exists, but :root custom
+     properties resolve at paint time regardless of DOM order, so this
+     still picks up the CONNECT.PH theme correctly once React mounts */
+  background: var(--color-bg, #f5f7fa);
   min-height: 100vh;
   display: flex;
   justify-content: center;

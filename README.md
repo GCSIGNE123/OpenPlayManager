@@ -40,7 +40,8 @@ Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer r
 - **Check In** — registered players tap to check in, or walk-ins register + check in on the spot
 - **Scorer** — PIN-gated; assign matches, adjust scores (first to 11 wins, sudden death), fix mismatched team pairings, substitute a player mid-game (injury/emergency), end matches
 - **Standings** — ranked by wins, then point differential, then fewest losses; players on a 3+ game win streak get a 🔥 icon
-- **Installable PWA** — Add to Home Screen on Android/iOS launches standalone (no browser chrome); the app shell (HTML/JS/CSS/icons) is precached so it still opens with no connection. Session data itself always needs the network, same as before
+- **Installable PWA, CONNECT.PH-branded** — Add to Home Screen on Android/iOS launches standalone (no browser chrome); the app shell (HTML/JS/CSS/icons) is precached so it still opens with no connection. Session data itself always needs the network, same as before
+- **CONNECT.PH theme** — every color in the app traces back to one centralized palette in `src/styles.js`, extracted from the CONNECT.PH logo (navy primary, orange secondary, plus success/warning/error and the usual neutrals)
 
 ## Project structure
 
@@ -51,12 +52,15 @@ openplay-manager/
 ├── vite.config.js          Includes the VitePWA plugin config (manifest + service worker)
 ├── .env.example             Template for your Supabase URL + anon key
 ├── public/
-│   ├── favicon.svg
+│   ├── favicon.svg          CONNECT.PH-inspired mark (navy field, orange "C" ring + connector dot)
+│   ├── favicon.ico          16x16 + 32x32
+│   ├── favicon-16x16.png
+│   ├── favicon-32x32.png
 │   ├── icon-192.png         PWA icon (any)
 │   ├── icon-512.png         PWA icon (any + maskable)
 │   └── apple-touch-icon.png iOS home-screen icon (180x180)
 ├── scripts/
-│   └── generate-pwa-icons.mjs  Regenerates the icons above from the favicon's color palette — no deps, hand-encodes PNGs
+│   └── generate-pwa-icons.mjs  Regenerates every icon/favicon above from the CONNECT.PH palette — no deps, hand-encodes PNG + ICO
 ├── src/
 │   ├── main.jsx             App entry point — loads the storage shim first
 │   ├── App.jsx               Thin wrapper around the main component

@@ -56,7 +56,7 @@ export default function StandingsView({ players }) {
               <span
                 style={{
                   ...styles.standingsStatCol,
-                  color: p.diff > 0 ? "var(--court)" : p.diff < 0 ? "var(--coral)" : "#8a8f83",
+                  color: p.diff > 0 ? "var(--color-success)" : p.diff < 0 ? "var(--color-error)" : "var(--color-text-faint)",
                   fontWeight: 700,
                 }}
               >

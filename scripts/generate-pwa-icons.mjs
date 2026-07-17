@@ -1,13 +1,14 @@
-// Generates the PWA placeholder icons (public/icon-192.png, icon-512.png,
-// apple-touch-icon.png) from scratch — no image-processing dependency
-// needed. Draws the same pickleball motif as public/favicon.svg (a ball
-// circle + 6 dots on a court-green background) directly into a raw RGBA
-// buffer and hand-encodes it as a PNG (zlib for IDAT, a small CRC32 table
-// for chunk checksums — the only two pieces the PNG format actually needs
-// beyond raw bytes).
+// Generates every PWA/favicon placeholder asset from scratch — no
+// image-processing dependency needed. Draws the same CONNECT.PH-inspired
+// mark as public/favicon.svg (a navy field, an open orange ring evoking the
+// logo's "C", and a small orange connector dot at center) directly into a
+// raw RGBA buffer, and hand-encodes it as PNG (zlib for IDAT, a small
+// CRC32 table for chunk checksums) or ICO (a thin container around the
+// same PNG bytes — modern browsers/OSes accept PNG-in-ICO).
 //
 // Run with: node scripts/generate-pwa-icons.mjs
-// Re-run any time the brand colors in favicon.svg change.
+// Re-run any time the brand colors change (keep this in sync with
+// styles.js's --color-primary/--color-secondary and favicon.svg).
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,43 +17,42 @@ import path from "node:path";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
 
-const COURT_GREEN = [0x1f, 0x5c, 0x43]; // --court
-const BALL_YELLOW = [0xd4, 0xe1, 0x57]; // --ball
+const NAVY = [0x16, 0x35, 0x5e]; // --color-primary
+const ORANGE = [0xf7, 0x94, 0x1d]; // --color-secondary
 
-// same dot layout as favicon.svg's 64x64 viewBox, expressed as fractions of
-// the canvas so it scales cleanly to any icon size
-const DOT_FRACTIONS = [
-  [22 / 64, 20 / 64],
-  [40 / 64, 18 / 64],
-  [46 / 64, 32 / 64],
-  [40 / 64, 46 / 64],
-  [22 / 64, 44 / 64],
-  [16 / 64, 32 / 64],
-];
+// ring geometry as fractions of the canvas, matching favicon.svg's 64x64
+// viewBox (r=20, stroke-width=9) — kept as fractions so every size below
+// shares one definition. The gap is expressed directly in raster terms
+// (a 60° opening centered at 0°/"3 o'clock") rather than trying to
+// replicate SVG's stroke-dasharray coordinate system pixel-for-pixel; it's
+// the same visual motif, not a literal re-render of the SVG.
+const RING_OUTER_R_FRACTION = (20 + 9 / 2) / 64;
+const RING_INNER_R_FRACTION = (20 - 9 / 2) / 64;
+const CENTER_DOT_R_FRACTION = 5.5 / 64;
+const GAP_HALF_WIDTH_DEG = 30;
 
 function drawIcon(size) {
   const pixels = new Uint8Array(size * size * 4);
   const cx = size / 2;
   const cy = size / 2;
-  const ballRadius = size * (22 / 64);
-  const dotRadius = size * (3 / 64);
-  const dots = DOT_FRACTIONS.map(([fx, fy]) => [fx * size, fy * size]);
+  const outerR = size * RING_OUTER_R_FRACTION;
+  const innerR = size * RING_INNER_R_FRACTION;
+  const dotR = size * CENTER_DOT_R_FRACTION;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      let color = COURT_GREEN;
+      let color = NAVY;
 
       const dx = x + 0.5 - cx;
       const dy = y + 0.5 - cy;
-      if (dx * dx + dy * dy <= ballRadius * ballRadius) {
-        color = BALL_YELLOW;
-      }
-      for (const [dcx, dcy] of dots) {
-        const ddx = x + 0.5 - dcx;
-        const ddy = y + 0.5 - dcy;
-        if (ddx * ddx + ddy * ddy <= dotRadius * dotRadius) {
-          color = COURT_GREEN;
-        }
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist <= dotR) {
+        color = ORANGE;
+      } else if (dist >= innerR && dist <= outerR) {
+        const angleDeg = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+        const inGap = angleDeg <= GAP_HALF_WIDTH_DEG || angleDeg >= 360 - GAP_HALF_WIDTH_DEG;
+        if (!inGap) color = ORANGE;
       }
 
       const i = (y * size + x) * 4;
@@ -122,14 +122,53 @@ function encodePng(pixels, size) {
   return Buffer.concat([signature, ihdr, idat, iend]);
 }
 
-function generate(size, filename) {
-  const pixels = drawIcon(size);
-  const png = encodePng(pixels, size);
-  const outPath = path.join(publicDir, filename);
-  writeFileSync(outPath, png);
-  console.log(`wrote ${filename} (${size}x${size}, ${png.length} bytes)`);
+// ICO container: a 6-byte header, one 16-byte directory entry per image,
+// then each image's raw PNG bytes back to back. Every modern browser/OS
+// accepts PNG-format entries (no need for the older uncompressed-BMP form).
+function encodeIco(entries) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: 1 = icon
+  header.writeUInt16LE(entries.length, 4);
+
+  const dirEntries = [];
+  const imageBuffers = [];
+  let offset = 6 + entries.length * 16;
+
+  for (const { size, png } of entries) {
+    const dir = Buffer.alloc(16);
+    dir[0] = size >= 256 ? 0 : size; // 0 means 256 in ICO's width/height byte
+    dir[1] = size >= 256 ? 0 : size;
+    dir[2] = 0; // color palette
+    dir[3] = 0; // reserved
+    dir.writeUInt16LE(1, 4); // color planes
+    dir.writeUInt16LE(32, 6); // bits per pixel
+    dir.writeUInt32LE(png.length, 8);
+    dir.writeUInt32LE(offset, 12);
+    dirEntries.push(dir);
+    imageBuffers.push(png);
+    offset += png.length;
+  }
+
+  return Buffer.concat([header, ...dirEntries, ...imageBuffers]);
 }
 
-generate(192, "icon-192.png");
-generate(512, "icon-512.png");
-generate(180, "apple-touch-icon.png");
+function generatePng(size, filename) {
+  const png = encodePng(drawIcon(size), size);
+  writeFileSync(path.join(publicDir, filename), png);
+  console.log(`wrote ${filename} (${size}x${size}, ${png.length} bytes)`);
+  return png;
+}
+
+generatePng(192, "icon-192.png");
+generatePng(512, "icon-512.png");
+generatePng(180, "apple-touch-icon.png");
+const png16 = generatePng(16, "favicon-16x16.png");
+const png32 = generatePng(32, "favicon-32x32.png");
+
+const ico = encodeIco([
+  { size: 16, png: png16 },
+  { size: 32, png: png32 },
+]);
+writeFileSync(path.join(publicDir, "favicon.ico"), ico);
+console.log(`wrote favicon.ico (16x16 + 32x32, ${ico.length} bytes)`);

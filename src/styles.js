@@ -1,13 +1,74 @@
 export const fontImport = `
 @import url('https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
 :root {
-  --ink: #16241F;
-  --court: #1F5C43;
-  --court-dark: #163F2E;
-  --chalk: #F3F1E4;
-  --ball: #D4E157;
-  --coral: #E85D4C;
-  --line: #C9C4AE;
+  /* ---------------------------------------------------------------------
+   * CONNECT.PH brand palette — single source of truth for every color in
+   * the app. Extracted from the CONNECT.PH logo: navy wordmark (Primary),
+   * orange "C"/plug mark (Secondary), with a lighter orange tint (Accent)
+   * and the usual semantic roles (Success/Warning/Error) chosen to stay
+   * clearly distinct from Primary/Secondary at a glance. Every color used
+   * anywhere in styles.js should trace back to one of these — see the
+   * legacy aliases below for how the rest of this file (which still
+   * references the old --ink/--court/... names) picks these up without
+   * needing every style object rewritten.
+   * ------------------------------------------------------------------- */
+  --color-primary: #16355E; /* Navy — logo wordmark */
+  --color-primary-dark: #0E2540;
+  --color-secondary: #F7941D; /* Orange — logo "C" / plug */
+  /* the vibrant brand orange above is ~2.4:1 against white/--color-bg —
+     well under WCAG AA's 4.5:1 for text. Use it for fills/badges/icons
+     (paired with dark text on top of it), and use this darkened variant
+     (~4.8:1) any time orange itself needs to BE the text/foreground color
+     on a light background. */
+  --color-secondary-text: #B85C00;
+  --color-accent: #FFB25C; /* lighter orange — hover/accent states */
+  --color-success: #1F8A57;
+  --color-warning: #E8A33D;
+  --color-error: #D64545;
+  --color-bg: #F5F7FA;
+  --color-surface: #FFFFFF;
+  --color-border: #D8DEE4;
+  --color-text: #1B2A3A;
+  --color-text-muted: #5B6B7A;
+  --color-text-faint: #93A1AC;
+  --color-on-primary: #FFFFFF;
+
+  /* per-phase colors for Progressive Skill Rotation (see
+     ProgressiveSkillPanel) — Mentorship/Competitive reuse Secondary/Primary
+     so the phase badge and progress bar stay inside the same palette;
+     Transition reuses Warning (amber) since it's already a distinct third
+     hue, rather than inventing an unrelated fourth color. The "-tint"
+     variants are pale versions used for a zone's *inactive* state on the
+     progress bar. */
+  --color-phase-mentorship: var(--color-secondary);
+  --color-phase-mentorship-tint: #FDE7CB;
+  --color-phase-transition: var(--color-warning);
+  --color-phase-transition-tint: #FBECD3;
+  --color-phase-competitive: var(--color-primary);
+  --color-phase-competitive-tint: #D7DEE7;
+
+  /* rotating avatar-background palette (lib/utils.js's colorForName hashes
+     a player's name to one of these) — needs several distinct hues to
+     actually distinguish players at a glance, so it's more than just
+     Primary/Secondary, but still centralized here rather than hardcoded
+     in JS */
+  --color-avatar-1: var(--color-primary);
+  --color-avatar-2: var(--color-secondary);
+  --color-avatar-3: #3E6B8A;
+  --color-avatar-4: #7A4C8A;
+  --color-avatar-5: var(--color-success);
+  --color-avatar-6: #8A6D3B;
+
+  /* legacy aliases — every existing var(--ink)/var(--court)/... reference
+     throughout styles.js resolves through these, so the whole app picks up
+     the CONNECT.PH palette without rewriting each style object individually */
+  --ink: var(--color-text);
+  --court: var(--color-primary);
+  --court-dark: var(--color-primary-dark);
+  --chalk: var(--color-bg);
+  --ball: var(--color-secondary);
+  --coral: var(--color-error);
+  --line: var(--color-border);
 }
 @keyframes phasePop {
   0% { transform: scale(0.82); opacity: 0.3; }
@@ -15,8 +76,8 @@ export const fontImport = `
   100% { transform: scale(1); opacity: 1; }
 }
 @keyframes progressMarkerPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(31, 92, 67, 0.45); }
-  50% { box-shadow: 0 0 0 5px rgba(31, 92, 67, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22, 53, 94, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(22, 53, 94, 0); }
 }
 @keyframes settingsSlideDown {
   from { opacity: 0; transform: translateY(-4px); }
@@ -53,7 +114,7 @@ export const styles = {
   },
   landingSub: {
     fontSize: 14,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
     maxWidth: 420,
     margin: "0 auto",
   },
@@ -63,7 +124,7 @@ export const styles = {
     gap: 16,
   },
   landingCard: {
-    background: "#fff",
+    background: "var(--color-surface)",
     border: "1.5px solid var(--line)",
     borderRadius: 12,
     padding: 20,
@@ -77,7 +138,7 @@ export const styles = {
   },
   landingCardText: {
     fontSize: 12.5,
-    color: "#6b7268",
+    color: "var(--color-text-muted)",
     margin: "0 0 14px 0",
     lineHeight: 1.5,
   },
@@ -92,7 +153,7 @@ export const styles = {
     margin: "26px auto 0 auto",
     background: "none",
     border: "none",
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
@@ -115,7 +176,7 @@ export const styles = {
     gap: 6,
     background: "none",
     border: "none",
-    color: "#6b7268",
+    color: "var(--color-text-muted)",
     fontSize: 12.5,
     fontWeight: 700,
     cursor: "pointer",
@@ -153,7 +214,7 @@ export const styles = {
     height: 20,
     borderRadius: "50%",
     background: "var(--chalk)",
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     border: "1px solid var(--line)",
     display: "flex",
     alignItems: "center",
@@ -183,7 +244,7 @@ export const styles = {
     alignItems: "center",
     gap: 4,
     background: skipped ? "var(--coral)" : "var(--chalk)",
-    color: skipped ? "#fff" : "#5c6157",
+    color: skipped ? "var(--color-surface)" : "var(--color-text-muted)",
     border: `1px solid ${skipped ? "var(--coral)" : "var(--line)"}`,
     borderRadius: 6,
     padding: "6px 10px",
@@ -212,11 +273,24 @@ export const styles = {
     gap: 12,
     paddingBottom: 16,
   },
+  // light-background usage (Landing/Access screens) — the darker,
+  // accessible orange variant, since the vibrant brand orange fails
+  // WCAG AA contrast as text on a light background
   kicker: {
     fontFamily: "'Space Mono', monospace",
     fontSize: 11,
     letterSpacing: "0.14em",
-    color: "var(--ball)",
+    color: "var(--color-secondary-text)",
+    marginBottom: 6,
+    fontWeight: 700,
+  },
+  // dark-background usage (the session header, navy) — the vibrant brand
+  // orange reads clearly here and has good contrast against navy
+  kickerOnDark: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 11,
+    letterSpacing: "0.14em",
+    color: "var(--color-secondary)",
     marginBottom: 6,
     fontWeight: 700,
   },
@@ -312,7 +386,7 @@ export const styles = {
   loading: {
     padding: 40,
     textAlign: "center",
-    color: "#6b7268",
+    color: "var(--color-text-muted)",
     fontSize: 14,
   },
   sectionLabel: {
@@ -320,7 +394,7 @@ export const styles = {
     fontSize: 11,
     fontWeight: 700,
     letterSpacing: "0.12em",
-    color: "#6b7268",
+    color: "var(--color-text-muted)",
     margin: "22px 0 10px 0",
     textTransform: "uppercase",
   },
@@ -330,7 +404,7 @@ export const styles = {
     gap: 14,
   },
   courtCard: (status) => ({
-    background: "#fff",
+    background: "var(--color-surface)",
     border: `1.5px solid ${status === "finished" ? "var(--coral)" : "var(--line)"}`,
     borderRadius: 10,
     padding: 16,
@@ -357,14 +431,14 @@ export const styles = {
     fontWeight: 800,
     letterSpacing: "0.08em",
     color:
-      status === "open" ? "#6b7268" : status === "finished" ? "var(--coral)" : "var(--court)",
+      status === "open" ? "var(--color-text-muted)" : status === "finished" ? "var(--coral)" : "var(--court)",
   }),
   openCourtBody: {
     textAlign: "center",
     padding: "14px 0 6px 0",
   },
   openCourtText: {
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     fontSize: 13,
     margin: "0 0 12px 0",
   },
@@ -393,7 +467,7 @@ export const styles = {
     borderRadius: "50%",
     border: "1px solid var(--line)",
     background: "var(--chalk)",
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -403,13 +477,13 @@ export const styles = {
   },
   subReturnLabel: {
     fontSize: 12,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
     margin: "10px 0 0 0",
   },
   teamName: {
     fontSize: 12.5,
     fontWeight: 600,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -417,7 +491,7 @@ export const styles = {
   avatarImg: {
     borderRadius: "50%",
     objectFit: "cover",
-    border: "1.5px solid #fff",
+    border: "1.5px solid var(--color-surface)",
     boxShadow: "0 0 0 1px var(--line)",
     flexShrink: 0,
   },
@@ -426,12 +500,12 @@ export const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#fff",
+    color: "var(--color-surface)",
     fontFamily: "'Space Mono', monospace",
     fontWeight: 700,
     fontSize: 10,
     flexShrink: 0,
-    border: "1.5px solid #fff",
+    border: "1.5px solid var(--color-surface)",
     boxShadow: "0 0 0 1px var(--line)",
   },
   photoRow: {
@@ -456,7 +530,7 @@ export const styles = {
     width: 52,
     height: 52,
     borderRadius: "50%",
-    background: "#fff",
+    background: "var(--color-surface)",
     border: "1.5px dashed var(--line)",
     display: "flex",
     alignItems: "center",
@@ -470,7 +544,7 @@ export const styles = {
     height: 16,
     borderRadius: "50%",
     background: "var(--coral)",
-    color: "#fff",
+    color: "var(--color-surface)",
     border: "1.5px solid var(--chalk)",
     display: "flex",
     alignItems: "center",
@@ -492,7 +566,7 @@ export const styles = {
     fontSize: 11,
     fontWeight: 700,
     color: "var(--court)",
-    background: "#fff",
+    background: "var(--color-surface)",
     border: "1.5px solid var(--court)",
     borderRadius: 6,
     padding: "4px 8px",
@@ -537,8 +611,8 @@ export const styles = {
     display: "flex",
     alignItems: "center",
     gap: 5,
-    background: "#fff",
-    color: "#5c6157",
+    background: "var(--color-surface)",
+    color: "var(--color-text-muted)",
     border: "1.5px solid var(--line)",
     borderRadius: 7,
     padding: "9px 12px",
@@ -549,7 +623,7 @@ export const styles = {
   },
   editHint: {
     fontSize: 12,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     margin: "0 0 10px 0",
   },
   playerSearchInput: {
@@ -569,7 +643,7 @@ export const styles = {
     padding: "7px 10px",
     borderRadius: 8,
     border: "1.5px solid var(--line)",
-    background: "#fff",
+    background: "var(--color-surface)",
     cursor: "pointer",
     textAlign: "left",
     fontFamily: "'Inter', sans-serif",
@@ -592,7 +666,7 @@ export const styles = {
     fontFamily: "'Space Mono', monospace",
     fontSize: 11,
     fontWeight: 700,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
   },
   editWarning: {
     fontSize: 11.5,
@@ -616,7 +690,7 @@ export const styles = {
     fontFamily: "'Space Mono', monospace",
     fontSize: 10.5,
     fontWeight: 700,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     letterSpacing: "0.06em",
   },
   standingsRow: {
@@ -629,7 +703,7 @@ export const styles = {
     width: 24,
     fontFamily: "'Space Mono', monospace",
     fontSize: 12,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
   },
   standingsNameCol: {
     flex: 1,
@@ -654,7 +728,7 @@ export const styles = {
   },
   standingsNote: {
     fontSize: 11.5,
-    color: "#a3a89a",
+    color: "var(--color-text-faint)",
     marginTop: 14,
   },
   standingsRatingCol: {
@@ -665,8 +739,8 @@ export const styles = {
     fontFamily: "'Space Mono', monospace",
     fontSize: 12,
     fontWeight: 700,
-    color: rating === null ? "#a3a89a" : rating >= 60 ? "var(--chalk)" : "var(--ink)",
-    background: rating === null ? "transparent" : rating >= 60 ? "var(--court)" : "var(--ball)",
+    color: rating === null ? "var(--color-text-faint)" : rating >= 60 ? "var(--color-on-primary)" : "var(--ink)",
+    background: rating === null ? "transparent" : rating >= 60 ? "var(--color-success)" : "var(--ball)",
     borderRadius: 5,
     padding: rating === null ? 0 : "2px 6px",
     flexShrink: 0,
@@ -695,7 +769,7 @@ export const styles = {
     border: "1.5px solid var(--line)",
     fontSize: 14,
     fontFamily: "'Inter', sans-serif",
-    background: "#fff",
+    background: "var(--color-surface)",
     color: "var(--ink)",
   },
   primaryBtn: {
@@ -717,7 +791,7 @@ export const styles = {
     alignItems: "center",
     gap: 6,
     background: "var(--coral)",
-    color: "#fff",
+    color: "var(--color-surface)",
     border: "none",
     borderRadius: 8,
     padding: "9px 14px",
@@ -762,7 +836,7 @@ export const styles = {
   queueNum: {
     fontFamily: "'Space Mono', monospace",
     fontSize: 11,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     width: 16,
   },
   queueName: { flex: 1, fontWeight: 600 },
@@ -770,8 +844,8 @@ export const styles = {
     fontFamily: "'Space Mono', monospace",
     fontSize: 10,
     fontWeight: 700,
-    color: "#fff",
-    background: result === "win" ? "var(--court)" : "var(--coral)",
+    color: "var(--color-surface)",
+    background: result === "win" ? "var(--color-success)" : "var(--coral)",
     borderRadius: 4,
     padding: "2px 5px",
     flexShrink: 0,
@@ -797,17 +871,17 @@ export const styles = {
     padding: "9px 10px",
     borderRadius: 7,
     border: `1.5px solid ${active ? "var(--court)" : "var(--line)"}`,
-    background: active ? "var(--court)" : "#fff",
-    color: active ? "var(--chalk)" : "#5c6157",
+    background: active ? "var(--court)" : "var(--color-surface)",
+    color: active ? "var(--chalk)" : "var(--color-text-muted)",
     fontWeight: 700,
     fontSize: 12.5,
     cursor: "pointer",
     textAlign: "center",
     fontFamily: "'Inter', sans-serif",
   }),
-  queueGames: { fontSize: 11, color: "#8a8f83" },
+  queueGames: { fontSize: 11, color: "var(--color-text-faint)" },
   matchupCard: (isNext) => ({
-    background: "#fff",
+    background: "var(--color-surface)",
     border: `1.5px solid ${isNext ? "var(--court)" : "var(--line)"}`,
     borderRadius: 10,
     padding: "12px 14px",
@@ -818,7 +892,7 @@ export const styles = {
     fontSize: 10,
     fontWeight: 700,
     letterSpacing: "0.1em",
-    color: isNext ? "var(--court)" : "#8a8f83",
+    color: isNext ? "var(--court)" : "var(--color-text-faint)",
     textTransform: "uppercase",
   }),
   matchupHeadRow: {
@@ -832,7 +906,7 @@ export const styles = {
     alignItems: "center",
     gap: 4,
     background: locked ? "var(--ball)" : "transparent",
-    color: locked ? "var(--ink)" : "#8a8f83",
+    color: locked ? "var(--ink)" : "var(--color-text-faint)",
     border: `1px solid ${locked ? "var(--ball)" : "var(--line)"}`,
     borderRadius: 6,
     padding: "3px 8px",
@@ -858,7 +932,7 @@ export const styles = {
     color: "var(--coral)",
     flexShrink: 0,
   },
-  emptyQueue: { color: "#8a8f83", fontSize: 13.5 },
+  emptyQueue: { color: "var(--color-text-faint)", fontSize: 13.5 },
   loginWrap: {
     maxWidth: 340,
     margin: "20px auto",
@@ -875,7 +949,7 @@ export const styles = {
     textTransform: "uppercase",
     margin: "10px 0 2px 0",
   },
-  loginSub: { fontSize: 13, color: "#6b7268", margin: "0 0 12px 0" },
+  loginSub: { fontSize: 13, color: "var(--color-text-muted)", margin: "0 0 12px 0" },
   pinInput: {
     width: "100%",
     textAlign: "center",
@@ -888,7 +962,7 @@ export const styles = {
     fontFamily: "'Space Mono', monospace",
   },
   pinError: { color: "var(--coral)", fontSize: 12.5, marginTop: 8, fontWeight: 600 },
-  loginNote: { fontSize: 11.5, color: "#a3a89a", marginTop: 14 },
+  loginNote: { fontSize: 11.5, color: "var(--color-text-faint)", marginTop: 14 },
   scorerToolbar: {
     display: "flex",
     justifyContent: "space-between",
@@ -897,19 +971,19 @@ export const styles = {
     flexWrap: "wrap",
     gap: 10,
   },
-  toolbarText: { fontSize: 13.5, color: "#5c6157" },
+  toolbarText: { fontSize: 13.5, color: "var(--color-text-muted)" },
   rotationRow: {
     display: "flex",
     alignItems: "center",
     gap: 8,
     fontSize: 13.5,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
   },
   rotationSelect: {
     padding: "6px 10px",
     borderRadius: 7,
     border: "1.5px solid var(--line)",
-    background: "#fff",
+    background: "var(--color-surface)",
     color: "var(--ink)",
     fontSize: 12.5,
     fontWeight: 600,
@@ -924,7 +998,7 @@ export const styles = {
     textTransform: "uppercase",
     color: phaseKey === "competitive" ? "var(--chalk)" : "var(--ink)",
     background:
-      phaseKey === "mentorship" ? "var(--ball)" : phaseKey === "transition" ? "#e8d9a3" : "var(--court)",
+      phaseKey === "mentorship" ? "var(--ball)" : phaseKey === "transition" ? "var(--color-phase-transition)" : "var(--court)",
     borderRadius: 5,
     padding: "3px 7px",
     flexShrink: 0,
@@ -936,7 +1010,7 @@ export const styles = {
     padding: "4px 6px",
     borderRadius: 6,
     border: "1.5px solid var(--line)",
-    background: "#fff",
+    background: "var(--color-surface)",
     color: "var(--ink)",
     fontSize: 12.5,
     fontFamily: "'Inter', sans-serif",
@@ -960,14 +1034,14 @@ export const styles = {
       phaseKey === "mentorship"
         ? active
           ? "var(--ball)"
-          : "#e9edc7"
+          : "var(--color-phase-mentorship-tint)"
         : phaseKey === "transition"
         ? active
-          ? "#e8d9a3"
-          : "#efe6cc"
+          ? "var(--color-phase-transition)"
+          : "var(--color-phase-transition-tint)"
         : active
         ? "var(--court)"
-        : "#c7d6cc",
+        : "var(--color-phase-competitive-tint)",
     transition: "background 0.4s ease",
   }),
   progressBarMarker: {
@@ -986,7 +1060,7 @@ export const styles = {
     display: "flex",
     justifyContent: "space-between",
     fontSize: 10,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     fontFamily: "'Space Mono', monospace",
     marginBottom: 10,
   },
@@ -1008,7 +1082,7 @@ export const styles = {
     gap: 14,
     marginTop: 10,
     padding: "10px 12px",
-    background: "#fff",
+    background: "var(--color-surface)",
     border: "1.5px solid var(--line)",
     borderRadius: 8,
     animation: "settingsSlideDown 0.2s ease",
@@ -1018,7 +1092,7 @@ export const styles = {
     flexDirection: "column",
     gap: 4,
     fontSize: 11.5,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
     fontWeight: 600,
   },
   statsRow: {
@@ -1026,7 +1100,7 @@ export const styles = {
     gap: 14,
     marginTop: 10,
     fontSize: 12,
-    color: "#5c6157",
+    color: "var(--color-text-muted)",
   },
   statsChip: (phaseKey) => ({
     display: "flex",
@@ -1039,7 +1113,7 @@ export const styles = {
   }),
   awaitingPairText: {
     fontSize: 12,
-    color: "#8a8f83",
+    color: "var(--color-text-faint)",
     textAlign: "center",
     margin: "10px 0 0 0",
   },
@@ -1052,7 +1126,7 @@ export const styles = {
   footer: {
     textAlign: "center",
     fontSize: 11,
-    color: "#a3a89a",
+    color: "var(--color-text-faint)",
     padding: "14px 0 18px 0",
   },
 };

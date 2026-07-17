@@ -45,7 +45,16 @@ export function initials(name) {
     .join("");
 }
 
-const AVATAR_COLORS = ["#1F5C43", "#E85D4C", "#8A6D3B", "#3E6B8A", "#7A4C8A", "#3D7A5C"];
+// pulls from the CONNECT.PH theme's rotating avatar palette (--color-avatar-1..6,
+// see styles.js) rather than hardcoding hex here
+const AVATAR_COLORS = [
+  "var(--color-avatar-1)",
+  "var(--color-avatar-2)",
+  "var(--color-avatar-3)",
+  "var(--color-avatar-4)",
+  "var(--color-avatar-5)",
+  "var(--color-avatar-6)",
+];
 export function colorForName(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
