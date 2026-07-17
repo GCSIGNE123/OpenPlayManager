@@ -42,6 +42,7 @@ Also worth knowing: this app currently uses hardcoded demo PINs for the Scorer r
 - **Standings** — columns: GP (games played), W, L, +/-, RTG. Default order is highest rating, then wins, then point differential, then alphabetical; click GP/W/L/+/-/RTG to sort by that column instead (ascending → descending → back to default), with a ▲/▼ indicator on the active column. Players on a 3+ game win streak get a 🔥 icon
 - **Installable PWA, CONNECT.PH-branded** — Add to Home Screen on Android/iOS launches standalone (no browser chrome); the app shell (HTML/JS/CSS/icons) is precached so it still opens with no connection. Session data itself always needs the network, same as before
 - **CONNECT.PH theme** — every color in the app traces back to one centralized palette in `src/styles.js`, extracted from the CONNECT.PH logo (navy primary, orange secondary, plus success/warning/error and the usual neutrals)
+- **Developer page** — "Developer? Run the rotation simulator →" on the landing screen; runs a full simulated Open Play session under Progressive Skill Rotation client-side (players, courts, games/player, beginner %, optional randomized 8-24 headcount, optional 2/3/4-court comparison) and shows the results, including a Fairness Score for how evenly games got spread. No session created, nothing saved — see `src/lib/simulation/RotationSimulationEngine.js`
 
 ## Project structure
 

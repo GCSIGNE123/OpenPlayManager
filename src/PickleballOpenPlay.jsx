@@ -24,9 +24,10 @@ import CheckinView from "./components/CheckinView.jsx";
 import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
+import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | app
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app
   const [sessionCode, setSessionCode] = useState(null);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
@@ -749,6 +750,7 @@ export default function PickleballOpenPlay() {
         <LandingScreen
           onCreate={() => setScreen("access")}
           onAdmin={() => setScreen("admin")}
+          onDeveloper={() => setScreen("developer")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -756,6 +758,8 @@ export default function PickleballOpenPlay() {
           joining={joining}
         />
       )}
+
+      {screen === "developer" && <DeveloperView onBack={goToLanding} />}
 
       {screen === "access" && (
         <AccessScreen

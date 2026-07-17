@@ -22,6 +22,7 @@ import { uid, shuffle } from "../random.js";
 
 export const DEFAULT_SIMULATION_CONFIG = {
   playerCount: 16,
+  randomizePlayers: false, // when true, playerCount is ignored and a fresh random count in [MIN_RANDOM_PLAYERS, MAX_RANDOM_PLAYERS] is picked for this run
   skillSplit: 0.5, // fraction of players registered as "beginner"; the rest "intermediate"
   courtCount: 4,
   expectedGamesPerPlayer: 6,
@@ -29,6 +30,16 @@ export const DEFAULT_SIMULATION_CONFIG = {
   pointsToWin: 11,
   maxRounds: 300, // safety cap — real sessions converge in a handful of rounds; this only guards against a genuine deadlock (e.g. too few players for any court)
 };
+
+export const MIN_RANDOM_PLAYERS = 8;
+export const MAX_RANDOM_PLAYERS = 24;
+
+// inclusive random integer in [MIN_RANDOM_PLAYERS, MAX_RANDOM_PLAYERS] — a
+// realistic open-play turnout range (below 8 there's rarely enough for even
+// 2 courts; above 24 is an unusually large single session)
+export function randomPlayerCount() {
+  return MIN_RANDOM_PLAYERS + Math.floor(Math.random() * (MAX_RANDOM_PLAYERS - MIN_RANDOM_PLAYERS + 1));
+}
 
 function buildPlayers(playerCount, skillSplit) {
   const players = {};
@@ -198,21 +209,33 @@ function releaseStalePairings(state) {
 // rotation fair" question. Population standard deviation (not sample),
 // since playerSummaries is the entire roster for this session, not a
 // sample drawn from a larger population.
+//
+// fairnessScore condenses that into one 0-100 number for an at-a-glance
+// read: 100 = every player played exactly the same number of games (stdDev
+// 0), lower = more spread. Built from the coefficient of variation
+// (stdDev / avg) rather than raw stdDev so it stays meaningful across very
+// different expectedGamesPerPlayer settings — a stdDev of 1 game means
+// something very different at "3 games/player" vs. "12 games/player", but
+// the CV normalizes for that. Clamped to [0, 100]; 100 when avgGames is 0
+// (no games played at all isn't "unfair," there's just nothing to compare).
 function calculateFairnessStats(playerSummaries) {
   const gamesPlayed = playerSummaries.map((p) => p.games);
   if (gamesPlayed.length === 0) {
-    return { minGames: 0, maxGames: 0, avgGames: 0, stdDevGames: 0 };
+    return { minGames: 0, maxGames: 0, avgGames: 0, stdDevGames: 0, fairnessScore: 100 };
   }
   const minGames = Math.min(...gamesPlayed);
   const maxGames = Math.max(...gamesPlayed);
   const avgGames = gamesPlayed.reduce((sum, g) => sum + g, 0) / gamesPlayed.length;
   const variance = gamesPlayed.reduce((sum, g) => sum + (g - avgGames) ** 2, 0) / gamesPlayed.length;
   const stdDevGames = Math.sqrt(variance);
+  const coefficientOfVariation = avgGames > 0 ? stdDevGames / avgGames : 0;
+  const fairnessScore = Math.round(Math.max(0, Math.min(100, (1 - coefficientOfVariation) * 100)));
   return {
     minGames,
     maxGames,
     avgGames: Math.round(avgGames * 100) / 100,
     stdDevGames: Math.round(stdDevGames * 100) / 100,
+    fairnessScore,
   };
 }
 
@@ -220,6 +243,10 @@ function calculateFairnessStats(playerSummaries) {
 // not print anything — see printSimulationReport for that.
 export function runSimulation(config = {}) {
   const cfg = { ...DEFAULT_SIMULATION_CONFIG, ...config };
+  // resolve to a concrete count up front so it's stable for the rest of
+  // this run and gets reported accurately in the result (cfg.playerCount
+  // is overwritten with whatever was actually used, random or not)
+  if (cfg.randomizePlayers) cfg.playerCount = randomPlayerCount();
   const { players, ids: queueIds } = buildPlayers(cfg.playerCount, cfg.skillSplit);
 
   let state = {
@@ -345,7 +372,9 @@ export function runSimulation(config = {}) {
 // from runSimulation so the data can be consumed programmatically too.
 export function printSimulationReport(result) {
   console.log("\n=== Rotation Simulation Report ===");
-  console.log(`Players: ${result.config.playerCount} (skill split ${Math.round(result.config.skillSplit * 100)}% beginner)`);
+  console.log(
+    `Players: ${result.config.playerCount}${result.config.randomizePlayers ? " (randomized 8-24)" : ""} (skill split ${Math.round(result.config.skillSplit * 100)}% beginner)`
+  );
   console.log(`Courts: ${result.config.courtCount}  |  Expected games/player: ${result.config.expectedGamesPerPlayer}`);
   console.log(`Phase thresholds: Mentorship ≤${result.config.progressiveSkillThresholds.mentorshipMax}% · Transition ≤${result.config.progressiveSkillThresholds.transitionMax}% · Competitive beyond`);
   console.log(`Rounds run: ${result.roundsRun}  |  Total matches: ${result.totalMatches}`);
@@ -359,7 +388,7 @@ export function printSimulationReport(result) {
 
   const f = result.fairnessStats;
   console.log(
-    `Fairness (games played) — min: ${f.minGames}  max: ${f.maxGames}  avg: ${f.avgGames}  stdDev: ${f.stdDevGames}`
+    `Fairness (games played) — min: ${f.minGames}  max: ${f.maxGames}  avg: ${f.avgGames}  stdDev: ${f.stdDevGames}  |  Fairness Score: ${f.fairnessScore}/100`
   );
 
   console.log("\n-- Final standings --");

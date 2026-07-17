@@ -1148,4 +1148,63 @@ export const styles = {
     color: "var(--color-text-faint)",
     padding: "14px 0 18px 0",
   },
+
+  // ---- Developer / rotation simulator page ----
+  devWrap: {
+    padding: "22px 24px 30px 24px",
+    maxWidth: 720,
+    margin: "0 auto",
+  },
+  devFormCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 18,
+  },
+  devFormGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: 12,
+    marginBottom: 14,
+  },
+  devCheckboxRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+    marginBottom: 14,
+  },
+  devSummaryCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 18,
+  },
+  devSummaryLine: {
+    fontSize: 13,
+    color: "var(--ink)",
+    margin: "4px 0",
+  },
+  devFairnessRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
+  devFairnessScore: (score) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 20,
+    fontWeight: 700,
+    color: "var(--color-on-primary)",
+    background: score >= 85 ? "var(--color-success)" : score >= 60 ? "var(--color-warning)" : "var(--color-error)",
+    borderRadius: 8,
+    padding: "6px 14px",
+  }),
+  devSectionGap: {
+    marginTop: 22,
+  },
 };

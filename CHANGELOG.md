@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-16 (later, cont'd #21)
+
+### Added
+- Rotation simulator: random player counts. New `randomizePlayers` config option + `randomPlayerCount()` (exported), an inclusive random integer in `[MIN_RANDOM_PLAYERS, MAX_RANDOM_PLAYERS]` = 8-24. CLI: bare `--randomPlayers` flag; when combined with `--courts=2,3,4` the headcount is resolved once and shared across all court counts so the comparison stays apples-to-apples
+- Rotation simulator: Fairness Score. `calculateFairnessStats` now also returns `fairnessScore`, a single 0-100 number (100 = perfectly even) built from the coefficient of variation of games played, so it stays meaningful across different `expectedGamesPerPlayer` settings rather than a raw stdDev number that means different things at different scales. Shown in `printSimulationReport` and the `--courts` comparison table
+- New Developer page (`src/components/DeveloperView.jsx`), reached via a "Developer? Run the rotation simulator →" link on the landing screen. A simple form (players, courts, games/player, beginner %, randomize-players checkbox, compare-2/3/4-courts checkbox) runs `RotationSimulationEngine` directly in the browser and displays the results — summary, phase counts, Fairness Score badge, and a standings table reusing `StandingsView`'s existing table styles. Read-only dev tool: no session, no auth, nothing persisted or saved anywhere
+
 ## 2026-07-16 (later, cont'd #20)
 
 ### Added
