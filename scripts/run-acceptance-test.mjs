@@ -1,0 +1,346 @@
+// Organizer Acceptance Test — automated, headless, logic-layer coverage.
+//
+// This is NOT a UI test — it doesn't click anything or render React. It
+// drives the same pure functions PickleballOpenPlay.jsx calls (imported
+// directly from src/lib/*, unmodified) through a full organizer session —
+// create, register, check in, generate matchups, manual court assignment,
+// score, end match, replace a player, edit session settings, and verify
+// standings/history — asserting the data comes out shaped exactly like the
+// real app produces it. A few small pieces of orchestration glue that only
+// exist as inline closures in PickleballOpenPlay.jsx (adjustScore's win
+// condition, fillCourt's dequeue, endMatch's stat bookkeeping) are
+// deliberately re-expressed here in miniature, the same precedent already
+// set by src/lib/simulation/RotationSimulationEngine.js for the same reason
+// — see that file's own header comment.
+//
+// UI-level gaps (confirm() dialogs, missing toasts, disabled-button
+// explanations, etc.) are NOT caught here — see TESTING.md's "Findings"
+// section, which came from an actual browser walkthrough, for those.
+//
+// Usage: node scripts/run-acceptance-test.mjs
+
+import { emptyCourt, ROTATION_MODES } from "../src/lib/constants.js";
+import {
+  getRotationEngine,
+  refreshNextMatchups,
+  manuallyReservedIds,
+  buildReplacementCandidates,
+  dissolveMatchupIfReserved,
+  recordRotationHistory,
+  reservedMatchupIds,
+} from "../src/lib/utils.js";
+import { calculatePerformanceRating } from "../src/lib/performanceRating.js";
+import { uid } from "../src/lib/random.js";
+
+let passCount = 0;
+let failCount = 0;
+const failures = [];
+
+function assert(step, description, condition) {
+  if (condition) {
+    passCount += 1;
+    console.log(`  \x1b[32m✓\x1b[0m ${description}`);
+  } else {
+    failCount += 1;
+    failures.push(`[${step}] ${description}`);
+    console.log(`  \x1b[31m✗ ${description}\x1b[0m`);
+  }
+}
+
+function section(title) {
+  console.log(`\n${title}`);
+}
+
+function newPlayer(name, skill) {
+  const id = uid();
+  return {
+    id,
+    name,
+    photo: null,
+    skill,
+    checkedIn: false,
+    skipped: false,
+    games: 0,
+    wins: 0,
+    losses: 0,
+    streak: 0,
+    lastResult: null,
+    pointsFor: 0,
+    pointsAgainst: 0,
+    partnerCounts: {},
+    recentPartnerIds: [],
+    opponentCounts: {},
+    lastOpponentIds: [],
+    recentOpponentIds: [],
+    courtCounts: {},
+    lastCourt: null,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Step 1 + 2: Create Session, Register Players
+// ---------------------------------------------------------------------
+section("1-2. Create Session / Register Players");
+
+const roster = [
+  newPlayer("John", "beginner"),
+  newPlayer("Lloyd", "intermediate"),
+  newPlayer("Lara", "beginner"),
+  newPlayer("Doy2x", "intermediate"),
+  newPlayer("Melit", "beginner"),
+];
+const players = {};
+roster.forEach((p) => (players[p.id] = p));
+const [johnId, lloydId, laraId, doy2xId, melitId] = roster.map((p) => p.id);
+
+let state = {
+  venue: "Acceptance Test Venue",
+  courts: [emptyCourt(1), emptyCourt(2)],
+  players,
+  queueIds: [],
+  nextMatchups: [],
+  matchHistory: [],
+  rotationMode: "continuous",
+  expectedGamesPerPlayer: 6,
+  progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 },
+  updatedAt: Date.now(),
+};
+
+assert("Create Session", "venue name stored", state.venue === "Acceptance Test Venue");
+assert("Create Session", "2 courts created, both open", state.courts.length === 2 && state.courts.every((c) => c.status === "open"));
+assert("Create Session", "rotation mode is a valid ROTATION_MODES value", ROTATION_MODES.some((m) => m.value === state.rotationMode));
+assert("Register Players", "5 players registered, none checked in yet", Object.keys(state.players).length === 5 && Object.values(state.players).every((p) => !p.checkedIn));
+
+// ---------------------------------------------------------------------
+// Step 3: Player Check-in (4 registered + 1 walk-in, mirroring
+// checkInExisting / quickAddCheckIn)
+// ---------------------------------------------------------------------
+section("3. Player Check-in");
+
+[johnId, lloydId, laraId, doy2xId].forEach((id) => {
+  state.players[id] = { ...state.players[id], checkedIn: true };
+  state.queueIds = [...state.queueIds, id];
+});
+const jeffreyId = uid();
+state.players[jeffreyId] = { ...newPlayer("Jeffrey", "intermediate"), checkedIn: true };
+state.queueIds = [...state.queueIds, jeffreyId];
+
+assert("Check-in", "4 registered players checked in via checkInExisting path", [johnId, lloydId, laraId, doy2xId].every((id) => state.players[id].checkedIn));
+assert("Check-in", "walk-in player added and checked in via quickAddCheckIn path", state.players[jeffreyId].checkedIn === true);
+assert("Check-in", "Melit (not checked in) stays out of the queue", !state.queueIds.includes(melitId));
+assert("Check-in", "queue has exactly the 5 checked-in players", state.queueIds.length === 5);
+
+// ---------------------------------------------------------------------
+// Step 4: Generate Matchups
+// ---------------------------------------------------------------------
+section("4. Generate Matchups");
+
+const engine = getRotationEngine(state.rotationMode);
+state.nextMatchups = refreshNextMatchups(state.queueIds, state.players, state.nextMatchups, engine, null);
+
+assert("Generate Matchups", "at least one matchup was generated from 5 waiting players", state.nextMatchups.length >= 1);
+const firstMatchup = state.nextMatchups[0];
+assert("Generate Matchups", "generated matchup has 2 players per side", firstMatchup && firstMatchup.teamA.length === 2 && firstMatchup.teamB.length === 2);
+assert(
+  "Generate Matchups",
+  "generated matchup mixes a beginner and an intermediate per team (BalancedRotationEngine rule)",
+  firstMatchup &&
+    [firstMatchup.teamA, firstMatchup.teamB].every((team) => {
+      const skills = team.map((id) => state.players[id].skill);
+      return skills.includes("beginner") && skills.includes("intermediate");
+    })
+);
+
+// ---------------------------------------------------------------------
+// Step 8 (checked here too): Waiting Queue — reservation accounting
+// ---------------------------------------------------------------------
+section("8. Waiting Queue (post-matchup-generation)");
+
+const reserved = reservedMatchupIds(state.nextMatchups);
+assert("Waiting Queue", "reservedMatchupIds tracks everyone inside nextMatchups", [...reserved].length === firstMatchup.teamA.length + firstMatchup.teamB.length);
+assert(
+  "Waiting Queue",
+  "players still counted in queueIds even once reserved into a matchup (they don't leave until deployed to a live court)",
+  [...reserved].every((id) => state.queueIds.includes(id))
+);
+
+// ---------------------------------------------------------------------
+// Step 6: Score Entry + Step 7: Court Rotation (deploy the generated
+// matchup onto Court 1, mirroring fillCourt, then score + end it,
+// mirroring adjustScore/declareWinner + endMatch's continuous-queue path)
+// ---------------------------------------------------------------------
+section("6-7. Score Entry / Court Rotation (Court 1, automatic matchup)");
+
+{
+  const [nextMatch, ...rest] = state.nextMatchups;
+  const consumed = new Set([...nextMatch.teamA, ...nextMatch.teamB]);
+  state.queueIds = state.queueIds.filter((id) => !consumed.has(id));
+  state.courts = state.courts.map((c, i) =>
+    i === 0 ? { ...c, status: "live", teamA: nextMatch.teamA, teamB: nextMatch.teamB, scoreA: 0, scoreB: 0 } : c
+  );
+  state.nextMatchups = rest;
+}
+assert("Court Rotation", "Court 1 is live with the deployed matchup's teams", state.courts[0].status === "live" && state.courts[0].teamA.length === 2);
+assert("Court Rotation", "deployed players removed from queueIds", !state.courts[0].teamA.concat(state.courts[0].teamB).some((id) => state.queueIds.includes(id)));
+
+// declareWinner-style: Team A wins 11-0
+state.courts = state.courts.map((c, i) => (i === 0 ? { ...c, scoreA: 11, scoreB: 0, status: "finished" } : c));
+assert("Score Entry", "score recorded and court marked finished at 11 points", state.courts[0].scoreA === 11 && state.courts[0].status === "finished");
+
+// endMatch-style: stats, rotation history, matchHistory, requeue
+{
+  const court = state.courts[0];
+  const { teamA, teamB, scoreA, scoreB } = court;
+  const aWon = scoreA > scoreB;
+  let updatedPlayers = { ...state.players };
+  teamA.forEach((id) => {
+    const p = updatedPlayers[id];
+    updatedPlayers[id] = { ...p, games: p.games + 1, wins: p.wins + (aWon ? 1 : 0), losses: p.losses + (aWon ? 0 : 1), pointsFor: p.pointsFor + scoreA, pointsAgainst: p.pointsAgainst + scoreB };
+  });
+  teamB.forEach((id) => {
+    const p = updatedPlayers[id];
+    updatedPlayers[id] = { ...p, games: p.games + 1, wins: p.wins + (aWon ? 0 : 1), losses: p.losses + (aWon ? 1 : 0), pointsFor: p.pointsFor + scoreB, pointsAgainst: p.pointsAgainst + scoreA };
+  });
+  updatedPlayers = recordRotationHistory(updatedPlayers, teamA, teamB, court.number);
+
+  const matchRecord = {
+    round: state.matchHistory.length + 1,
+    court: court.number,
+    teamA,
+    teamB,
+    winner: aWon ? "A" : "B",
+    scoreA,
+    scoreB,
+    endedAt: Date.now(),
+    phase: null,
+  };
+  state.matchHistory = [...state.matchHistory, matchRecord];
+  state.queueIds = [...state.queueIds, ...teamA, ...teamB];
+  state.courts = state.courts.map((c, i) => (i === 0 ? emptyCourt(c.number) : c));
+  state.players = updatedPlayers;
+}
+
+assert("Court Rotation", "match #1 recorded in matchHistory as round 1", state.matchHistory.length === 1 && state.matchHistory[0].round === 1);
+assert("Court Rotation", "Court 1 reset to open/empty after end-match (continuous mode, non-pooling)", state.courts[0].status === "open" && state.courts[0].teamA.length === 0);
+assert("Court Rotation", "all 4 played players requeued into queueIds", state.matchHistory[0].teamA.concat(state.matchHistory[0].teamB).every((id) => state.queueIds.includes(id)));
+assert("Score Entry", "winning team's players credited a win, losing team a loss", state.matchHistory[0].teamA.every((id) => state.players[id].wins === 1) && state.matchHistory[0].teamB.every((id) => state.players[id].losses === 1));
+
+// ---------------------------------------------------------------------
+// Step 9: Manual Court Assignment (Court 2)
+// ---------------------------------------------------------------------
+section("9. Manual Court Assignment");
+
+state.courts = state.courts.map((c, i) => (i === 1 ? { ...c, assignmentMode: "manual" } : c));
+assert("Manual Court Assignment", "Court 2 switched to manual mode", state.courts[1].assignmentMode === "manual");
+
+// draft: pull a player who is currently reserved in nextMatchups (if any),
+// exercising dissolveMatchupIfReserved the same way setManualCourtPlayer does
+const manualPick1 = state.queueIds[0];
+state.nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, manualPick1);
+state.courts = state.courts.map((c, i) => (i === 1 ? { ...c, teamA: [manualPick1] } : c));
+
+const remainingPicks = state.queueIds.filter((id) => id !== manualPick1).slice(0, 3);
+state.courts = state.courts.map((c, i) =>
+  i === 1 ? { ...c, teamA: [...c.teamA, remainingPicks[0]], teamB: [remainingPicks[1], remainingPicks[2]] } : c
+);
+
+const manualCourt = state.courts[1];
+const manualIds = [...manualCourt.teamA, ...manualCourt.teamB];
+assert("Manual Court Assignment", "draft has exactly 4 unique players before locking", manualIds.length === 4 && new Set(manualIds).size === 4);
+
+const reservedByManual = manuallyReservedIds(state.courts);
+assert("Manual Court Assignment", "manuallyReservedIds sees all 4 drafted players", manualIds.every((id) => reservedByManual.has(id)));
+
+// lockManualCourt-style
+state.queueIds = state.queueIds.filter((id) => !manualIds.includes(id));
+state.courts = state.courts.map((c, i) => (i === 1 ? { ...c, status: "live", scoreA: 0, scoreB: 0, manualLocked: true } : c));
+assert("Manual Court Assignment", "Court 2 live and manualLocked after lock", state.courts[1].status === "live" && state.courts[1].manualLocked === true);
+assert("Manual Court Assignment", "locked players removed from queueIds", !manualIds.some((id) => state.queueIds.includes(id)));
+
+// ---------------------------------------------------------------------
+// Step 10: Player Replacement (substitute one of Court 2's players)
+// ---------------------------------------------------------------------
+section("10. Player Replacement");
+
+const outgoingId = state.courts[1].teamA[0];
+const unassigned = state.queueIds.map((id) => state.players[id]).filter(Boolean);
+const candidates = buildReplacementCandidates(state.nextMatchups, unassigned, state.players);
+assert("Player Replacement", "candidate pool has at least one player available to sub in", candidates.waiting.length + candidates.upcoming.length > 0);
+
+const incomingId = candidates.waiting[0]?.id ?? candidates.upcoming[0]?.id;
+if (incomingId) {
+  state.nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, incomingId);
+  state.courts = state.courts.map((c, i) => {
+    if (i !== 1) return c;
+    return { ...c, teamA: c.teamA.map((id) => (id === outgoingId ? incomingId : id)) };
+  });
+  state.queueIds = state.queueIds.filter((id) => id !== incomingId);
+  state.queueIds = [...state.queueIds, outgoingId];
+}
+assert("Player Replacement", "outgoing player returned to queueIds", state.queueIds.includes(outgoingId));
+assert("Player Replacement", "incoming player now on Court 2, not in queueIds", state.courts[1].teamA.includes(incomingId) && !state.queueIds.includes(incomingId));
+assert("Player Replacement", "Court 2 still has exactly 4 unique players after the swap", new Set([...state.courts[1].teamA, ...state.courts[1].teamB]).size === 4);
+
+// ---------------------------------------------------------------------
+// Step 11: Session Settings (edit venue, expected games, thresholds —
+// mirroring updateSessionSettings)
+// ---------------------------------------------------------------------
+section("11. Session Settings");
+
+const prevRotationMode = state.rotationMode;
+state = {
+  ...state,
+  venue: "Renamed Venue",
+  expectedGamesPerPlayer: 8,
+  progressiveSkillThresholds: { mentorshipMax: 25, transitionMax: 55 },
+};
+assert("Session Settings", "venue name updated", state.venue === "Renamed Venue");
+assert("Session Settings", "expected games per player updated", state.expectedGamesPerPlayer === 8);
+assert("Session Settings", "progressive skill thresholds updated", state.progressiveSkillThresholds.mentorshipMax === 25 && state.progressiveSkillThresholds.transitionMax === 55);
+assert("Session Settings", "rotation mode NOT changed by session settings (by design — chosen once at creation)", state.rotationMode === prevRotationMode);
+
+// ---------------------------------------------------------------------
+// Step 12: Standings
+// ---------------------------------------------------------------------
+section("12. Standings");
+
+const winnerSample = state.matchHistory[0].teamA[0];
+const loserSample = state.matchHistory[0].teamB[0];
+const winnerRating = calculatePerformanceRating(state.players[winnerSample]);
+const loserRating = calculatePerformanceRating(state.players[loserSample]);
+assert("Standings", "a player with a completed win has a non-null performance rating", winnerRating.rating !== null);
+assert("Standings", "the winning player's rating is higher than the losing player's", winnerRating.rating > loserRating.rating);
+assert("Standings", "a player with 0 games played has a null rating (not shown in standings)", calculatePerformanceRating(state.players[melitId]).rating === null);
+
+// ---------------------------------------------------------------------
+// Step 13: History
+// ---------------------------------------------------------------------
+section("13. History");
+
+assert("History", "matchHistory has exactly 1 completed game recorded", state.matchHistory.length === 1);
+const historyEntry = state.matchHistory[0];
+assert("History", "history entry has round/court/teams/score/winner/endedAt — the reusable shape PROJECT.md documents", ["round", "court", "teamA", "teamB", "winner", "scoreA", "scoreB", "endedAt"].every((k) => k in historyEntry));
+assert("History", "history entry is immutable player-id data, not display strings (names resolved at render/export time)", typeof historyEntry.teamA[0] === "string" && !historyEntry.teamA[0].includes(" "));
+
+// ---------------------------------------------------------------------
+// Step 5 (End Session) — logic-layer check only; the actual Supabase
+// delete + native confirm() dialog can't be safely exercised headlessly.
+// See TESTING.md Finding #1 for why that confirm() is itself a problem.
+// ---------------------------------------------------------------------
+section("5. End Session (data-integrity check only)");
+
+const stillLiveCourts = state.courts.filter((c) => c.status === "live" || c.status === "finished");
+assert("End Session", "Court 2 still live going into end-of-session (expected — this test never explicitly ended it)", stillLiveCourts.length === 1);
+assert("End Session", "no player id appears in queueIds AND on a live court at the same time", stillLiveCourts.every((c) => [...c.teamA, ...c.teamB].every((id) => !state.queueIds.includes(id))));
+assert("End Session", "matchHistory survived every subsequent mutation unchanged (round-1 record untouched)", state.matchHistory.length === 1 && state.matchHistory[0].round === 1 && state.matchHistory[0].scoreA === 11);
+
+// ---------------------------------------------------------------------
+console.log(`\n${"=".repeat(60)}`);
+console.log(`${passCount} passed, ${failCount} failed`);
+if (failCount > 0) {
+  console.log("\nFailed assertions:");
+  failures.forEach((f) => console.log(`  - ${f}`));
+  process.exit(1);
+} else {
+  console.log("All organizer acceptance checks passed.");
+}
