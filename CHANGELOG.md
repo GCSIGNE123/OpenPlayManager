@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-18
+
+### Added
+- Permanent, non-expiring, reusable developer access code `GUILSIGN` (`DEV_ACCESS_CODE` in `lib/constants.js`) — bypasses the normal single-use Supabase-backed access code flow entirely, for the developer's own repeated session-creation testing. Every organizer-issued code is unaffected
+
 ## 2026-07-17
 
 ### Added

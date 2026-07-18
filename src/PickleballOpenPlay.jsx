@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
-import { ACCESS_PREFIX, ADMIN_PIN, ROTATION_MODES, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
+import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -222,8 +222,10 @@ export default function PickleballOpenPlay() {
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
 
       // consume the access code now that a session was actually created —
-      // if the organizer backed out earlier, the code stays unused/reusable
-      if (validatedAccessCode) {
+      // if the organizer backed out earlier, the code stays unused/reusable.
+      // Skipped entirely for DEV_ACCESS_CODE, which isn't a real Supabase
+      // record to begin with and must stay usable indefinitely.
+      if (validatedAccessCode && validatedAccessCode !== DEV_ACCESS_CODE) {
         try {
           const res = await window.storage.get(`${ACCESS_PREFIX}${validatedAccessCode}`, true);
           if (res && res.value) {
@@ -284,6 +286,14 @@ export default function PickleballOpenPlay() {
     }
     setAccessChecking(true);
     setAccessError("");
+    // dev-only escape hatch: never looked up in Supabase, never consumed —
+    // see DEV_ACCESS_CODE in lib/constants.js
+    if (code === DEV_ACCESS_CODE) {
+      setValidatedAccessCode(code);
+      setScreen("create");
+      setAccessChecking(false);
+      return;
+    }
     try {
       const res = await window.storage.get(`${ACCESS_PREFIX}${code}`, true);
       if (!res || !res.value) {
