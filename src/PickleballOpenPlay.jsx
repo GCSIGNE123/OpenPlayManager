@@ -28,7 +28,7 @@ import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
-import TournamentScheduleView from "./components/TournamentScheduleView.jsx";
+import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
@@ -1070,7 +1070,7 @@ export default function PickleballOpenPlay() {
                   { id: "standings", label: "Standings" },
                   { id: "scorer", label: "Scorer" },
                   { id: "history", label: "History" },
-                  ...(state.sessionType === "tournament" ? [{ id: "schedule", label: "Schedule" }] : []),
+                  ...(state.sessionType === "tournament" ? [{ id: "tournament", label: "Tournament" }] : []),
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1116,8 +1116,8 @@ export default function PickleballOpenPlay() {
                 <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
               )}
 
-              {loaded && view === "schedule" && state.sessionType === "tournament" && (
-                <TournamentScheduleView
+              {loaded && view === "tournament" && state.sessionType === "tournament" && (
+                <TournamentDashboardView
                   state={state}
                   tournamentId={state.tournamentId}
                   onGenerate={generateTournamentSchedule}

@@ -48,6 +48,7 @@ Do not implement multiple unrelated features in a single task.
 ## 🏆 Tournament Manager
 
 - [x] Session Type Architecture
+- [x] Tournament Engine Foundation
 - [x] Round Robin
 - [ ] Single Elimination
 - [ ] Double Elimination
