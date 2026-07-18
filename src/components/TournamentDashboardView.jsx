@@ -7,6 +7,7 @@ import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 import TournamentQualificationView from "./TournamentQualificationView.jsx";
+import TournamentBracketView from "./TournamentBracketView.jsx";
 
 const qualificationService = new PoolQualificationService();
 
@@ -325,7 +326,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
 
       {tab === "qualification" && <TournamentQualificationView tournament={tournament} loading={loading} />}
 
-      {tab === "bracket" && <Placeholder>Elimination bracket view. Coming soon.</Placeholder>}
+      {tab === "bracket" && <TournamentBracketView tournament={tournament} loading={loading} />}
     </div>
   );
 }

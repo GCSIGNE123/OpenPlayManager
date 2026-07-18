@@ -7,13 +7,7 @@
 // off the top N. Any future pooled format reuses this unchanged as long as
 // its engine implements getStandings the same way.
 import { QualificationService } from "./QualificationService.js";
-
-const STAGE_BY_COUNT = {
-  2: "Championship Match",
-  4: "Semifinals",
-  8: "Quarterfinals",
-  16: "Round of 16",
-};
+import { exactStageName } from "./playoffStages.js";
 
 const NOT_READY = { ready: false, pools: [], qualifiedTeams: [], playoffSize: null };
 
@@ -46,7 +40,7 @@ export class PoolQualificationService extends QualificationService {
   // (a generic "N-Team Playoff") rather than nothing — Custom "teams
   // advancing" values won't always land on a power of two.
   calculatePlayoffSize(qualifiedCount) {
-    return { count: qualifiedCount, stage: STAGE_BY_COUNT[qualifiedCount] ?? `${qualifiedCount}-Team Playoff` };
+    return { count: qualifiedCount, stage: exactStageName(qualifiedCount) ?? `${qualifiedCount}-Team Playoff` };
   }
 
   getQualifiedTeams(tournament, engine) {

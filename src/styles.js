@@ -1510,6 +1510,30 @@ export const styles = {
     color: "var(--color-text-faint)",
     letterSpacing: "0.03em",
   },
+  bracketScroll: {
+    display: "flex",
+    gap: 16,
+    overflowX: "auto",
+    paddingBottom: 8,
+  },
+  bracketRoundColumn: {
+    flex: "0 0 240px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  bracketSeedTag: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+    marginRight: 6,
+  },
+  bracketTbdLabel: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: "var(--color-text-faint)",
+  },
   phaseBadge: (phaseKey) => ({
     fontFamily: "'Space Mono', monospace",
     fontSize: 10.5,
