@@ -738,6 +738,14 @@ export default function PickleballOpenPlay() {
     save({ ...state, expectedGamesPerPlayer });
   };
 
+  // Session Settings dialog (Scorer) — venue name, expected games/player,
+  // and (when Progressive Skill Rotation is active) its phase thresholds,
+  // all in one save. Deliberately excludes rotationMode: chosen once at
+  // Create Session and not editable after, see ROTATION_MODES usage above.
+  const updateSessionSettings = (updates) => {
+    save({ ...state, ...updates });
+  };
+
   // Progressive Skill Rotation's phase boundaries (% of expected games) —
   // buildPhases (lib/progressiveSkillPhase.js) clamps/orders these, so any
   // input here (partial edits while typing, an inverted pair, etc.) always
@@ -1112,6 +1120,7 @@ export default function PickleballOpenPlay() {
                   addCourt={addCourt}
                   removeCourt={removeCourt}
                   endSession={endSession}
+                  updateSessionSettings={updateSessionSettings}
                 />
               )}
 

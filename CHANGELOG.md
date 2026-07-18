@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## 2026-07-18
 
 ### Added
+- **Session Settings dialog** — a gear icon on Scorer's Session Information card opens a modal to edit venue name, expected games per player, and (when Progressive Skill Rotation is active) its phase-boundary percentages, after the session has already started. Rotation Mode and court count are intentionally not editable here — Rotation Mode stays locked to what was chosen at Create Session, and court count keeps using its existing +/- stepper. New `SessionSettingsDialog.jsx` and `updateSessionSettings` in `PickleballOpenPlay.jsx`
 - New "Expected games per player" field on Create Session (step 4, default 6), stored on the session as `expectedGamesPerPlayer` at creation. Not wired into any new behavior yet — Progressive Skill Rotation's phase calc already reads this same field (unchanged), it now just starts from an organizer-chosen value instead of always defaulting to 6
 
 ### Changed

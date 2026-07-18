@@ -1,4 +1,5 @@
-import { Minus, Plus, RefreshCw, Shuffle, Undo2, Wand2, X } from "lucide-react";
+import { useState } from "react";
+import { Minus, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
@@ -7,6 +8,7 @@ import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
 import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 
 export default function ScorerView({
@@ -46,7 +48,9 @@ export default function ScorerView({
   addCourt,
   removeCourt,
   endSession,
+  updateSessionSettings,
 }) {
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const nextMatchups = state.nextMatchups || [];
   const reserved = reservedMatchupIds(nextMatchups);
   const manualIds = manuallyReservedIds(state.courts);
@@ -82,6 +86,17 @@ export default function ScorerView({
   return (
     <div>
       <div style={styles.sessionInfoCard}>
+        <div style={styles.sessionInfoHeadRow}>
+          <SectionLabel>Session Information</SectionLabel>
+          <button
+            style={styles.iconBtn}
+            onClick={() => setSettingsDialogOpen(true)}
+            aria-label="Edit session settings"
+            title="Session settings"
+          >
+            <Settings size={14} strokeWidth={2.5} />
+          </button>
+        </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Rotation Mode</span>
           <span style={styles.sessionInfoValue}>{rotationModeLabel}</span>
@@ -259,6 +274,18 @@ export default function ScorerView({
           });
         })()}
       </div>
+
+      {settingsDialogOpen && (
+        <SessionSettingsDialog
+          venue={state.venue}
+          rotationModeLabel={rotationModeLabel}
+          expectedGamesPerPlayer={expectedGamesPerPlayer}
+          progressiveSkillThresholds={progressiveSkillThresholds}
+          showThresholds={rotationMode === "progressiveSkill"}
+          onSave={updateSessionSettings}
+          onClose={() => setSettingsDialogOpen(false)}
+        />
+      )}
     </div>
   );
 }
