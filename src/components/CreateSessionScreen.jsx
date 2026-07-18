@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { ArrowLeft, Camera, LogIn, Minus, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, Camera, ChevronDown, ChevronRight, LogIn, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { resizeImageToAvatar, uid } from "../lib/utils.js";
+import { resizeImageToAvatar } from "../lib/utils.js";
+import { emptyPlayerRecord, fetchAllPlayers, filterPlayersByQuery, savePlayerRecord } from "../lib/playerDatabase.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
@@ -22,10 +23,49 @@ export default function CreateSessionScreen({
   const [tournamentFormat, setTournamentFormat] = useState(tournamentFormats?.[0]?.value ?? "roundRobin");
   const [expectedGamesPerPlayer, setExpectedGamesPerPlayer] = useState(6);
   const [roster, setRoster] = useState([]);
-  const [nameInput, setNameInput] = useState("");
+
+  // ---- Player Database — see lib/playerDatabase.js ----
+  const [playerDb, setPlayerDb] = useState([]);
+  const [playerDbLoading, setPlayerDbLoading] = useState(true);
+  const [playerDbError, setPlayerDbError] = useState("");
+  const [registrationMode, setRegistrationMode] = useState("select"); // "select" | "create"
+  const [search, setSearch] = useState("");
+
+  // "Create New Player" form
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [displayNameTouched, setDisplayNameTouched] = useState(false);
   const [skillInput, setSkillInput] = useState("beginner");
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
+  const [gender, setGender] = useState("");
+  const [duprRating, setDuprRating] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAllPlayers()
+      .then((players) => {
+        if (cancelled) return;
+        setPlayerDb(players);
+        // an empty database is more useful landing on "create" than showing
+        // an empty search with no explanation
+        if (players.length === 0) setRegistrationMode("create");
+      })
+      .catch(() => {
+        if (!cancelled) setPlayerDbError("Couldn't load the player database — you can still create new players.");
+      })
+      .finally(() => {
+        if (!cancelled) setPlayerDbLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handlePhotoSelect = async (file) => {
     if (!file) return;
@@ -40,17 +80,62 @@ export default function CreateSessionScreen({
     }
   };
 
-  const addPlayer = () => {
-    const name = nameInput.trim();
-    if (!name) return;
-    setRoster((r) => [...r, { id: uid(), name, skill: skillInput, photo: photoDataUrl || null }]);
-    setNameInput("");
-    setPhotoDataUrl(null);
+  const rosterIds = new Set(roster.map((p) => p.id));
+
+  // adding from the database reuses that record's id as the roster entry's
+  // id — see lib/playerDatabase.js's header comment for why that link matters
+  const addExistingPlayer = (record) => {
+    if (rosterIds.has(record.id)) return;
+    setRoster((r) => [...r, { id: record.id, name: record.displayName, skill: record.skill, photo: record.photo }]);
   };
 
   const removePlayer = (id) => setRoster((r) => r.filter((p) => p.id !== id));
   const adjustCourts = (delta) => setCourts((c) => Math.min(8, Math.max(1, c + delta)));
   const canStart = venue.trim().length > 0 && courts >= 1 && !creating;
+
+  // Creating a new player always saves it to the database (this is what
+  // makes the database grow from nothing — no separate migration step is
+  // needed) and adds it to this session's roster in the same id. A save
+  // failure doesn't block the organizer from continuing — the player still
+  // joins the local roster — but is surfaced so it's not silently lost.
+  const createAndAddPlayer = async () => {
+    const trimmedFirst = firstName.trim();
+    if (!trimmedFirst) return;
+    setSaveError("");
+    const record = emptyPlayerRecord({
+      firstName: trimmedFirst,
+      lastName,
+      displayName: displayName.trim() || trimmedFirst,
+      photo: photoDataUrl || null,
+      gender: gender || null,
+      skill: skillInput,
+      duprRating,
+      contactNumber,
+      notes,
+    });
+    try {
+      await savePlayerRecord(record);
+      setPlayerDb((db) => [...db, record]);
+    } catch (e) {
+      setSaveError(`Couldn't save ${record.displayName} to the player database, but they've been added to this session.`);
+    }
+    setRoster((r) => [...r, { id: record.id, name: record.displayName, skill: record.skill, photo: record.photo }]);
+    setFirstName("");
+    setLastName("");
+    setDisplayName("");
+    setDisplayNameTouched(false);
+    setPhotoDataUrl(null);
+    setGender("");
+    setDuprRating("");
+    setContactNumber("");
+    setNotes("");
+    setMoreDetailsOpen(false);
+  };
+
+  const activePlayers = playerDb.filter((p) => p.active);
+  const searchResults = filterPlayersByQuery(activePlayers, search).sort((a, b) =>
+    a.displayName.localeCompare(b.displayName)
+  );
 
   return (
     <div style={styles.createWrap}>
@@ -157,46 +242,193 @@ export default function CreateSessionScreen({
         This is just the guest list — everyone still needs to Check In once they're actually at the courts.
         Skill level is used to pair a beginner with an intermediate player as teammates.
       </p>
-      <SkillToggle value={skillInput} onChange={setSkillInput} />
-      <div style={styles.photoRow}>
-        <div style={styles.photoPreviewWrap}>
-          {photoDataUrl ? (
-            <img src={photoDataUrl} alt="" style={styles.photoPreview} />
-          ) : (
-            <div style={styles.photoPlaceholder}>
-              <Camera size={18} strokeWidth={2} color="var(--color-text-faint)" />
-            </div>
-          )}
-          {photoDataUrl && (
-            <button style={styles.photoClearBtn} onClick={() => setPhotoDataUrl(null)} aria-label="remove photo">
-              <X size={11} strokeWidth={3} />
-            </button>
-          )}
-        </div>
-        <label style={styles.photoLabel}>
-          <input
-            type="file"
-            accept="image/*"
-            capture="user"
-            style={{ display: "none" }}
-            onChange={(e) => handlePhotoSelect(e.target.files?.[0])}
-          />
-          {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (optional)"}
-        </label>
-      </div>
-      <div style={styles.checkinRow}>
-        <input
-          style={styles.input}
-          placeholder="Player name"
-          value={nameInput}
-          onChange={(e) => setNameInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addPlayer()}
-        />
-        <button style={styles.primaryBtn} onClick={addPlayer}>
-          <Plus size={16} strokeWidth={2.5} />
-          Add
+
+      <div style={styles.skillToggle}>
+        <button
+          type="button"
+          style={styles.skillToggleBtn(registrationMode === "select")}
+          onClick={() => setRegistrationMode("select")}
+        >
+          Select existing player
+        </button>
+        <button
+          type="button"
+          style={styles.skillToggleBtn(registrationMode === "create")}
+          onClick={() => setRegistrationMode("create")}
+        >
+          Create new player
         </button>
       </div>
+
+      {registrationMode === "select" && (
+        <div>
+          {playerDbError && <p style={styles.editWarning}>{playerDbError}</p>}
+          <div style={styles.historySearchBox}>
+            <Search size={14} strokeWidth={2.5} />
+            <input
+              style={styles.historySearchInput}
+              placeholder="Search players by name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {playerDbLoading ? (
+            <p style={styles.editHint}>Loading player database…</p>
+          ) : activePlayers.length === 0 ? (
+            <p style={styles.editWarning}>
+              No players in the database yet — switch to "Create new player" to add your first one.
+            </p>
+          ) : searchResults.length === 0 ? (
+            <p style={styles.editWarning}>No players match "{search.trim()}".</p>
+          ) : (
+            <div style={styles.editGrid}>
+              {searchResults.map((p) => {
+                const alreadyAdded = rosterIds.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    style={{ ...styles.editChip, ...(alreadyAdded ? styles.btnDisabled : {}) }}
+                    onClick={() => addExistingPlayer(p)}
+                    disabled={alreadyAdded}
+                  >
+                    <Avatar player={{ name: p.displayName, photo: p.photo }} size={22} />
+                    <span style={styles.editChipName}>
+                      {p.displayName}
+                      {p.duprRating != null && <span style={styles.playerDbMeta}>DUPR {p.duprRating}</span>}
+                    </span>
+                    <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
+                    {alreadyAdded ? <span style={styles.playerDbMeta}>Added</span> : <UserPlus size={14} strokeWidth={2.5} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {registrationMode === "create" && (
+        <div>
+          <div style={styles.checkinRow}>
+            <input
+              style={styles.input}
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => {
+                setFirstName(e.target.value);
+                if (!displayNameTouched) setDisplayName(e.target.value);
+              }}
+            />
+            <input
+              style={styles.input}
+              placeholder="Last name (optional)"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </div>
+          <input
+            style={{ ...styles.input, ...styles.playerSearchInput }}
+            placeholder="Display name (shown everywhere)"
+            value={displayName}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+              setDisplayNameTouched(true);
+            }}
+          />
+          <SkillToggle value={skillInput} onChange={setSkillInput} />
+          <div style={styles.photoRow}>
+            <div style={styles.photoPreviewWrap}>
+              {photoDataUrl ? (
+                <img src={photoDataUrl} alt="" style={styles.photoPreview} />
+              ) : (
+                <div style={styles.photoPlaceholder}>
+                  <Camera size={18} strokeWidth={2} color="var(--color-text-faint)" />
+                </div>
+              )}
+              {photoDataUrl && (
+                <button style={styles.photoClearBtn} onClick={() => setPhotoDataUrl(null)} aria-label="remove photo">
+                  <X size={11} strokeWidth={3} />
+                </button>
+              )}
+            </div>
+            <label style={styles.photoLabel}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="user"
+                style={{ display: "none" }}
+                onChange={(e) => handlePhotoSelect(e.target.files?.[0])}
+              />
+              {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (optional)"}
+            </label>
+          </div>
+
+          <button
+            type="button"
+            style={styles.settingsToggleBtn}
+            onClick={() => setMoreDetailsOpen((v) => !v)}
+          >
+            {moreDetailsOpen ? <ChevronDown size={13} strokeWidth={2.5} /> : <ChevronRight size={13} strokeWidth={2.5} />}
+            More details (optional)
+          </button>
+          {moreDetailsOpen && (
+            <div style={styles.settingsPanel}>
+              <label style={styles.settingsField}>
+                Gender
+                <select style={styles.rotationSelect} value={gender} onChange={(e) => setGender(e.target.value)}>
+                  <option value="">Prefer not to say</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label style={styles.settingsField}>
+                DUPR rating
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={8}
+                  style={styles.expectedGamesInput}
+                  value={duprRating}
+                  onChange={(e) => setDuprRating(e.target.value)}
+                />
+              </label>
+              <label style={styles.settingsField}>
+                Contact number
+                <input
+                  type="tel"
+                  style={styles.input}
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                />
+              </label>
+              <label style={{ ...styles.settingsField, width: "100%" }}>
+                Notes
+                <textarea
+                  style={styles.textareaInput}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+          )}
+
+          {saveError && <p style={styles.editWarning}>{saveError}</p>}
+
+          <div style={styles.editActions}>
+            <button
+              type="button"
+              style={{ ...styles.primaryBtn, ...(!firstName.trim() ? styles.btnDisabled : {}) }}
+              onClick={createAndAddPlayer}
+              disabled={!firstName.trim()}
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              Add to session &amp; save to database
+            </button>
+          </div>
+        </div>
+      )}
 
       {roster.length > 0 && (
         <ul style={styles.rosterList}>

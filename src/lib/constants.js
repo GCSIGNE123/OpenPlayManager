@@ -1,5 +1,6 @@
 export const STORAGE_PREFIX = "opl-session-";
 export const ACCESS_PREFIX = "opl-access-";
+export const PLAYER_DB_PREFIX = "opl-player-"; // one KV record per player, shared across every session — see lib/playerDatabase.js
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts
 export const ADMIN_PIN = "918273"; // demo-only gate — the organizer's PIN for generating access codes
 export const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — easy to read aloud

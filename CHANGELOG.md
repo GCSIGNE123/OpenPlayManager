@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-07-19
 
+### Added
+- **Player Database** — a reusable, cross-session player registry (architecture only, no statistics/rankings/tournament logic yet). New `src/lib/playerDatabase.js` stores one record per player (First/Last/Display Name, Photo, Gender, Skill, DUPR Rating, Contact Number, Notes, Active/Inactive), shared across every Open Play and Tournament session. Create Session's "Register players" step now offers **Select existing player** (search, active players only) alongside **Create new player** (which always saves to the database in addition to the current roster — no migration needed, the database just grows from the first player anyone creates). A player added to a roster reuses their database record's id, so future statistics/rankings features can join a player's history across sessions purely by id. Check-in's walk-in add and a player-management (edit/deactivate) screen are intentionally not part of this change — separate follow-ups
+
 ### Changed
 - **Session Type Architecture** — Create Session's step order is now: Session name → Number of courts → Session type → Rotation Strategy *or* Tournament Format → Expected games per player (Open Play only) → Register players. "Rotation Mode" is relabeled "Rotation Strategy" in the UI to sit alongside Tournament Format as a peer concept; the underlying stored field is still `rotationMode` (deliberately not renamed — see `PROJECT.md`, avoids touching every rotation engine and preserves old session records). Expected Games per Player now only shows for Open Play sessions. Existing Open Play sessions and all rotation logic are unaffected — verified a legacy session record with no `sessionType`/`tournamentFormat` at all still loads and runs correctly
 

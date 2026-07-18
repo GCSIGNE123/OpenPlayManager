@@ -56,4 +56,13 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Tournament Standings
 - [ ] Tournament Reports
 
+## 🗄️ Player Database
+
+- [x] Player Database Architecture
+- [ ] Player Management UI (edit/deactivate)
+- [ ] Player Statistics
+- [ ] Club Rankings
+- [ ] Season History
+- [ ] DUPR Integration
+
 ## ✅ Completed

@@ -1390,6 +1390,23 @@ export const styles = {
     color: "var(--color-text-muted)",
     fontWeight: 600,
   },
+  textareaInput: {
+    width: "100%",
+    padding: "9px 12px",
+    borderRadius: 8,
+    border: "1.5px solid var(--line)",
+    fontSize: 13.5,
+    fontFamily: "'Inter', sans-serif",
+    background: "var(--color-surface)",
+    color: "var(--ink)",
+    resize: "vertical",
+    minHeight: 56,
+  },
+  playerDbMeta: {
+    fontSize: 10.5,
+    color: "var(--color-text-faint)",
+    marginLeft: 4,
+  },
   statsRow: {
     display: "flex",
     gap: 14,
