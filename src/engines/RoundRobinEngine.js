@@ -37,14 +37,27 @@
 // getNextMatches() is still a placeholder — "what's next" logic is out of
 // scope for this task. Returns an inert, clearly-marked placeholder shape
 // rather than throwing.
+//
+// updateMatchResult() also auto-generates the Playoff Bracket as of Playoff
+// Match Management & Winner Advancement: once the tournament-wide status
+// rollup below lands on "completed" (every pool done) and tournament.bracket
+// is still null, it asks SingleEliminationBracketGenerator for one; if the
+// qualified count is a power of two, the returned record is attached as-is
+// to tournament.bracket. If it isn't (or pools aren't all done yet), bracket
+// stays null — the Bracket tab already knows how to explain both cases.
+// From that point on, everything that happens to the bracket (starting
+// matches, saving results, advancing winners) is owned by PlayoffEngine.js,
+// not this file.
 import { TournamentEngine } from "./TournamentEngine.js";
 import { generateRoundRobinSchedule } from "./RoundRobinScheduler.js";
 import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
 import { RoundRobinCompletionService } from "./RoundRobinCompletionService.js";
+import { SingleEliminationBracketGenerator } from "./SingleEliminationBracketGenerator.js";
 import { findMatch, computeRoundStatus, computePoolStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
 
 const standingsService = new RoundRobinStandingsService();
 const completionService = new RoundRobinCompletionService();
+const bracketGenerator = new SingleEliminationBracketGenerator();
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Not implemented yet — architecture only (Tournament Engine Foundation)." };
 
@@ -96,8 +109,15 @@ export class RoundRobinEngine extends TournamentEngine {
       if (nextPool.status === "completed") nextPool = completionService.finalizeTournament(nextPool);
       return nextPool;
     });
-    const next = { ...tournament, pools };
+    let next = { ...tournament, pools };
     next.status = computeTournamentStatus(next);
+    if (next.status === "completed" && !next.bracket) {
+      const generated = bracketGenerator.generateBracket(next, this);
+      if (generated.ready) {
+        const { ready, ...bracket } = generated;
+        next = { ...next, bracket };
+      }
+    }
     return next;
   }
 

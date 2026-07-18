@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
 import { fetchTournament, getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
-import { saveMatchStart, saveMatchResult, getTournamentEngine } from "../lib/tournament.js";
+import { saveMatchStart, saveMatchResult, savePlayoffMatchStart, savePlayoffMatchResult, getTournamentEngine } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
@@ -79,6 +79,18 @@ function CompletedOverviewPanel({ tournament }) {
             {qualification.playoffSize.stage} ({qualification.playoffSize.count})
           </span>
         </div>
+        {tournament.bracket?.status === "completed" && (
+          <>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>🥇 Bracket Champion</span>
+              <span style={styles.sessionInfoValue}>{tournament.bracket.champion?.label ?? "—"}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>🥈 Bracket Runner-up</span>
+              <span style={styles.sessionInfoValue}>{tournament.bracket.runnerUp?.label ?? "—"}</span>
+            </div>
+          </>
+        )}
       </div>
       {tournament.pools.map((pool) => (
         <PoolPodium key={pool.id} pool={pool} showHeading={tournament.pools.length > 1} />
@@ -263,6 +275,34 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Playoff Match Management & Winner Advancement — same "call the engine,
+  // setTournament(updated)" shape as the pool handlers above, just routed
+  // through PlayoffEngine (via lib/tournament.js's savePlayoffMatch*) and
+  // operating on tournament.bracket instead of tournament.pools. This is
+  // what makes "refresh the bracket immediately" free — the same live
+  // `tournament` object already flows down to the Bracket tab.
+  const handlePlayoffStartMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      const updated = await savePlayoffMatchStart(tournament, matchId);
+      setTournament(updated);
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handlePlayoffSaveResult = async (matchId, result) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      const updated = await savePlayoffMatchResult(tournament, matchId, result);
+      setTournament(updated);
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
   const pools = tournament?.pools ?? [];
 
   return (
@@ -326,7 +366,15 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
 
       {tab === "qualification" && <TournamentQualificationView tournament={tournament} loading={loading} />}
 
-      {tab === "bracket" && <TournamentBracketView tournament={tournament} loading={loading} />}
+      {tab === "bracket" && (
+        <TournamentBracketView
+          tournament={tournament}
+          loading={loading}
+          matchError={matchError}
+          onStartMatch={handlePlayoffStartMatch}
+          onSaveResult={handlePlayoffSaveResult}
+        />
+      )}
     </div>
   );
 }

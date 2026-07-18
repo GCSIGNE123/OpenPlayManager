@@ -13,6 +13,9 @@ import { assignPools, poolLabel } from "../engines/PoolAssignment.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
 import { DoubleEliminationEngine } from "../engines/DoubleEliminationEngine.js";
+import { PlayoffEngine } from "../engines/PlayoffEngine.js";
+
+const playoffEngine = new PlayoffEngine();
 
 export function buildEntrants(players, mode) {
   if (mode === "doubles") {
@@ -91,4 +94,20 @@ export async function saveMatchResult(tournament, matchId, result) {
   const engine = getTournamentEngine(tournament.format);
   const updated = engine.updateMatchResult(tournament, matchId, result);
   return saveTournament(updated);
+}
+
+// ---- Playoff Match Management & Winner Advancement ----
+// Same "call the engine, persist what it returns" shape as saveMatchStart/
+// saveMatchResult above, but scoped to tournament.bracket via PlayoffEngine
+// rather than tournament.pools via startMatch/RoundRobinEngine — a
+// completely separate engine (see PlayoffEngine.js's file header for why).
+
+export async function savePlayoffMatchStart(tournament, matchId) {
+  const bracket = playoffEngine.startMatch(tournament.bracket, matchId);
+  return saveTournament({ ...tournament, bracket });
+}
+
+export async function savePlayoffMatchResult(tournament, matchId, result) {
+  const bracket = playoffEngine.updateBracket(tournament.bracket, matchId, result);
+  return saveTournament({ ...tournament, bracket });
 }

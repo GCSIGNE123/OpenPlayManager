@@ -6,6 +6,14 @@
 // than re-deriving "who qualified" itself, the same "delegate to a
 // dedicated module" precedent RoundRobinEngine's getStandings/
 // updateMatchResult already set.
+//
+// As of Playoff Match Management & Winner Advancement, a `ready: true`
+// result from generateBracket() is the actual persistable Bracket record
+// (id/status/completedAt/champion/runnerUp included) — RoundRobinEngine
+// attaches it to tournament.bracket as-is the moment it's first generated.
+// PlayoffEngine.js owns everything that happens to it after that (starting
+// matches, saving results, advancing winners) — this file only ever builds
+// the initial structure, once.
 import { BracketGeneratorService } from "./BracketGeneratorService.js";
 import { PoolQualificationService } from "./PoolQualificationService.js";
 import { assignSeeds as assignSeedsForBracket } from "./BracketSeeding.js";
@@ -16,16 +24,19 @@ const qualificationService = new PoolQualificationService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, seeds: [], rounds: [] };
 
-function makeBracketMatch({ round, matchNumber, teamA = null, teamB = null }) {
+function makeBracketMatch({ round, matchNumber, court, teamA = null, teamB = null }) {
   return {
     id: uid(),
     round,
     matchNumber,
-    court: null, // placeholder only — real court assignment isn't in scope this milestone
-    teamA, // SeededTeam | null ("TBD" — no winner-advancement logic exists yet to fill this in)
+    court, // real court number for round 1 (cycled 1..courtsCount, same convention RoundRobinScheduler uses); null for later rounds until PlayoffEngine advances a winner into them
+    teamA, // SeededTeam | null ("TBD" until PlayoffEngine.advanceWinner fills it in)
     teamB,
-    status: "pending", // match scoring isn't in scope this milestone; every bracket match starts pending
+    isBye: false, // brackets are power-of-two only this milestone — no byes possible, kept for shape parity with pool matches (computeRoundStatus expects it)
+    status: "pending",
     winner: null,
+    score: { teamA: null, teamB: null },
+    completedAt: null,
   };
 }
 
@@ -38,8 +49,9 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
   // team out or an arbitrary count without inventing bye logic this
   // milestone doesn't cover. Round 1 is the only round built from real
   // teams; every later round is pre-built with the right match count but
-  // empty teamA/teamB slots.
-  buildRounds(seededTeams) {
+  // empty teamA/teamB slots — those only fill in once PlayoffEngine
+  // advances a winner into them.
+  buildRounds(seededTeams, courtsCount = 1) {
     const total = seededTeams.length;
     if (total < 2 || (total & (total - 1)) !== 0) {
       throw new Error(`Bracket generation requires a power-of-two qualifier count (2, 4, 8, 16, ...) — got ${total}.`);
@@ -49,29 +61,38 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
     const firstRoundMatches = [];
     for (let i = 0; i < total / 2; i++) {
       firstRoundMatches.push(
-        makeBracketMatch({ round: 1, matchNumber: i + 1, teamA: seededTeams[i], teamB: seededTeams[total - 1 - i] })
+        makeBracketMatch({
+          round: 1,
+          matchNumber: i + 1,
+          court: (i % Math.max(courtsCount, 1)) + 1,
+          teamA: seededTeams[i],
+          teamB: seededTeams[total - 1 - i],
+        })
       );
     }
-    rounds.push({ roundNumber: 1, name: stageNameForCount(total), matches: firstRoundMatches });
+    rounds.push({ roundNumber: 1, name: stageNameForCount(total), status: "pending", matches: firstRoundMatches });
 
     let teamsInRound = firstRoundMatches.length; // winners advancing = number of round-1 matches
     let roundNumber = 2;
     while (teamsInRound >= 2) {
       const matches = [];
       for (let i = 0; i < teamsInRound / 2; i++) {
-        matches.push(makeBracketMatch({ round: roundNumber, matchNumber: i + 1 }));
+        matches.push(makeBracketMatch({ round: roundNumber, matchNumber: i + 1, court: null }));
       }
-      rounds.push({ roundNumber, name: stageNameForCount(teamsInRound), matches });
+      rounds.push({ roundNumber, name: stageNameForCount(teamsInRound), status: "pending", matches });
       teamsInRound = matches.length;
       roundNumber += 1;
     }
     return rounds;
   }
 
-  // tournament: Tournament: engine: TournamentEngine for tournament.format
-  // returns: { ready, reason?, size, seeds, rounds } — `reason` is set only
-  // when `ready` is false: "not_ready" (pools still in progress) or
-  // "unsupported_size" (qualified count isn't a power of two)
+  // tournament: Tournament; engine: TournamentEngine for tournament.format
+  // returns: { ready, reason?, size, seeds, rounds } when not ready/
+  // unsupported, or the full persistable Bracket record (id, status:
+  // "ready", completedAt: null, champion: null, runnerUp: null, size,
+  // seeds, rounds) when ready — `reason` is set only when `ready` is
+  // false: "not_ready" (pools still in progress) or "unsupported_size"
+  // (qualified count isn't a power of two)
   generateBracket(tournament, engine) {
     const qualification = qualificationService.determineQualifiers(tournament, engine);
     if (!qualification.ready) return NOT_READY;
@@ -82,7 +103,7 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
     }
 
     const seeds = this.assignSeeds(qualification.qualifiedTeams);
-    const rounds = this.buildRounds(seeds);
-    return { ready: true, size, seeds, rounds };
+    const rounds = this.buildRounds(seeds, tournament.courtsCount);
+    return { ready: true, id: uid(), size, seeds, rounds, status: "ready", completedAt: null, champion: null, runnerUp: null };
   }
 }

@@ -243,6 +243,15 @@ export function makeTournament({
     // RoundRobinTournament) against every pool's actual size before this
     // runs — this constructor trusts the value it's given.
     advancesPerPool,
+    // Playoff Bracket — null until pool play finishes AND the qualified
+    // count is a power of two (see RoundRobinEngine.updateMatchResult,
+    // which attaches it via SingleEliminationBracketGenerator the moment
+    // both are true). Structurally the same { id, status, completedAt,
+    // champion, runnerUp, rounds } shape a TournamentPool already has —
+    // its lifecycle is owned entirely by PlayoffEngine.js from that point
+    // on, independent of tournament.status (which keeps meaning "pool play
+    // done," unchanged).
+    bracket: null,
     createdAt: now,
     updatedAt: now,
   };

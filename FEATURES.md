@@ -57,10 +57,12 @@ Do not implement multiple unrelated features in a single task.
 - [x] Multiple Pool Support
 - [x] Playoff Qualification
 - [x] Bracket Generation
-- [ ] Winner Advancement
+- [x] Playoff Match Management
+- [x] Winner Advancement
 - [ ] Bronze Match
-- [ ] Single Elimination Tournament
+- [ ] Consolation Bracket
 - [ ] Double Elimination Tournament
+- [ ] Single Elimination Tournament
 - [ ] Pool Assignment Methods
 - [ ] Elimination Bracket
 - [ ] Advanced Tie-breakers
