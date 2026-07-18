@@ -163,6 +163,14 @@ export function makeTournament({ name, sessionCode, format = "roundRobin", mode,
     status: "ready",
     entrants,
     rounds,
+    // Champion Determination (Round Robin only so far) — all four stay null
+    // until RoundRobinCompletionService.finalizeTournament() stamps them the
+    // moment the last match result makes the tournament complete. champion/
+    // runnerUp/thirdPlace are each { participantId, label } | null.
+    completedAt: null,
+    champion: null,
+    runnerUp: null,
+    thirdPlace: null,
     createdAt: now,
     updatedAt: now,
   };

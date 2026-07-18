@@ -33,10 +33,18 @@ export default function TournamentStandingsView({ tournament, loading }) {
   // decided — with zero matches played, ranks 1-3 are just insertion order
   // (everyone tied at 0), not a real podium.
   const anyMatchesPlayed = standings.some((r) => r.matchesPlayed > 0);
+  // Once the tournament is completed, no further results can be recorded
+  // (see RoundRobinEngine.updateMatchResult), so these standings are
+  // already final — "frozen" simply falls out of that validation, nothing
+  // extra to do here beyond labeling it.
+  const isComplete = tournament.status === "completed";
 
   return (
     <div>
-      <SectionLabel>Standings</SectionLabel>
+      <div style={styles.standingsHeaderRow}>
+        <SectionLabel>Standings</SectionLabel>
+        {isComplete && <span style={styles.tournamentCompleteBadge}>Tournament Complete</span>}
+      </div>
       <div style={styles.tournamentStandingsScroll}>
         <table style={styles.tournamentStandingsTable}>
           <thead>

@@ -19,15 +19,23 @@
 // dedicated module" precedent generateSchedule/updateMatchResult already
 // set.
 //
+// updateMatchResult() also finalizes the tournament as of Champion
+// Determination: once the status roll-up above lands on "completed", it
+// calls RoundRobinCompletionService.finalizeTournament() on its way out —
+// so the champion/runner-up/third place are stamped automatically the
+// moment the last match is saved, with no separate action required.
+//
 // getNextMatches() is still a placeholder — "what's next" logic is out of
 // scope for this task. Returns an inert, clearly-marked placeholder shape
 // rather than throwing.
 import { TournamentEngine } from "./TournamentEngine.js";
 import { generateRoundRobinSchedule } from "./RoundRobinScheduler.js";
 import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
+import { RoundRobinCompletionService } from "./RoundRobinCompletionService.js";
 import { findMatch, computeRoundStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
 
 const standingsService = new RoundRobinStandingsService();
+const completionService = new RoundRobinCompletionService();
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Not implemented yet — architecture only (Tournament Engine Foundation)." };
 
@@ -74,8 +82,9 @@ export class RoundRobinEngine extends TournamentEngine {
       const matches = r.matches.map((m) => (m.id === matchId ? updatedMatch : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
-    const next = { ...tournament, rounds };
+    let next = { ...tournament, rounds };
     next.status = computeTournamentStatus(next);
+    if (next.status === "completed") next = completionService.finalizeTournament(next);
     return next;
   }
 

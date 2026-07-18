@@ -228,8 +228,8 @@ export default function TournamentScheduleView({
   };
 
   const playerCount = Object.keys(state.players || {}).length;
-  const canGenerate = playerCount >= 2 && !generating;
   const tournamentCompleted = tournament?.status === "completed";
+  const canGenerate = playerCount >= 2 && !generating && !tournamentCompleted;
 
   return (
     <div>
@@ -237,9 +237,11 @@ export default function TournamentScheduleView({
 
       <div style={styles.tournamentSetupCard}>
         <p style={styles.editHint}>
-          {tournament
-            ? `Regenerating rebuilds the schedule from this session's ${playerCount} currently registered player${playerCount === 1 ? "" : "s"} — any results already saved will be lost.`
-            : `Generates a Round Robin schedule from this session's ${playerCount} registered player${playerCount === 1 ? "" : "s"} across ${state.courts.length} court${state.courts.length === 1 ? "" : "s"}.`}
+          {tournamentCompleted
+            ? "This tournament is complete — the schedule can no longer be regenerated."
+            : tournament
+              ? `Regenerating rebuilds the schedule from this session's ${playerCount} currently registered player${playerCount === 1 ? "" : "s"} — any results already saved will be lost.`
+              : `Generates a Round Robin schedule from this session's ${playerCount} registered player${playerCount === 1 ? "" : "s"} across ${state.courts.length} court${state.courts.length === 1 ? "" : "s"}.`}
         </p>
         <div style={styles.skillToggle}>
           <button type="button" style={styles.skillToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
@@ -251,14 +253,16 @@ export default function TournamentScheduleView({
         </div>
         {generateError && <p style={styles.editWarning}>{generateError}</p>}
         {playerCount < 2 && <p style={styles.editWarning}>Register at least 2 players before generating a schedule.</p>}
-        <button
-          style={{ ...styles.primaryBtn, ...(!canGenerate ? styles.btnDisabled : {}) }}
-          disabled={!canGenerate}
-          onClick={() => onGenerate(mode)}
-        >
-          {tournament ? <RefreshCw size={16} strokeWidth={2.5} /> : <Users size={16} strokeWidth={2.5} />}
-          {generating ? (tournament ? "Regenerating…" : "Generating…") : tournament ? "Regenerate schedule" : "Generate schedule"}
-        </button>
+        {!tournamentCompleted && (
+          <button
+            style={{ ...styles.primaryBtn, ...(!canGenerate ? styles.btnDisabled : {}) }}
+            disabled={!canGenerate}
+            onClick={() => onGenerate(mode)}
+          >
+            {tournament ? <RefreshCw size={16} strokeWidth={2.5} /> : <Users size={16} strokeWidth={2.5} />}
+            {generating ? (tournament ? "Regenerating…" : "Generating…") : tournament ? "Regenerate schedule" : "Generate schedule"}
+          </button>
+        )}
       </div>
 
       {loading && <p style={styles.editHint}>Loading schedule…</p>}

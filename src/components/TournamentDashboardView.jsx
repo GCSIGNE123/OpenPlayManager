@@ -6,6 +6,55 @@ import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 
+const MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
+const PODIUM_LABELS = { champion: "Champion", runnerUp: "Runner-up", thirdPlace: "Third Place" };
+
+function formatCompletionTime(ms) {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+// Shown once a Round Robin tournament is complete — replaces the live-
+// progress Overview with the final result. Champion/runner-up/third place
+// were already stamped onto the tournament by RoundRobinCompletionService
+// the moment the last match was saved (see RoundRobinEngine.
+// updateMatchResult), so this just displays what's already there — no
+// recomputation needed.
+function CompletedOverviewPanel({ tournament }) {
+  const progress = getTournamentProgress(tournament);
+  return (
+    <div>
+      <div style={styles.sessionInfoCard}>
+        {["champion", "runnerUp", "thirdPlace"].map((slot) => (
+          <div key={slot} style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>
+              {MEDALS[slot]} {PODIUM_LABELS[slot]}
+            </span>
+            <span style={styles.sessionInfoValue}>{tournament[slot]?.label ?? "—"}</span>
+          </div>
+        ))}
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Tournament Status</span>
+          <span style={styles.sessionInfoValue}>Completed</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Total Matches</span>
+          <span style={styles.sessionInfoValue}>{progress.total}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Matches Completed</span>
+          <span style={styles.sessionInfoValue}>{progress.completed}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Completion Time</span>
+          <span style={styles.sessionInfoValue}>{formatCompletionTime(tournament.completedAt)}</span>
+        </div>
+      </div>
+      <p style={{ ...styles.editHint, marginTop: 10 }}>{tournament.name} — tournament complete.</p>
+    </div>
+  );
+}
+
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "participants", label: "Participants" },
@@ -25,6 +74,9 @@ function OverviewPanel({ tournament, loading }) {
   if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
   if (!tournament) {
     return <Placeholder>Generate a schedule from the Schedule tab to see tournament progress here.</Placeholder>;
+  }
+  if (tournament.status === "completed" && tournament.format === "roundRobin") {
+    return <CompletedOverviewPanel tournament={tournament} />;
   }
   const progress = getTournamentProgress(tournament);
   // "Current Leader" only means something once at least one match has
@@ -65,14 +117,14 @@ function OverviewPanel({ tournament, loading }) {
   );
 }
 
-// Tournament Dashboard — Overview (Live Tournament Progress) and Schedule
-// (real, working match management) share one fetched copy of the
-// tournament, owned here, so a result saved in Schedule is reflected in
-// Overview's stats immediately without a second fetch. Participants/
-// Standings/Bracket remain placeholders — not in scope for Tournament
-// Match Management. Reachable from the session nav's "Tournament" tab,
-// shown only when state.sessionType === "tournament" — see
-// PickleballOpenPlay.jsx.
+// Tournament Dashboard — Overview, Schedule, and Standings all share one
+// fetched copy of the tournament, owned here, so a result saved in Schedule
+// is reflected everywhere else immediately without a second fetch. Once a
+// Round Robin tournament completes, Overview switches to the final result
+// (champion/runner-up/third place) automatically — see
+// RoundRobinCompletionService. Participants/Bracket remain placeholders.
+// Reachable from the session nav's "Tournament" tab, shown only when
+// state.sessionType === "tournament" — see PickleballOpenPlay.jsx.
 export default function TournamentDashboardView({ state, tournamentId, onGenerate, generating, generateError }) {
   const [tab, setTab] = useState("overview");
   const [tournament, setTournament] = useState(null);
@@ -100,6 +152,10 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
 
   const handleGenerate = async (mode) => {
     setMatchError("");
+    if (tournament?.status === "completed") {
+      setMatchError("This tournament is already completed — the schedule can't be regenerated.");
+      return;
+    }
     await onGenerate(mode);
   };
 
