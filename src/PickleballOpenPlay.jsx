@@ -16,6 +16,7 @@ import {
 } from "./lib/utils.js";
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
+import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -27,6 +28,7 @@ import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
+import TournamentScheduleView from "./components/TournamentScheduleView.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
@@ -65,6 +67,8 @@ export default function PickleballOpenPlay() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [checkinMsg, setCheckinMsg] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   // one-shot, this-device-only undo for "Regenerate matchups" — not synced
   // to Supabase, so it only makes sense as a quick "oops" for whoever just
   // clicked Regenerate, not a durable multi-device feature. Cleared by any
@@ -227,6 +231,7 @@ export default function PickleballOpenPlay() {
         matchHistory: [],
         sessionType,
         tournamentFormat,
+        tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
         expectedGamesPerPlayer,
         updatedAt: Date.now(),
@@ -261,6 +266,31 @@ export default function PickleballOpenPlay() {
       setCreateError("Couldn't create the session — check your connection and try again.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Builds (or rebuilds) a Round Robin schedule from this session's
+  // registered players and saves it as its own Tournament record (see
+  // lib/tournamentModel.js) — the session only stores a `tournamentId`
+  // pointer to it, never the schedule itself. Regenerating is safe: it
+  // creates a brand-new record with a new id rather than overwriting the
+  // old one, since nothing (scoring, standings) references match ids yet.
+  const generateTournamentSchedule = async (mode) => {
+    setGeneratingSchedule(true);
+    setScheduleError("");
+    try {
+      const players = Object.values(state.players);
+      const tournament = await buildAndSaveRoundRobinTournament({
+        sessionCode,
+        players,
+        mode,
+        courtsCount: state.courts.length,
+      });
+      await save({ ...state, tournamentId: tournament.id });
+    } catch (e) {
+      setScheduleError(e.message || "Couldn't generate the schedule.");
+    } finally {
+      setGeneratingSchedule(false);
     }
   };
 
@@ -1040,6 +1070,7 @@ export default function PickleballOpenPlay() {
                   { id: "standings", label: "Standings" },
                   { id: "scorer", label: "Scorer" },
                   { id: "history", label: "History" },
+                  ...(state.sessionType === "tournament" ? [{ id: "schedule", label: "Schedule" }] : []),
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -1083,6 +1114,16 @@ export default function PickleballOpenPlay() {
 
               {loaded && view === "history" && (
                 <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
+              )}
+
+              {loaded && view === "schedule" && state.sessionType === "tournament" && (
+                <TournamentScheduleView
+                  state={state}
+                  tournamentId={state.tournamentId}
+                  onGenerate={generateTournamentSchedule}
+                  generating={generatingSchedule}
+                  generateError={scheduleError}
+                />
               )}
 
               {loaded && view === "scorer" && !scorerAuthed && (

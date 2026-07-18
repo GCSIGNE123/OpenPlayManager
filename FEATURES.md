@@ -48,7 +48,7 @@ Do not implement multiple unrelated features in a single task.
 ## 🏆 Tournament Manager
 
 - [x] Session Type Architecture
-- [ ] Round Robin
+- [x] Round Robin
 - [ ] Single Elimination
 - [ ] Double Elimination
 - [ ] Bracket Generator

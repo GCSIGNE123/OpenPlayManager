@@ -1285,6 +1285,33 @@ export const styles = {
     fontWeight: 700,
     color: "var(--ink)",
   },
+  matchStatusBadge: (status) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: status === "completed" ? "var(--chalk)" : "var(--ink)",
+    background:
+      status === "completed" ? "var(--court)" : status === "inProgress" ? "var(--ball)" : "var(--color-bg)",
+    border: status === "pending" ? "1.5px solid var(--line)" : "none",
+    borderRadius: 5,
+    padding: "3px 7px",
+    flexShrink: 0,
+    display: "inline-block",
+  }),
+  byeTag: {
+    fontSize: 12,
+    color: "var(--color-text-faint)",
+    fontStyle: "italic",
+  },
+  tournamentSetupCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 10,
+    padding: 16,
+    maxWidth: 420,
+  },
   phaseBadge: (phaseKey) => ({
     fontFamily: "'Space Mono', monospace",
     fontSize: 10.5,
