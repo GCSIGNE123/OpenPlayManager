@@ -6,9 +6,10 @@ import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
 
-export default function CreateSessionScreen({ onStart, onBack, creating, createError }) {
+export default function CreateSessionScreen({ onStart, onBack, creating, createError, rotationModes }) {
   const [venue, setVenue] = useState("Ormoc City Pickleball — Open Play");
   const [courts, setCourts] = useState(4);
+  const [rotationMode, setRotationMode] = useState(rotationModes?.[0]?.value ?? "continuous");
   const [roster, setRoster] = useState([]);
   const [nameInput, setNameInput] = useState("");
   const [skillInput, setSkillInput] = useState("beginner");
@@ -66,7 +67,24 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         </button>
       </div>
 
-      <SectionLabel>3. Register players joining today ({roster.length})</SectionLabel>
+      {rotationModes && rotationModes.length > 0 && (
+        <>
+          <SectionLabel>3. Rotation mode</SectionLabel>
+          <select
+            style={styles.rotationSelect}
+            value={rotationMode}
+            onChange={(e) => setRotationMode(e.target.value)}
+          >
+            {rotationModes.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "4" : "3"}. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
         This is just the guest list — everyone still needs to Check In once they're actually at the courts.
         Skill level is used to pair a beginner with an intermediate player as teammates.
@@ -135,7 +153,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
 
       <button
         style={{ ...styles.primaryBtn, ...styles.startBtn, ...(!canStart ? styles.btnDisabled : {}) }}
-        onClick={() => canStart && onStart(venue.trim(), courts, roster)}
+        onClick={() => canStart && onStart(venue.trim(), courts, roster, rotationMode)}
         disabled={!canStart}
       >
         <LogIn size={16} strokeWidth={2.5} />

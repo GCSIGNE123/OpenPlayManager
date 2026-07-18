@@ -1,5 +1,6 @@
 import { Minus, Plus, RefreshCw, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
+import { ROTATION_MODES } from "../lib/constants.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
@@ -35,8 +36,6 @@ export default function ScorerView({
   toggleSkipPlayer,
   removePlayer,
   rotationMode,
-  setRotationMode,
-  rotationModes,
   expectedGamesPerPlayer,
   setExpectedGamesPerPlayer,
   progressiveSkillThresholds,
@@ -70,23 +69,16 @@ export default function ScorerView({
   const canAddCourt = state.courts.length < 8;
   const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
   const hasOpenAutomaticCourt = state.courts.some((c) => c.status === "open" && c.assignmentMode !== "manual");
+  // rotation mode is now chosen once at session creation (Create Session
+  // screen) — this is a read-only label, not a control, so the organizer
+  // can still see which mode is active without being able to switch it here
+  const rotationModeLabel = ROTATION_MODES.find((m) => m.value === rotationMode)?.label || rotationMode;
 
   return (
     <div>
       <div style={styles.scorerToolbar}>
         <div style={styles.rotationRow}>
-          Rotation:
-          <select
-            style={styles.rotationSelect}
-            value={rotationMode}
-            onChange={(e) => setRotationMode(e.target.value)}
-          >
-            {rotationModes.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+          Rotation: <strong>{rotationModeLabel}</strong>
         </div>
       </div>
       {rotationMode === "progressiveSkill" && (

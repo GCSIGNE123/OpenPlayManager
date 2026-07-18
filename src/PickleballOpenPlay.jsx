@@ -179,7 +179,7 @@ export default function PickleballOpenPlay() {
     }
   };
 
-  const startSession = async (venue, courtsCount, roster) => {
+  const startSession = async (venue, courtsCount, roster, rotationMode = "continuous") => {
     setCreating(true);
     setCreateError("");
     try {
@@ -217,6 +217,7 @@ export default function PickleballOpenPlay() {
         queueIds: [],
         nextMatchups: [],
         matchHistory: [],
+        rotationMode,
         updatedAt: Date.now(),
       };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
@@ -731,10 +732,6 @@ export default function PickleballOpenPlay() {
     setLastRoundSnapshot(null);
   };
 
-  const setRotationMode = (mode) => {
-    save({ ...state, rotationMode: mode });
-  };
-
   const setExpectedGamesPerPlayer = (count) => {
     const expectedGamesPerPlayer = Math.max(1, Number(count) || 1);
     save({ ...state, expectedGamesPerPlayer });
@@ -980,6 +977,7 @@ export default function PickleballOpenPlay() {
           onBack={() => setScreen("access")}
           creating={creating}
           createError={createError}
+          rotationModes={ROTATION_MODES}
         />
       )}
 
@@ -1098,8 +1096,6 @@ export default function PickleballOpenPlay() {
                   toggleSkipPlayer={toggleSkipPlayer}
                   removePlayer={removePlayer}
                   rotationMode={state.rotationMode || "continuous"}
-                  setRotationMode={setRotationMode}
-                  rotationModes={ROTATION_MODES}
                   expectedGamesPerPlayer={state.expectedGamesPerPlayer || 6}
                   setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
                   progressiveSkillThresholds={state.progressiveSkillThresholds}

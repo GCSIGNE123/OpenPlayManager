@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-07-18
 
+### Changed
+- Rotation Mode selection moved from the Scorer page to the Create Session page (step 3, alongside venue name and court count) — it's now chosen once when the session is created (`state.rotationMode` set in `startSession`) instead of being switchable mid-session. Scorer now shows the active mode as a read-only label instead of a dropdown. No rotation logic changed — `getRotationEngine`/`refreshNextMatchups`/`regenerateNextMatchups`/`isPoolingRotation` and everything downstream of `rotationMode` behave identically to before
+
 ### Added
 - Permanent, non-expiring, reusable developer access code `GUILSIGN` (`DEV_ACCESS_CODE` in `lib/constants.js`) — bypasses the normal single-use Supabase-backed access code flow entirely, for the developer's own repeated session-creation testing. Every organizer-issued code is unaffected
 
