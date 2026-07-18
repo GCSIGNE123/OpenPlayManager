@@ -5,7 +5,7 @@
 // from lib/tournamentModel.js (pure data shapes + storage) and
 // engines/RoundRobinScheduler.js (the scheduling algorithm itself), which
 // don't need to know anything about session players.
-import { makeEntrant, makeTournament, saveTournament } from "./tournamentModel.js";
+import { makeEntrant, makeTournament, saveTournament, startMatch } from "./tournamentModel.js";
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
@@ -40,4 +40,20 @@ const engines = {
 
 export function getTournamentEngine(format) {
   return engines[format] || engines.roundRobin;
+}
+
+// ---- Tournament Match Management ----
+// Both throw (propagating validation errors from startMatch/
+// updateMatchResult) rather than swallowing them — callers surface the
+// message directly to the organizer instead of silently no-op'ing.
+
+export async function saveMatchStart(tournament, matchId) {
+  const updated = startMatch(tournament, matchId);
+  return saveTournament(updated);
+}
+
+export async function saveMatchResult(tournament, matchId, result) {
+  const engine = getTournamentEngine(tournament.format);
+  const updated = engine.updateMatchResult(tournament, matchId, result);
+  return saveTournament(updated);
 }

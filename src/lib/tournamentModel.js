@@ -35,11 +35,12 @@ export const makeEntrant = makeParticipant;
 //   id, court, round (round number this match belongs to),
 //   teamA, teamB (Participant | null — null only for the synthetic BYE side),
 //   isBye (true when this "match" is actually a bye for teamA),
-//   winner (Participant['id'] | null), score (null | app-defined shape) —
-//   part of the Tournament Engine Foundation's data model; nothing writes to
-//   either yet, match scoring is a separate later feature,
-//   status ('pending' | 'inProgress' | 'completed') — placeholder only,
-//   nothing transitions it yet
+//   winner (Participant['id'] | null),
+//   score ({ teamA: number|null, teamB: number|null }) — both null until a
+//   result is saved, see updateMatchResult below,
+//   completedAt (ms epoch | null) — set when a result is saved,
+//   status ('pending' | 'inProgress' | 'completed') — real now, see
+//   startMatch/updateMatchResult below (Tournament Match Management)
 // }
 export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
   return {
@@ -50,7 +51,8 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
     teamB: isBye ? null : teamB,
     isBye,
     winner: null,
-    score: null,
+    score: { teamA: null, teamB: null },
+    completedAt: null,
     status: "pending",
   };
 }
@@ -63,10 +65,86 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
 export function makeRound(roundNumber, matches) {
   return {
     roundNumber,
-    status: "pending", // 'pending' | 'inProgress' | 'completed' — placeholder only, mirrors TournamentMatch's status values
+    status: computeRoundStatus(matches), // 'pending' | 'inProgress' | 'completed'
     courtAssignments: matches.filter((m) => !m.isBye).map((m) => m.court),
     matches,
   };
+}
+
+// ---- Tournament Match Management ----
+// Format-agnostic helpers for locating and progressing matches — used by
+// both startMatch below (a plain status flip, not specific to any format)
+// and RoundRobinEngine.updateMatchResult (which reuses computeRoundStatus/
+// computeTournamentStatus after actually writing the result). Not part of
+// the TournamentEngine interface itself since "find a match" and "roll up a
+// round/tournament's status from its matches" aren't scheduling/results
+// logic a format needs to customize.
+
+export function findMatch(tournament, matchId) {
+  for (const round of tournament.rounds) {
+    const match = round.matches.find((m) => m.id === matchId);
+    if (match) return { round, match };
+  }
+  return null;
+}
+
+// A bye "match" is always effectively done — it never blocks a round from
+// completing. A round with only byes (shouldn't happen with 2+ real
+// participants, but guarded anyway) is considered completed.
+export function computeRoundStatus(matches) {
+  const real = matches.filter((m) => !m.isBye);
+  if (real.length === 0) return "completed";
+  if (real.every((m) => m.status === "completed")) return "completed";
+  if (real.some((m) => m.status === "inProgress" || m.status === "completed")) return "inProgress";
+  return "pending";
+}
+
+// 'draft' is preserved as-is (nothing in this app creates a draft
+// tournament yet — schedule generation always produces one that's
+// immediately 'ready' — but this function shouldn't invent a status change
+// for a state it doesn't understand). Otherwise: every real match completed
+// -> 'completed'; any match started or finished -> 'running'; else 'ready'.
+export function computeTournamentStatus(tournament) {
+  if (tournament.status === "draft") return "draft";
+  const real = tournament.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
+  if (real.length > 0 && real.every((m) => m.status === "completed")) return "completed";
+  if (real.some((m) => m.status === "inProgress" || m.status === "completed")) return "running";
+  return "ready";
+}
+
+// Live Tournament Progress — Total/Completed/Remaining/Percent, counting
+// only real (non-bye) matches. Pure and format-agnostic; used by the
+// Tournament Dashboard's Overview tab.
+export function getTournamentProgress(tournament) {
+  const real = tournament.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
+  const total = real.length;
+  const completed = real.filter((m) => m.status === "completed").length;
+  return {
+    total,
+    completed,
+    remaining: total - completed,
+    percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+  };
+}
+
+// "Start Match": pending -> inProgress. Deliberately not part of the
+// TournamentEngine interface (see file header above) — every format starts
+// a match the same way, there's nothing to customize. No-op on a bye (there
+// is no match to start) or once the tournament itself is completed.
+export function startMatch(tournament, matchId) {
+  if (tournament.status === "completed") {
+    throw new Error("This tournament is already completed — matches can't be changed.");
+  }
+  const found = findMatch(tournament, matchId);
+  if (!found || found.match.isBye) return tournament;
+  const rounds = tournament.rounds.map((r) => {
+    if (r.roundNumber !== found.round.roundNumber) return r;
+    const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress" } : m));
+    return { ...r, matches, status: computeRoundStatus(matches) };
+  });
+  const next = { ...tournament, rounds };
+  next.status = computeTournamentStatus(next);
+  return next;
 }
 
 export function makeTournament({ name, sessionCode, format = "roundRobin", mode, courtsCount, entrants, rounds }) {

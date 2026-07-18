@@ -49,7 +49,11 @@ Do not implement multiple unrelated features in a single task.
 
 - [x] Session Type Architecture
 - [x] Tournament Engine Foundation
-- [x] Round Robin
+- [x] Round Robin Scheduler
+- [x] Tournament Match Management
+- [ ] Round Robin Standings
+- [ ] Champion Determination
+- [ ] Tie-breakers
 - [ ] Single Elimination
 - [ ] Double Elimination
 - [ ] Bracket Generator
