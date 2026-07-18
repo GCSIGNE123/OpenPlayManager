@@ -73,12 +73,34 @@ export default function ScorerView({
   // screen) — this is a read-only label, not a control, so the organizer
   // can still see which mode is active without being able to switch it here
   const rotationModeLabel = ROTATION_MODES.find((m) => m.value === rotationMode)?.label || rotationMode;
+  const totalPlayers = Object.keys(state.players || {}).length;
+  // matches matchHistory's own round numbering (see endMatch: `round:
+  // (state.matchHistory || []).length + 1`) — the round the next completed
+  // match would be recorded under, i.e. "what round are we currently on"
+  const currentRound = (matchHistory || []).length + 1;
 
   return (
     <div>
-      <div style={styles.scorerToolbar}>
-        <div style={styles.rotationRow}>
-          Rotation: <strong>{rotationModeLabel}</strong>
+      <div style={styles.sessionInfoCard}>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Rotation Mode</span>
+          <span style={styles.sessionInfoValue}>{rotationModeLabel}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Courts</span>
+          <span style={styles.sessionInfoValue}>{state.courts.length}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Players</span>
+          <span style={styles.sessionInfoValue}>{totalPlayers}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Waiting Players</span>
+          <span style={styles.sessionInfoValue}>{waitingCount}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Current Round</span>
+          <span style={styles.sessionInfoValue}>{currentRound}</span>
         </div>
       </div>
       {rotationMode === "progressiveSkill" && (
