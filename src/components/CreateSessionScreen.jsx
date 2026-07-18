@@ -10,6 +10,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
   const [venue, setVenue] = useState("Ormoc City Pickleball — Open Play");
   const [courts, setCourts] = useState(4);
   const [rotationMode, setRotationMode] = useState(rotationModes?.[0]?.value ?? "continuous");
+  const [expectedGamesPerPlayer, setExpectedGamesPerPlayer] = useState(6);
   const [roster, setRoster] = useState([]);
   const [nameInput, setNameInput] = useState("");
   const [skillInput, setSkillInput] = useState("beginner");
@@ -84,7 +85,19 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         </>
       )}
 
-      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "4" : "3"}. Register players joining today ({roster.length})</SectionLabel>
+      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "4" : "3"}. Expected games per player</SectionLabel>
+      <p style={styles.editHint}>
+        How many games each player expects to play this session. Stored with the session — not used anywhere yet.
+      </p>
+      <input
+        type="number"
+        min={1}
+        style={{ ...styles.expectedGamesInput, width: 64 }}
+        value={expectedGamesPerPlayer}
+        onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
+      />
+
+      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "5" : "4"}. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
         This is just the guest list — everyone still needs to Check In once they're actually at the courts.
         Skill level is used to pair a beginner with an intermediate player as teammates.
@@ -153,7 +166,10 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
 
       <button
         style={{ ...styles.primaryBtn, ...styles.startBtn, ...(!canStart ? styles.btnDisabled : {}) }}
-        onClick={() => canStart && onStart(venue.trim(), courts, roster, rotationMode)}
+        onClick={() =>
+          canStart &&
+          onStart(venue.trim(), courts, roster, rotationMode, Math.max(1, Number(expectedGamesPerPlayer) || 1))
+        }
         disabled={!canStart}
       >
         <LogIn size={16} strokeWidth={2.5} />

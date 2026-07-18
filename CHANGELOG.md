@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-07-18
 
+### Added
+- New "Expected games per player" field on Create Session (step 4, default 6), stored on the session as `expectedGamesPerPlayer` at creation. Not wired into any new behavior yet — Progressive Skill Rotation's phase calc already reads this same field (unchanged), it now just starts from an organizer-chosen value instead of always defaulting to 6
+
 ### Changed
 - Rotation Mode selection moved from the Scorer page to the Create Session page (step 3, alongside venue name and court count) — it's now chosen once when the session is created (`state.rotationMode` set in `startSession`) instead of being switchable mid-session. No rotation logic changed — `getRotationEngine`/`refreshNextMatchups`/`regenerateNextMatchups`/`isPoolingRotation` and everything downstream of `rotationMode` behave identically to before
 - Replaced the Scorer page's Rotation dropdown with a read-only **Session Information** card showing Rotation Mode, Courts, Players, Waiting Players, and Current Round at a glance

@@ -179,7 +179,7 @@ export default function PickleballOpenPlay() {
     }
   };
 
-  const startSession = async (venue, courtsCount, roster, rotationMode = "continuous") => {
+  const startSession = async (venue, courtsCount, roster, rotationMode = "continuous", expectedGamesPerPlayer = 6) => {
     setCreating(true);
     setCreateError("");
     try {
@@ -218,6 +218,7 @@ export default function PickleballOpenPlay() {
         nextMatchups: [],
         matchHistory: [],
         rotationMode,
+        expectedGamesPerPlayer,
         updatedAt: Date.now(),
       };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
