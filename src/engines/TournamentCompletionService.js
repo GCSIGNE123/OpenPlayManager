@@ -11,24 +11,27 @@
 // implements. See RoundRobinCompletionService.js for the one real
 // implementation so far.
 export class TournamentCompletionService {
-  // tournament: Tournament (see lib/tournamentModel.js)
+  // entity: Tournament or TournamentPool (see lib/tournamentModel.js) —
+  // anything with `.entrants`/`.rounds`. As of Round Robin Pool Support,
+  // completion is determined per pool (pools are fully independent), so
+  // callers pass a TournamentPool here, not the whole Tournament.
   // returns: boolean
-  isTournamentComplete(tournament) {
+  isTournamentComplete(entity) {
     throw new Error("isTournamentComplete() must be implemented by a TournamentCompletionService subclass");
   }
 
-  // tournament: Tournament
+  // entity: Tournament or TournamentPool
   // returns: { champion, runnerUp, thirdPlace }, each
   // { participantId, label } | null (null if too few entrants for that slot)
-  determineChampion(tournament) {
+  determineChampion(entity) {
     throw new Error("determineChampion() must be implemented by a TournamentCompletionService subclass");
   }
 
-  // tournament: Tournament
-  // returns: the finalized Tournament (never mutates the one passed in) if
-  // isTournamentComplete() and not already finalized, else the tournament
+  // entity: Tournament or TournamentPool
+  // returns: the finalized entity (never mutates the one passed in) if
+  // isTournamentComplete() and not already finalized, else the entity
   // unchanged — safe to call after every match result is saved
-  finalizeTournament(tournament) {
+  finalizeTournament(entity) {
     throw new Error("finalizeTournament() must be implemented by a TournamentCompletionService subclass");
   }
 }

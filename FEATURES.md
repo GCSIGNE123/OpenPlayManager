@@ -52,7 +52,12 @@ Do not implement multiple unrelated features in a single task.
 - [x] Round Robin Scheduler
 - [x] Tournament Match Management
 - [x] Round Robin Standings
+- [x] Tournament Completion
 - [x] Champion Determination
+- [x] Multiple Pool Support
+- [ ] Pool Assignment Methods
+- [ ] Playoff Qualification
+- [ ] Elimination Bracket
 - [ ] Advanced Tie-breakers
 - [ ] Single Elimination
 - [ ] Double Elimination

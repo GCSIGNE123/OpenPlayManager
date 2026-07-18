@@ -1356,6 +1356,17 @@ export const styles = {
     borderColor: "var(--color-success)",
     background: "rgba(31,92,67,0.05)",
   },
+  poolScheduleBlock: {
+    marginBottom: 20,
+  },
+  poolHeading: {
+    fontFamily: "'Anton', sans-serif",
+    fontWeight: 400,
+    fontSize: 15,
+    textTransform: "uppercase",
+    color: "var(--ink)",
+    margin: "0 0 6px 0",
+  },
   scoreInputRow: {
     display: "flex",
     alignItems: "center",

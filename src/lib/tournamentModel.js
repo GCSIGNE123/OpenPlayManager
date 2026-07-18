@@ -5,10 +5,13 @@
 // use. An Open Play session only carries a `tournamentId` pointer to one of
 // these — see PickleballOpenPlay.jsx — it never embeds the schedule itself.
 //
-// Scope for now: schedule generation + display only (see
-// engines/RoundRobinScheduler.js and TournamentScheduleView.jsx). No
-// scoring, standings, rankings, or bracket logic reads or writes these
-// records yet — `TournamentMatch.status` is a static placeholder.
+// As of Round Robin Pool Support, a Tournament no longer carries its own
+// entrants/rounds/champion directly — those live one level down, on each
+// TournamentPool in `tournament.pools` (see makeTournamentPool below). This
+// is a breaking schema change from every earlier task's shape; there's no
+// migration for tournament records saved before this task, since the
+// Tournament Manager epic is still unreleased/in-progress (unlike Rotation
+// Mode, which stays backward-compatible deliberately — see PROJECT.md).
 import { uid } from "./random.js";
 import { TOURNAMENT_PREFIX } from "./constants.js";
 
@@ -71,19 +74,73 @@ export function makeRound(roundNumber, matches) {
   };
 }
 
+// ---- Round Robin Pool Support ----
+// A TournamentPool is a fully independent Round Robin sub-tournament: its
+// own entrants, schedule, standings, and champion. It's deliberately given
+// the same { entrants, rounds } shape a Tournament used to carry directly —
+// that's what lets TournamentStandingsService/TournamentCompletionService
+// (engines/) work on a pool with ZERO changes: those services only ever
+// read `entity.entrants`/`entity.rounds`, so a pool satisfies their
+// interface exactly as well as a single-pool tournament used to. A single-
+// pool tournament (poolCount: 1, the default) is just a tournament with one
+// pool in the array — not a structurally different case anything needs to
+// special-case.
+export function makeTournamentPool({ label, entrants, rounds }) {
+  return {
+    id: uid(),
+    label,
+    entrants,
+    rounds,
+    status: computePoolStatus({ rounds }), // 'ready' | 'running' | 'completed'
+    completedAt: null,
+    champion: null,
+    runnerUp: null,
+    thirdPlace: null,
+  };
+}
+
+// Renamed from the old (pre-pools) computeTournamentStatus — identical
+// logic, now explicitly scoped to one pool's rounds rather than assumed to
+// be the whole tournament's. 'draft' is preserved as-is (nothing creates a
+// draft pool yet). Otherwise: every real match completed -> 'completed';
+// any match started or finished -> 'running'; else 'ready'.
+export function computePoolStatus(pool) {
+  if (pool.status === "draft") return "draft";
+  const real = pool.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
+  if (real.length > 0 && real.every((m) => m.status === "completed")) return "completed";
+  if (real.some((m) => m.status === "inProgress" || m.status === "completed")) return "running";
+  return "ready";
+}
+
+// Overall tournament status derived from every pool's own status — pools
+// are fully independent, so the tournament as a whole is only 'completed'
+// once ALL of them are; 'running' as soon as any one of them has started or
+// finished; 'ready' otherwise. There's no cross-pool combining here (that's
+// what a future Playoff Qualification feature would add).
+export function computeTournamentStatus(tournament) {
+  const statuses = tournament.pools.map((p) => p.status);
+  if (statuses.every((s) => s === "completed")) return "completed";
+  if (statuses.some((s) => s === "running" || s === "completed")) return "running";
+  return "ready";
+}
+
 // ---- Tournament Match Management ----
 // Format-agnostic helpers for locating and progressing matches — used by
 // both startMatch below (a plain status flip, not specific to any format)
 // and RoundRobinEngine.updateMatchResult (which reuses computeRoundStatus/
-// computeTournamentStatus after actually writing the result). Not part of
-// the TournamentEngine interface itself since "find a match" and "roll up a
-// round/tournament's status from its matches" aren't scheduling/results
-// logic a format needs to customize.
+// computePoolStatus after actually writing the result). Not part of the
+// TournamentEngine interface itself since "find a match" and "roll up a
+// round/pool/tournament's status from its matches" aren't scheduling/
+// results logic a format needs to customize.
 
+// Searches every pool's rounds — a match id is unique across the whole
+// tournament regardless of which pool it belongs to.
 export function findMatch(tournament, matchId) {
-  for (const round of tournament.rounds) {
-    const match = round.matches.find((m) => m.id === matchId);
-    if (match) return { round, match };
+  for (const pool of tournament.pools) {
+    for (const round of pool.rounds) {
+      const match = round.matches.find((m) => m.id === matchId);
+      if (match) return { pool, round, match };
+    }
   }
   return null;
 }
@@ -99,26 +156,28 @@ export function computeRoundStatus(matches) {
   return "pending";
 }
 
-// 'draft' is preserved as-is (nothing in this app creates a draft
-// tournament yet — schedule generation always produces one that's
-// immediately 'ready' — but this function shouldn't invent a status change
-// for a state it doesn't understand). Otherwise: every real match completed
-// -> 'completed'; any match started or finished -> 'running'; else 'ready'.
-export function computeTournamentStatus(tournament) {
-  if (tournament.status === "draft") return "draft";
-  const real = tournament.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
-  if (real.length > 0 && real.every((m) => m.status === "completed")) return "completed";
-  if (real.some((m) => m.status === "inProgress" || m.status === "completed")) return "running";
-  return "ready";
-}
-
-// Live Tournament Progress — Total/Completed/Remaining/Percent, counting
-// only real (non-bye) matches. Pure and format-agnostic; used by the
-// Tournament Dashboard's Overview tab.
-export function getTournamentProgress(tournament) {
-  const real = tournament.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
+// Live progress for anything shaped like { rounds } — a single pool or (by
+// aggregating across pools, see getTournamentProgress below) a whole
+// tournament. Counts only real (non-bye) matches.
+export function getPoolProgress(pool) {
+  const real = pool.rounds.flatMap((r) => r.matches.filter((m) => !m.isBye));
   const total = real.length;
   const completed = real.filter((m) => m.status === "completed").length;
+  return {
+    total,
+    completed,
+    remaining: total - completed,
+    percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+  };
+}
+
+// Tournament-wide progress — sums every pool's own progress. Used by the
+// Tournament Dashboard's Overview tab for the aggregate Total/Completed/
+// Remaining stats (pool-by-pool breakdowns use getPoolProgress directly).
+export function getTournamentProgress(tournament) {
+  const totals = tournament.pools.map(getPoolProgress);
+  const total = totals.reduce((sum, p) => sum + p.total, 0);
+  const completed = totals.reduce((sum, p) => sum + p.completed, 0);
   return {
     total,
     completed,
@@ -130,50 +189,47 @@ export function getTournamentProgress(tournament) {
 // "Start Match": pending -> inProgress. Deliberately not part of the
 // TournamentEngine interface (see file header above) — every format starts
 // a match the same way, there's nothing to customize. No-op on a bye (there
-// is no match to start) or once the tournament itself is completed.
+// is no match to start). Locked per pool: a pool that's already completed
+// rejects further changes even while a sibling pool is still running.
 export function startMatch(tournament, matchId) {
-  if (tournament.status === "completed") {
-    throw new Error("This tournament is already completed — matches can't be changed.");
-  }
   const found = findMatch(tournament, matchId);
-  if (!found || found.match.isBye) return tournament;
-  const rounds = tournament.rounds.map((r) => {
-    if (r.roundNumber !== found.round.roundNumber) return r;
-    const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress" } : m));
-    return { ...r, matches, status: computeRoundStatus(matches) };
+  if (!found) return tournament;
+  if (found.pool.status === "completed") {
+    throw new Error("This pool is already completed — matches can't be changed.");
+  }
+  if (found.match.isBye) return tournament;
+
+  const pools = tournament.pools.map((p) => {
+    if (p.id !== found.pool.id) return p;
+    const rounds = p.rounds.map((r) => {
+      if (r.roundNumber !== found.round.roundNumber) return r;
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress" } : m));
+      return { ...r, matches, status: computeRoundStatus(matches) };
+    });
+    return { ...p, rounds, status: computePoolStatus({ rounds }) };
   });
-  const next = { ...tournament, rounds };
+  const next = { ...tournament, pools };
   next.status = computeTournamentStatus(next);
   return next;
 }
 
-export function makeTournament({ name, sessionCode, format = "roundRobin", mode, courtsCount, entrants, rounds }) {
+export function makeTournament({ name, sessionCode, format = "roundRobin", mode, courtsCount, poolCount = 1, assignmentMethod = "random", pools }) {
   const now = Date.now();
-  return {
+  const tournament = {
     id: uid(),
     name: name || `${mode === "doubles" ? "Doubles" : "Singles"} ${format === "roundRobin" ? "Round Robin" : format}`,
     sessionCode,
     format,
     mode, // 'singles' | 'doubles'
     courtsCount,
-    // 'draft' | 'ready' | 'running' | 'completed' — a freshly generated
-    // tournament already has its full schedule, so it starts 'ready' rather
-    // than 'draft'. Nothing transitions it further yet (no live match
-    // tracking exists), so it stays 'ready' indefinitely for now.
-    status: "ready",
-    entrants,
-    rounds,
-    // Champion Determination (Round Robin only so far) — all four stay null
-    // until RoundRobinCompletionService.finalizeTournament() stamps them the
-    // moment the last match result makes the tournament complete. champion/
-    // runnerUp/thirdPlace are each { participantId, label } | null.
-    completedAt: null,
-    champion: null,
-    runnerUp: null,
-    thirdPlace: null,
+    poolCount,
+    assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
+    pools,
     createdAt: now,
     updatedAt: now,
   };
+  tournament.status = computeTournamentStatus(tournament);
+  return tournament;
 }
 
 export async function saveTournament(tournament) {

@@ -10,20 +10,23 @@
 // implements. See RoundRobinStandingsService.js for the one real
 // implementation so far.
 export class TournamentStandingsService {
-  // tournament: Tournament (see lib/tournamentModel.js)
+  // entity: Tournament or TournamentPool (see lib/tournamentModel.js) —
+  // anything with `.entrants`/`.rounds`. As of Round Robin Pool Support,
+  // standings are computed per pool (pools are fully independent), so
+  // callers pass a TournamentPool here, not the whole Tournament.
   // returns: StandingsRow[], UNSORTED — { participantId, label, matchesPlayed,
   // wins, losses, winPct, pointsFor, pointsAgainst, pointDiff }
-  calculateStandings(tournament) {
+  calculateStandings(entity) {
     throw new Error("calculateStandings() must be implemented by a TournamentStandingsService subclass");
   }
 
-  // tournament: Tournament
+  // entity: Tournament or TournamentPool
   // returns: StandingsRow[], SORTED (see sortStandings) with `rank` assigned
   // Convenience wrapper a caller reaches for after saving a match result —
   // "recalculate and re-rank" in one call. A full recompute rather than an
   // incremental patch (see RoundRobinStandingsService for why that's fine
   // at this scale).
-  updateAfterMatch(tournament) {
+  updateAfterMatch(entity) {
     throw new Error("updateAfterMatch() must be implemented by a TournamentStandingsService subclass");
   }
 

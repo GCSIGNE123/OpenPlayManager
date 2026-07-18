@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Pencil, Play, RefreshCw, Users, X } from "lucide-react";
 import { styles } from "../styles.js";
 import SectionLabel from "./SectionLabel.jsx";
@@ -8,11 +8,16 @@ import SectionLabel from "./SectionLabel.jsx";
 // RoundRobinEngine.updateMatchResult.
 const STATUS_LABELS = { pending: "Pending", inProgress: "In Progress", completed: "Completed" };
 
+const POOL_COUNT_OPTIONS = [1, 2, 3, 4];
+
 // Start Match / Enter Scores / Save Result / Edit Result all live in this
 // one card: "Start Match" (pending) and "Edit Result" (completed) both open
 // the same score-entry form rather than being separate multi-step flows —
-// fewer clicks, same four organizer actions the task asks for.
-function MatchCard({ match, tournamentCompleted, onStartMatch, onSaveResult }) {
+// fewer clicks, same four organizer actions the task asks for. As of Round
+// Robin Pool Support, editing locks per POOL (poolCompleted) rather than per
+// whole tournament — a match in a still-running pool stays editable even
+// once a sibling pool has finished.
+function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
   const [editing, setEditing] = useState(false);
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
@@ -62,7 +67,7 @@ function MatchCard({ match, tournamentCompleted, onStartMatch, onSaveResult }) {
   }
 
   const isCompleted = match.status === "completed";
-  const canEdit = isCompleted && !tournamentCompleted;
+  const canEdit = isCompleted && !poolCompleted;
 
   return (
     <div style={{ ...styles.historyMatchCard, ...(isCompleted ? styles.matchCompletedCard : {}) }}>
@@ -170,7 +175,7 @@ function MatchCard({ match, tournamentCompleted, onStartMatch, onSaveResult }) {
   );
 }
 
-function RoundCard({ round, expanded, onToggle, tournamentCompleted, onStartMatch, onSaveResult }) {
+function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onSaveResult }) {
   return (
     <div style={styles.historyRoundCard}>
       <button style={styles.historyRoundHead} onClick={onToggle}>
@@ -184,13 +189,7 @@ function RoundCard({ round, expanded, onToggle, tournamentCompleted, onStartMatc
       {expanded && (
         <div style={styles.historyRoundBody}>
           {round.matches.map((m) => (
-            <MatchCard
-              key={m.id}
-              match={m}
-              tournamentCompleted={tournamentCompleted}
-              onStartMatch={onStartMatch}
-              onSaveResult={onSaveResult}
-            />
+            <MatchCard key={m.id} match={m} poolCompleted={poolCompleted} onStartMatch={onStartMatch} onSaveResult={onSaveResult} />
           ))}
         </div>
       )}
@@ -198,12 +197,45 @@ function RoundCard({ round, expanded, onToggle, tournamentCompleted, onStartMatc
   );
 }
 
+// One pool's full round list — a pool is a fully independent Round Robin
+// sub-tournament, so it gets its own "N players/teams, N rounds, [complete]"
+// summary line exactly like the old single-pool view used to render for the
+// whole tournament. Only shown with a "Pool X" heading when there's more
+// than one pool (poolCount === 1 renders identically to before Pool
+// Support — no extra chrome for the common case).
+function PoolSchedule({ pool, showHeading, expandedRounds, onToggleRound, onStartMatch, onSaveResult }) {
+  const poolCompleted = pool.status === "completed";
+  return (
+    <div style={styles.poolScheduleBlock}>
+      {showHeading && <h3 style={styles.poolHeading}>{pool.label}</h3>}
+      <p style={styles.editHint}>
+        {pool.entrants.length} {pool.entrants.length === 1 ? "entrant" : "entrants"}, {pool.rounds.length} round
+        {pool.rounds.length === 1 ? "" : "s"}.
+        {poolCompleted && " This pool is complete — results can no longer be edited."}
+      </p>
+      {pool.rounds.map((r) => (
+        <RoundCard
+          key={r.roundNumber}
+          round={r}
+          expanded={expandedRounds.has(`${pool.id}:${r.roundNumber}`)}
+          onToggle={() => onToggleRound(`${pool.id}:${r.roundNumber}`)}
+          poolCompleted={poolCompleted}
+          onStartMatch={onStartMatch}
+          onSaveResult={onSaveResult}
+        />
+      ))}
+    </div>
+  );
+}
+
 // Tournament schedule generation + match management for Tournament-type
 // sessions — see PROJECT.md's Round Robin Scheduler / Tournament Match
-// Management sections. The tournament itself is fetched and owned by the
-// parent (TournamentDashboardView), so Overview's progress stats and this
-// view's match cards always agree — this component only renders it and
-// forwards actions up.
+// Management / Round Robin Pool Support sections. The tournament itself is
+// fetched and owned by the parent (TournamentDashboardView), so Overview's
+// progress stats and this view's match cards always agree — this component
+// only renders it and forwards actions up. `selectedPool` ('all' | poolId,
+// also owned by the parent so Standings stays in sync) filters which pools'
+// schedules render here.
 export default function TournamentScheduleView({
   state,
   tournament,
@@ -214,22 +246,41 @@ export default function TournamentScheduleView({
   matchError,
   onStartMatch,
   onSaveResult,
+  selectedPool,
 }) {
   const [mode, setMode] = useState(() => tournament?.mode ?? "singles");
-  const [expandedRounds, setExpandedRounds] = useState(() => new Set([1]));
+  const [poolCount, setPoolCount] = useState(() => tournament?.poolCount ?? 1);
+  const [customPoolCount, setCustomPoolCount] = useState("");
+  const [expandedRounds, setExpandedRounds] = useState(() => new Set());
 
-  const toggleRound = (roundNumber) => {
+  // Round 1 of every pool starts expanded, same as the single-pool view
+  // used to default to Round 1 open — re-derived whenever a *different*
+  // tournament loads (pool ids are fresh uids each generation, so this
+  // can't be computed once at mount).
+  useEffect(() => {
+    if (!tournament) return;
+    setExpandedRounds(new Set(tournament.pools.map((p) => `${p.id}:1`)));
+  }, [tournament?.id]);
+
+  const toggleRound = (key) => {
     setExpandedRounds((prev) => {
       const next = new Set(prev);
-      if (next.has(roundNumber)) next.delete(roundNumber);
-      else next.add(roundNumber);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
+  const isCustomPoolCount = !POOL_COUNT_OPTIONS.includes(poolCount);
+  const effectivePoolCount = isCustomPoolCount ? Number(customPoolCount) || 0 : poolCount;
+
   const playerCount = Object.keys(state.players || {}).length;
   const tournamentCompleted = tournament?.status === "completed";
-  const canGenerate = playerCount >= 2 && !generating && !tournamentCompleted;
+  const canGenerate =
+    playerCount >= 2 && effectivePoolCount >= 1 && playerCount >= effectivePoolCount * 2 && !generating && !tournamentCompleted;
+
+  const pools = tournament?.pools ?? [];
+  const visiblePools = selectedPool === "all" ? pools : pools.filter((p) => p.id === selectedPool);
 
   return (
     <div>
@@ -240,7 +291,7 @@ export default function TournamentScheduleView({
           {tournamentCompleted
             ? "This tournament is complete — the schedule can no longer be regenerated."
             : tournament
-              ? `Regenerating rebuilds the schedule from this session's ${playerCount} currently registered player${playerCount === 1 ? "" : "s"} — any results already saved will be lost.`
+              ? `Regenerating rebuilds every pool's schedule from this session's ${playerCount} currently registered player${playerCount === 1 ? "" : "s"} — any results already saved will be lost.`
               : `Generates a Round Robin schedule from this session's ${playerCount} registered player${playerCount === 1 ? "" : "s"} across ${state.courts.length} court${state.courts.length === 1 ? "" : "s"}.`}
         </p>
         <div style={styles.skillToggle}>
@@ -251,13 +302,41 @@ export default function TournamentScheduleView({
             Doubles
           </button>
         </div>
+        {!tournamentCompleted && (
+          <>
+            <p style={styles.dialogLabel}>Number of pools</p>
+            <div style={styles.skillToggle}>
+              {POOL_COUNT_OPTIONS.map((n) => (
+                <button key={n} type="button" style={styles.skillToggleBtn(poolCount === n)} onClick={() => setPoolCount(n)}>
+                  {n}
+                </button>
+              ))}
+              <button type="button" style={styles.skillToggleBtn(isCustomPoolCount)} onClick={() => setPoolCount(-1)}>
+                Custom
+              </button>
+            </div>
+            {isCustomPoolCount && (
+              <input
+                type="number"
+                min={1}
+                placeholder="Number of pools"
+                style={{ ...styles.expectedGamesInput, width: "100%", marginBottom: 12 }}
+                value={customPoolCount}
+                onChange={(e) => setCustomPoolCount(e.target.value)}
+              />
+            )}
+          </>
+        )}
         {generateError && <p style={styles.editWarning}>{generateError}</p>}
         {playerCount < 2 && <p style={styles.editWarning}>Register at least 2 players before generating a schedule.</p>}
+        {playerCount >= 2 && effectivePoolCount >= 1 && playerCount < effectivePoolCount * 2 && (
+          <p style={styles.editWarning}>Need at least 2 players per pool — register more players or choose fewer pools.</p>
+        )}
         {!tournamentCompleted && (
           <button
             style={{ ...styles.primaryBtn, ...(!canGenerate ? styles.btnDisabled : {}) }}
             disabled={!canGenerate}
-            onClick={() => onGenerate(mode)}
+            onClick={() => onGenerate(mode, effectivePoolCount)}
           >
             {tournament ? <RefreshCw size={16} strokeWidth={2.5} /> : <Users size={16} strokeWidth={2.5} />}
             {generating ? (tournament ? "Regenerating…" : "Generating…") : tournament ? "Regenerate schedule" : "Generate schedule"}
@@ -271,19 +350,13 @@ export default function TournamentScheduleView({
 
       {tournament && !loading && (
         <div>
-          <p style={styles.editHint}>
-            {tournament.mode === "doubles" ? "Doubles" : "Singles"} Round Robin — {tournament.entrants.length}{" "}
-            {tournament.mode === "doubles" ? "teams" : "players"}, {tournament.rounds.length} round
-            {tournament.rounds.length === 1 ? "" : "s"}.
-            {tournamentCompleted && " This tournament is complete — results can no longer be edited."}
-          </p>
-          {tournament.rounds.map((r) => (
-            <RoundCard
-              key={r.roundNumber}
-              round={r}
-              expanded={expandedRounds.has(r.roundNumber)}
-              onToggle={() => toggleRound(r.roundNumber)}
-              tournamentCompleted={tournamentCompleted}
+          {visiblePools.map((pool) => (
+            <PoolSchedule
+              key={pool.id}
+              pool={pool}
+              showHeading={pools.length > 1}
+              expandedRounds={expandedRounds}
+              onToggleRound={toggleRound}
               onStartMatch={onStartMatch}
               onSaveResult={onSaveResult}
             />

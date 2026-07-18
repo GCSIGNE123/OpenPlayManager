@@ -1,11 +1,16 @@
 // Round Robin's TournamentStandingsService implementation — see
 // TournamentStandingsService.js for the shared interface this conforms to.
 // Standings are pure derived data: nothing here reads or writes anything
-// beyond the Tournament object already in memory, and nothing new is
-// persisted — a caller just recomputes on every render, which is what
-// makes this "live" with zero extra plumbing (see
-// TournamentDashboardView.jsx, which already holds one up-to-date copy of
-// the tournament after every match save).
+// beyond the object already in memory, and nothing new is persisted — a
+// caller just recomputes on every render, which is what makes this "live"
+// with zero extra plumbing (see TournamentDashboardView.jsx, which already
+// holds one up-to-date copy of the tournament after every match save).
+//
+// As of Round Robin Pool Support, every method here is called with a
+// TournamentPool, not a whole Tournament — but nothing below needed to
+// change, since a pool has exactly the { entrants, rounds } shape these
+// methods have always relied on. Parameter names below say `entity` for
+// that reason: "a Tournament or TournamentPool, either works."
 import { TournamentStandingsService } from "./TournamentStandingsService.js";
 
 // Default Round Robin ranking rules, exactly as specified: Wins desc, then
@@ -28,9 +33,9 @@ export class RoundRobinStandingsService extends TournamentStandingsService {
   // anyone's record. Every entrant appears in the result even with zero
   // matches played (all-zero row), so the table always lists the full
   // field, not just whoever's played so far.
-  calculateStandings(tournament) {
+  calculateStandings(entity) {
     const rows = new Map(
-      tournament.entrants.map((p) => [
+      entity.entrants.map((p) => [
         p.id,
         {
           participantId: p.id,
@@ -44,14 +49,14 @@ export class RoundRobinStandingsService extends TournamentStandingsService {
       ])
     );
 
-    const completedMatches = tournament.rounds
+    const completedMatches = entity.rounds
       .flatMap((r) => r.matches)
       .filter((m) => !m.isBye && m.status === "completed");
 
     for (const match of completedMatches) {
       const a = rows.get(match.teamA.id);
       const b = rows.get(match.teamB.id);
-      // a participant no longer in tournament.entrants (shouldn't happen —
+      // a participant no longer in entity.entrants (shouldn't happen —
       // entrants don't change after generation — but guard rather than throw
       // on a stale/foreign match id)
       if (!a || !b) continue;
@@ -86,8 +91,8 @@ export class RoundRobinStandingsService extends TournamentStandingsService {
   // standings existed before this match — correctness over micro-
   // optimization. A Round Robin tournament has at most a few dozen matches,
   // so recomputing from scratch on every save is effectively instant.
-  updateAfterMatch(tournament) {
-    return this.sortStandings(this.calculateStandings(tournament));
+  updateAfterMatch(entity) {
+    return this.sortStandings(this.calculateStandings(entity));
   }
 
   sortStandings(rows, comparator = defaultRoundRobinComparator) {

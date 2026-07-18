@@ -1,12 +1,15 @@
 // Orchestration glue between a session's registered players and the Round
 // Robin engine — builds entrants (Singles: one per player; Doubles: one per
-// team, paired via RoundRobinScheduler.pairIntoTeams), generates the
-// schedule, and persists it as its own Tournament record. Kept separate
-// from lib/tournamentModel.js (pure data shapes + storage) and
-// engines/RoundRobinScheduler.js (the scheduling algorithm itself), which
-// don't need to know anything about session players.
-import { makeEntrant, makeTournament, saveTournament, startMatch } from "./tournamentModel.js";
+// team, paired via RoundRobinScheduler.pairIntoTeams), splits them into
+// pools (Round Robin Pool Support), generates each pool's own schedule, and
+// persists the whole thing as its own Tournament record. Kept separate from
+// lib/tournamentModel.js (pure data shapes + storage) and
+// engines/RoundRobinScheduler.js (the scheduling algorithm itself, called
+// once per pool — it has no idea pools exist), which don't need to know
+// anything about session players.
+import { makeEntrant, makeTournament, makeTournamentPool, saveTournament, startMatch } from "./tournamentModel.js";
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
+import { assignPools, poolLabel } from "../engines/PoolAssignment.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
 import { DoubleEliminationEngine } from "../engines/DoubleEliminationEngine.js";
@@ -18,10 +21,24 @@ export function buildEntrants(players, mode) {
   return players.map((p) => makeEntrant(p.name, [p.id]));
 }
 
-export async function buildAndSaveRoundRobinTournament({ sessionCode, players, mode, courtsCount }) {
+export async function buildAndSaveRoundRobinTournament({
+  sessionCode,
+  players,
+  mode,
+  courtsCount,
+  poolCount = 1,
+  assignmentMethod = "random",
+}) {
   const entrants = buildEntrants(players, mode);
-  const rounds = generateRoundRobinSchedule({ entrants, courtsCount });
-  const tournament = makeTournament({ sessionCode, format: "roundRobin", mode, courtsCount, entrants, rounds });
+  const groups = assignPools(entrants, poolCount, assignmentMethod);
+  const pools = groups.map((group, i) =>
+    makeTournamentPool({
+      label: poolLabel(i),
+      entrants: group,
+      rounds: generateRoundRobinSchedule({ entrants: group, courtsCount }),
+    })
+  );
+  const tournament = makeTournament({ sessionCode, format: "roundRobin", mode, courtsCount, poolCount, assignmentMethod, pools });
   return saveTournament(tournament);
 }
 

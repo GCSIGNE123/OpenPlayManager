@@ -13,37 +13,29 @@ const COLUMNS = [
   { key: "pointsAgainst", label: "PA" },
 ];
 
-// Live Round Robin standings — pure derived data, recomputed from
-// `tournament` on every render (see RoundRobinStandingsService), so this
-// component needs no state of its own and no manual refresh: a match
-// result saved anywhere in the Dashboard flows straight through as a new
-// `tournament` prop. Applies to Round Robin only, per Round Robin
-// Standings' scope — other formats don't have ranking logic yet.
-export default function TournamentStandingsView({ tournament, loading }) {
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
-  if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see standings here.</div>;
-  }
-  if (tournament.format !== "roundRobin") {
-    return <div style={styles.placeholderCard}>Standings aren't available for this tournament format yet.</div>;
-  }
-
-  const standings = getTournamentEngine(tournament.format).getStandings(tournament);
+// One pool's own standings table — pure derived data, recomputed from that
+// pool's own rounds on every render (see RoundRobinStandingsService), so
+// nothing here needs local state or a manual refresh: a match result saved
+// anywhere in the Dashboard flows straight through as a new `tournament`
+// (and thus `pool`) prop. Standings are never combined across pools — each
+// pool is a fully independent Round Robin.
+function PoolStandingsTable({ tournament, pool, showHeading }) {
+  const standings = getTournamentEngine(tournament.format).getStandings(tournament, pool.id);
   // Medals only mean something once at least one match has actually been
   // decided — with zero matches played, ranks 1-3 are just insertion order
   // (everyone tied at 0), not a real podium.
   const anyMatchesPlayed = standings.some((r) => r.matchesPlayed > 0);
-  // Once the tournament is completed, no further results can be recorded
-  // (see RoundRobinEngine.updateMatchResult), so these standings are
-  // already final — "frozen" simply falls out of that validation, nothing
-  // extra to do here beyond labeling it.
-  const isComplete = tournament.status === "completed";
+  // Once a pool is completed, no further results can be recorded for it
+  // (see RoundRobinEngine.updateMatchResult's per-pool lock), so its
+  // standings are already final — "frozen" simply falls out of that
+  // validation, nothing extra to do here beyond labeling it.
+  const isComplete = pool.status === "completed";
 
   return (
-    <div>
+    <div style={styles.poolScheduleBlock}>
       <div style={styles.standingsHeaderRow}>
-        <SectionLabel>Standings</SectionLabel>
-        {isComplete && <span style={styles.tournamentCompleteBadge}>Tournament Complete</span>}
+        {showHeading && <h3 style={styles.poolHeading}>{pool.label}</h3>}
+        {isComplete && <span style={styles.tournamentCompleteBadge}>{showHeading ? "Pool Complete" : "Tournament Complete"}</span>}
       </div>
       <div style={styles.tournamentStandingsScroll}>
         <table style={styles.tournamentStandingsTable}>
@@ -82,6 +74,40 @@ export default function TournamentStandingsView({ tournament, loading }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Standings tab for Tournament-type sessions — see PROJECT.md's Round Robin
+// Standings / Round Robin Pool Support sections. `selectedPool` ('all' |
+// poolId, owned by the parent Dashboard so it stays in sync with the
+// Schedule tab's pool filter) picks whether one pool's table renders or
+// every pool's table stacks in sequence. Applies to Round Robin only, per
+// Round Robin Standings' original scope — other formats don't have ranking
+// logic yet.
+export default function TournamentStandingsView({ tournament, loading, selectedPool }) {
+  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (!tournament) {
+    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see standings here.</div>;
+  }
+  if (tournament.format !== "roundRobin") {
+    return <div style={styles.placeholderCard}>Standings aren't available for this tournament format yet.</div>;
+  }
+
+  const pools = tournament.pools;
+  const visiblePools = selectedPool === "all" ? pools : pools.filter((p) => p.id === selectedPool);
+
+  return (
+    <div>
+      <div style={styles.standingsHeaderRow}>
+        <SectionLabel>Standings</SectionLabel>
+        {pools.length > 1 && tournament.status === "completed" && (
+          <span style={styles.tournamentCompleteBadge}>Tournament Complete</span>
+        )}
+      </div>
+      {visiblePools.map((pool) => (
+        <PoolStandingsTable key={pool.id} tournament={tournament} pool={pool} showHeading={pools.length > 1} />
+      ))}
       <p style={styles.standingsNote}>
         Ranked by Wins, then Win %, then Point Differential, then Points For. Matches still pending or in progress
         don't count toward a record yet.

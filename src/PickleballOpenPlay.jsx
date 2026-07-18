@@ -275,7 +275,7 @@ export default function PickleballOpenPlay() {
   // pointer to it, never the schedule itself. Regenerating is safe: it
   // creates a brand-new record with a new id rather than overwriting the
   // old one, since nothing (scoring, standings) references match ids yet.
-  const generateTournamentSchedule = async (mode) => {
+  const generateTournamentSchedule = async (mode, poolCount = 1) => {
     setGeneratingSchedule(true);
     setScheduleError("");
     try {
@@ -285,6 +285,7 @@ export default function PickleballOpenPlay() {
         players,
         mode,
         courtsCount: state.courts.length,
+        poolCount,
       });
       await save({ ...state, tournamentId: tournament.id });
     } catch (e) {

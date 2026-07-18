@@ -5,25 +5,34 @@
 // working, tested circle-method engine already shipped in the prior Round
 // Robin Scheduler task. This class adds no new scheduling logic of its own
 // — it only conforms that already-working code to the TournamentEngine
-// interface.
+// interface. As of Round Robin Pool Support, lib/tournament.js calls this
+// once per pool rather than once per tournament — this method itself is
+// unchanged either way, since it already only ever dealt with one flat
+// entrant list.
 //
-// updateMatchResult() is real as of Tournament Match Management: it
-// validates the incoming result, writes it onto the matching
-// TournamentMatch, and rolls the containing round's and the tournament's
-// own status up via lib/tournamentModel.js's computeRoundStatus/
-// computeTournamentStatus (format-agnostic — every format progresses the
-// same way once a match completes).
+// updateMatchResult() is real as of Tournament Match Management, and as of
+// Round Robin Pool Support operates on the containing POOL rather than the
+// whole tournament: it validates the incoming result, writes it onto the
+// matching TournamentMatch, and rolls the containing round's and pool's
+// status up via lib/tournamentModel.js's computeRoundStatus/
+// computePoolStatus (format-agnostic — every format progresses the same way
+// once a match completes), then recomputes the tournament's own status from
+// every pool's status via computeTournamentStatus.
 //
 // getStandings() is real as of Round Robin Standings: it delegates to
 // RoundRobinStandingsService, the same "engine method delegates to a
 // dedicated module" precedent generateSchedule/updateMatchResult already
-// set.
+// set. As of Pool Support it operates on a single named pool (poolId is
+// required) — standings are never combined across independent pools.
 //
-// updateMatchResult() also finalizes the tournament as of Champion
-// Determination: once the status roll-up above lands on "completed", it
-// calls RoundRobinCompletionService.finalizeTournament() on its way out —
-// so the champion/runner-up/third place are stamped automatically the
-// moment the last match is saved, with no separate action required.
+// updateMatchResult() also finalizes a POOL as of Champion Determination /
+// Round Robin Pool Support: once the round-up above lands that pool's own
+// status on "completed", it calls RoundRobinCompletionService.
+// finalizeTournament() on that pool (the service only ever reads
+// entity.entrants/entity.rounds, so a pool satisfies it exactly like a
+// whole tournament used to) — so a pool's champion/runner-up/third place
+// are stamped automatically the moment its own last match is saved, with no
+// separate action required, independently of any other pool's progress.
 //
 // getNextMatches() is still a placeholder — "what's next" logic is out of
 // scope for this task. Returns an inert, clearly-marked placeholder shape
@@ -32,7 +41,7 @@ import { TournamentEngine } from "./TournamentEngine.js";
 import { generateRoundRobinSchedule } from "./RoundRobinScheduler.js";
 import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
 import { RoundRobinCompletionService } from "./RoundRobinCompletionService.js";
-import { findMatch, computeRoundStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
+import { findMatch, computeRoundStatus, computePoolStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
 
 const standingsService = new RoundRobinStandingsService();
 const completionService = new RoundRobinCompletionService();
@@ -47,8 +56,10 @@ export class RoundRobinEngine extends TournamentEngine {
   // result: { scoreA, scoreB, winnerId }
   // returns: the updated Tournament (never mutates the one passed in)
   updateMatchResult(tournament, matchId, result) {
-    if (tournament.status === "completed") {
-      throw new Error("This tournament is already completed — results can't be edited.");
+    const found = findMatch(tournament, matchId);
+    if (!found) throw new Error("Match not found.");
+    if (found.pool.status === "completed") {
+      throw new Error("This pool is already completed — results can't be edited.");
     }
     const { scoreA, scoreB, winnerId } = result;
     if (scoreA === "" || scoreB === "" || scoreA == null || scoreB == null) {
@@ -62,9 +73,6 @@ export class RoundRobinEngine extends TournamentEngine {
     if (!winnerId) {
       throw new Error("Select a winner before saving.");
     }
-
-    const found = findMatch(tournament, matchId);
-    if (!found) throw new Error("Match not found.");
     if (found.match.isBye) throw new Error("Bye matches don't have a result to record.");
     if (winnerId !== found.match.teamA.id && winnerId !== found.match.teamB.id) {
       throw new Error("Winner must be one of this match's two teams.");
@@ -77,21 +85,30 @@ export class RoundRobinEngine extends TournamentEngine {
       status: "completed",
       completedAt: Date.now(),
     };
-    const rounds = tournament.rounds.map((r) => {
-      if (r.roundNumber !== found.round.roundNumber) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? updatedMatch : m));
-      return { ...r, matches, status: computeRoundStatus(matches) };
+    const pools = tournament.pools.map((p) => {
+      if (p.id !== found.pool.id) return p;
+      const rounds = p.rounds.map((r) => {
+        if (r.roundNumber !== found.round.roundNumber) return r;
+        const matches = r.matches.map((m) => (m.id === matchId ? updatedMatch : m));
+        return { ...r, matches, status: computeRoundStatus(matches) };
+      });
+      let nextPool = { ...p, rounds, status: computePoolStatus({ rounds }) };
+      if (nextPool.status === "completed") nextPool = completionService.finalizeTournament(nextPool);
+      return nextPool;
     });
-    let next = { ...tournament, rounds };
+    const next = { ...tournament, pools };
     next.status = computeTournamentStatus(next);
-    if (next.status === "completed") next = completionService.finalizeTournament(next);
     return next;
   }
 
+  // poolId: required — standings are per pool, never combined across
+  // independent pools (that's a future Playoff Qualification concern).
   // returns: StandingsRow[], sorted and ranked — see
   // RoundRobinStandingsService for the shape and default sort rules.
-  getStandings(tournament) {
-    return standingsService.updateAfterMatch(tournament);
+  getStandings(tournament, poolId) {
+    const pool = tournament.pools.find((p) => p.id === poolId);
+    if (!pool) throw new Error("Pool not found.");
+    return standingsService.updateAfterMatch(pool);
   }
 
   getNextMatches(tournament) {
