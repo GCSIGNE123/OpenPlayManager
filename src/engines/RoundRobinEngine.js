@@ -14,14 +14,20 @@
 // computeTournamentStatus (format-agnostic — every format progresses the
 // same way once a match completes).
 //
-// getStandings/getNextMatches are still placeholders — standings
-// calculation and "what's next" logic are explicitly out of scope for this
-// task (separate later FEATURES.md items: Round Robin Standings, Champion
-// Determination). They return an inert, clearly-marked placeholder shape
+// getStandings() is real as of Round Robin Standings: it delegates to
+// RoundRobinStandingsService, the same "engine method delegates to a
+// dedicated module" precedent generateSchedule/updateMatchResult already
+// set.
+//
+// getNextMatches() is still a placeholder — "what's next" logic is out of
+// scope for this task. Returns an inert, clearly-marked placeholder shape
 // rather than throwing.
 import { TournamentEngine } from "./TournamentEngine.js";
 import { generateRoundRobinSchedule } from "./RoundRobinScheduler.js";
+import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
 import { findMatch, computeRoundStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
+
+const standingsService = new RoundRobinStandingsService();
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Not implemented yet — architecture only (Tournament Engine Foundation)." };
 
@@ -73,8 +79,10 @@ export class RoundRobinEngine extends TournamentEngine {
     return next;
   }
 
+  // returns: StandingsRow[], sorted and ranked — see
+  // RoundRobinStandingsService for the shape and default sort rules.
   getStandings(tournament) {
-    return NOT_IMPLEMENTED;
+    return standingsService.updateAfterMatch(tournament);
   }
 
   getNextMatches(tournament) {

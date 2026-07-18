@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
 import { fetchTournament, getTournamentProgress } from "../lib/tournamentModel.js";
-import { saveMatchStart, saveMatchResult } from "../lib/tournament.js";
+import { saveMatchStart, saveMatchResult, getTournamentEngine } from "../lib/tournament.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
+import TournamentStandingsView from "./TournamentStandingsView.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -26,32 +27,39 @@ function OverviewPanel({ tournament, loading }) {
     return <Placeholder>Generate a schedule from the Schedule tab to see tournament progress here.</Placeholder>;
   }
   const progress = getTournamentProgress(tournament);
+  // "Current Leader" only means something once at least one match has
+  // actually been decided — with zero completed matches every entrant is
+  // tied at 0 wins, so standings[0] would just be an arbitrary name, not a
+  // real leader.
+  const leader =
+    progress.completed > 0 && tournament.format === "roundRobin"
+      ? getTournamentEngine(tournament.format).getStandings(tournament)[0]?.label
+      : null;
   return (
     <div>
       <div style={styles.sessionInfoCard}>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Matches</span>
-          <span style={styles.sessionInfoValue}>{progress.total}</span>
+          <span style={styles.sessionInfoLabel}>Total Teams</span>
+          <span style={styles.sessionInfoValue}>{tournament.entrants.length}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Completed</span>
+          <span style={styles.sessionInfoLabel}>Matches Completed</span>
           <span style={styles.sessionInfoValue}>{progress.completed}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Remaining</span>
+          <span style={styles.sessionInfoLabel}>Matches Remaining</span>
           <span style={styles.sessionInfoValue}>{progress.remaining}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Progress</span>
-          <span style={styles.sessionInfoValue}>{progress.percent}%</span>
+          <span style={styles.sessionInfoLabel}>Current Leader</span>
+          <span style={styles.sessionInfoValue}>{leader || "—"}</span>
         </div>
       </div>
       <div style={styles.tournamentProgressTrack}>
         <div style={styles.tournamentProgressFill(progress.percent)} />
       </div>
       <p style={{ ...styles.editHint, marginTop: 10 }}>
-        {tournament.name} — status:{" "}
-        <strong>{tournament.status}</strong>.
+        {tournament.name} — {progress.percent}% complete, status: <strong>{tournament.status}</strong>.
       </p>
     </div>
   );
@@ -153,7 +161,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
         />
       )}
 
-      {tab === "standings" && <Placeholder>Tournament standings. Coming soon.</Placeholder>}
+      {tab === "standings" && <TournamentStandingsView tournament={tournament} loading={loading} />}
 
       {tab === "bracket" && <Placeholder>Elimination bracket view. Coming soon.</Placeholder>}
     </div>
