@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-07-19
+
+### Changed
+- **Session Type Architecture** — Create Session's step order is now: Session name → Number of courts → Session type → Rotation Strategy *or* Tournament Format → Expected games per player (Open Play only) → Register players. "Rotation Mode" is relabeled "Rotation Strategy" in the UI to sit alongside Tournament Format as a peer concept; the underlying stored field is still `rotationMode` (deliberately not renamed — see `PROJECT.md`, avoids touching every rotation engine and preserves old session records). Expected Games per Player now only shows for Open Play sessions. Existing Open Play sessions and all rotation logic are unaffected — verified a legacy session record with no `sessionType`/`tournamentFormat` at all still loads and runs correctly
+
 ## 2026-07-18
 
 ### Added

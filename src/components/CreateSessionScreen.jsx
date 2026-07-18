@@ -59,7 +59,7 @@ export default function CreateSessionScreen({
         Back
       </button>
 
-      <SectionLabel>1. Name your open play</SectionLabel>
+      <SectionLabel>1. Session name</SectionLabel>
       <input
         style={styles.input}
         value={venue}
@@ -67,9 +67,20 @@ export default function CreateSessionScreen({
         placeholder="e.g. Ormoc City Saturday Open Play"
       />
 
+      <SectionLabel>2. Number of courts</SectionLabel>
+      <div style={styles.courtStepper}>
+        <button style={styles.scoreBtn} onClick={() => adjustCourts(-1)} aria-label="fewer courts">
+          <Minus size={14} strokeWidth={3} />
+        </button>
+        <span style={styles.courtStepperCount}>{courts}</span>
+        <button style={styles.scoreBtn} onClick={() => adjustCourts(1)} aria-label="more courts">
+          <Plus size={14} strokeWidth={3} />
+        </button>
+      </div>
+
       {sessionTypes && sessionTypes.length > 0 && (
         <>
-          <SectionLabel>2. Session type</SectionLabel>
+          <SectionLabel>3. Session type</SectionLabel>
           <div style={styles.skillToggle}>
             {sessionTypes.map((t) => (
               <button
@@ -85,20 +96,9 @@ export default function CreateSessionScreen({
         </>
       )}
 
-      <SectionLabel>3. Number of courts</SectionLabel>
-      <div style={styles.courtStepper}>
-        <button style={styles.scoreBtn} onClick={() => adjustCourts(-1)} aria-label="fewer courts">
-          <Minus size={14} strokeWidth={3} />
-        </button>
-        <span style={styles.courtStepperCount}>{courts}</span>
-        <button style={styles.scoreBtn} onClick={() => adjustCourts(1)} aria-label="more courts">
-          <Plus size={14} strokeWidth={3} />
-        </button>
-      </div>
-
       {sessionType !== "tournament" && rotationModes && rotationModes.length > 0 && (
         <>
-          <SectionLabel>4. Rotation mode</SectionLabel>
+          <SectionLabel>4. Rotation strategy</SectionLabel>
           <select
             style={styles.rotationSelect}
             value={rotationMode}
@@ -117,8 +117,9 @@ export default function CreateSessionScreen({
         <>
           <SectionLabel>4. Tournament format</SectionLabel>
           <p style={styles.editHint}>
-            Placeholder only for now — tournament scheduling/brackets aren't implemented yet. The session will still
-            run as a normal continuous-queue Open Play session until that lands.
+            Placeholder only for now — tournament scheduling/brackets aren't implemented yet. Selecting a format just
+            records it on the session; no bracket, seeding, or scoring logic exists until those are built as
+            separate features.
           </p>
           <select
             style={styles.rotationSelect}
@@ -134,17 +135,22 @@ export default function CreateSessionScreen({
         </>
       )}
 
-      <SectionLabel>5. Expected games per player</SectionLabel>
-      <p style={styles.editHint}>
-        How many games each player expects to play this session. Stored with the session — not used anywhere yet.
-      </p>
-      <input
-        type="number"
-        min={1}
-        style={{ ...styles.expectedGamesInput, width: 64 }}
-        value={expectedGamesPerPlayer}
-        onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
-      />
+      {sessionType !== "tournament" && (
+        <>
+          <SectionLabel>5. Expected games per player</SectionLabel>
+          <p style={styles.editHint}>
+            How many games each player expects to play this session. Stored with the session — not used anywhere
+            yet.
+          </p>
+          <input
+            type="number"
+            min={1}
+            style={{ ...styles.expectedGamesInput, width: 64 }}
+            value={expectedGamesPerPlayer}
+            onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
+          />
+        </>
+      )}
 
       <SectionLabel>6. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
