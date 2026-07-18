@@ -9,6 +9,7 @@ import SectionLabel from "./SectionLabel.jsx";
 const STATUS_LABELS = { pending: "Pending", inProgress: "In Progress", completed: "Completed" };
 
 const POOL_COUNT_OPTIONS = [1, 2, 3, 4];
+const ADVANCES_OPTIONS = [1, 2, 3, 4];
 
 // Start Match / Enter Scores / Save Result / Edit Result all live in this
 // one card: "Start Match" (pending) and "Edit Result" (completed) both open
@@ -251,6 +252,8 @@ export default function TournamentScheduleView({
   const [mode, setMode] = useState(() => tournament?.mode ?? "singles");
   const [poolCount, setPoolCount] = useState(() => tournament?.poolCount ?? 1);
   const [customPoolCount, setCustomPoolCount] = useState("");
+  const [advancesPerPool, setAdvancesPerPool] = useState(() => tournament?.advancesPerPool ?? 1);
+  const [customAdvances, setCustomAdvances] = useState("");
   const [expandedRounds, setExpandedRounds] = useState(() => new Set());
 
   // Round 1 of every pool starts expanded, same as the single-pool view
@@ -274,10 +277,24 @@ export default function TournamentScheduleView({
   const isCustomPoolCount = !POOL_COUNT_OPTIONS.includes(poolCount);
   const effectivePoolCount = isCustomPoolCount ? Number(customPoolCount) || 0 : poolCount;
 
+  const isCustomAdvances = !ADVANCES_OPTIONS.includes(advancesPerPool);
+  const effectiveAdvances = isCustomAdvances ? Number(customAdvances) || 0 : advancesPerPool;
+
   const playerCount = Object.keys(state.players || {}).length;
   const tournamentCompleted = tournament?.status === "completed";
+  // distributeEvenly (engines/PoolAssignment.js) always gives the smallest
+  // pool floor(playerCount / poolCount) entrants — mirrored here so the
+  // organizer sees the "exceeds smallest pool" warning before ever hitting
+  // buildAndSaveRoundRobinTournament's own belt-and-suspenders check.
+  const smallestPoolSize = effectivePoolCount >= 1 ? Math.floor(playerCount / effectivePoolCount) : 0;
+  const advancesFitsPools = effectiveAdvances >= 1 && effectiveAdvances <= smallestPoolSize;
   const canGenerate =
-    playerCount >= 2 && effectivePoolCount >= 1 && playerCount >= effectivePoolCount * 2 && !generating && !tournamentCompleted;
+    playerCount >= 2 &&
+    effectivePoolCount >= 1 &&
+    playerCount >= effectivePoolCount * 2 &&
+    advancesFitsPools &&
+    !generating &&
+    !tournamentCompleted;
 
   const pools = tournament?.pools ?? [];
   const visiblePools = selectedPool === "all" ? pools : pools.filter((p) => p.id === selectedPool);
@@ -325,6 +342,32 @@ export default function TournamentScheduleView({
                 onChange={(e) => setCustomPoolCount(e.target.value)}
               />
             )}
+            <p style={styles.dialogLabel}>Teams advancing per pool</p>
+            <div style={styles.skillToggle}>
+              {ADVANCES_OPTIONS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  style={styles.skillToggleBtn(advancesPerPool === n)}
+                  onClick={() => setAdvancesPerPool(n)}
+                >
+                  Top {n}
+                </button>
+              ))}
+              <button type="button" style={styles.skillToggleBtn(isCustomAdvances)} onClick={() => setAdvancesPerPool(-1)}>
+                Custom
+              </button>
+            </div>
+            {isCustomAdvances && (
+              <input
+                type="number"
+                min={1}
+                placeholder="Teams advancing per pool"
+                style={{ ...styles.expectedGamesInput, width: "100%", marginBottom: 12 }}
+                value={customAdvances}
+                onChange={(e) => setCustomAdvances(e.target.value)}
+              />
+            )}
           </>
         )}
         {generateError && <p style={styles.editWarning}>{generateError}</p>}
@@ -332,11 +375,16 @@ export default function TournamentScheduleView({
         {playerCount >= 2 && effectivePoolCount >= 1 && playerCount < effectivePoolCount * 2 && (
           <p style={styles.editWarning}>Need at least 2 players per pool — register more players or choose fewer pools.</p>
         )}
+        {playerCount >= 2 && effectivePoolCount >= 1 && playerCount >= effectivePoolCount * 2 && !advancesFitsPools && (
+          <p style={styles.editWarning}>
+            Teams advancing per pool can't exceed the smallest pool's size ({smallestPoolSize}).
+          </p>
+        )}
         {!tournamentCompleted && (
           <button
             style={{ ...styles.primaryBtn, ...(!canGenerate ? styles.btnDisabled : {}) }}
             disabled={!canGenerate}
-            onClick={() => onGenerate(mode, effectivePoolCount)}
+            onClick={() => onGenerate(mode, effectivePoolCount, effectiveAdvances)}
           >
             {tournament ? <RefreshCw size={16} strokeWidth={2.5} /> : <Users size={16} strokeWidth={2.5} />}
             {generating ? (tournament ? "Regenerating…" : "Generating…") : tournament ? "Regenerate schedule" : "Generate schedule"}

@@ -213,7 +213,17 @@ export function startMatch(tournament, matchId) {
   return next;
 }
 
-export function makeTournament({ name, sessionCode, format = "roundRobin", mode, courtsCount, poolCount = 1, assignmentMethod = "random", pools }) {
+export function makeTournament({
+  name,
+  sessionCode,
+  format = "roundRobin",
+  mode,
+  courtsCount,
+  poolCount = 1,
+  assignmentMethod = "random",
+  pools,
+  advancesPerPool = 1,
+}) {
   const now = Date.now();
   const tournament = {
     id: uid(),
@@ -225,6 +235,14 @@ export function makeTournament({ name, sessionCode, format = "roundRobin", mode,
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
     pools,
+    // Playoff Qualification config — how many of each pool's top finishers
+    // advance once every pool completes. Not itself a result: qualifiers
+    // are pure derived data (see engines/PoolQualificationService.js),
+    // recomputed from this + each pool's standings on every render, same as
+    // Standings already are. Validated by the caller (buildAndSave
+    // RoundRobinTournament) against every pool's actual size before this
+    // runs — this constructor trusts the value it's given.
+    advancesPerPool,
     createdAt: now,
     updatedAt: now,
   };

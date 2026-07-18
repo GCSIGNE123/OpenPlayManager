@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
 import { fetchTournament, getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
 import { saveMatchStart, saveMatchResult, getTournamentEngine } from "../lib/tournament.js";
+import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
+import TournamentQualificationView from "./TournamentQualificationView.jsx";
+
+const qualificationService = new PoolQualificationService();
 
 const MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
 const PODIUM_LABELS = { champion: "Champion", runnerUp: "Runner-up", thirdPlace: "Third Place" };
@@ -44,6 +48,11 @@ function PoolPodium({ pool, showHeading }) {
 function CompletedOverviewPanel({ tournament }) {
   const progress = getTournamentProgress(tournament);
   const latestCompletion = Math.max(...tournament.pools.map((p) => p.completedAt || 0));
+  // Playoff stage is only meaningful once every pool is done (which is
+  // exactly the condition that got us into this panel), so
+  // determineQualifiers is always `ready: true` here.
+  const engine = getTournamentEngine(tournament.format);
+  const qualification = qualificationService.determineQualifiers(tournament, engine);
   return (
     <div>
       <div style={styles.sessionInfoCard}>
@@ -63,6 +72,12 @@ function CompletedOverviewPanel({ tournament }) {
           <span style={styles.sessionInfoLabel}>Completion Time</span>
           <span style={styles.sessionInfoValue}>{formatCompletionTime(latestCompletion)}</span>
         </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Playoff Stage</span>
+          <span style={styles.sessionInfoValue}>
+            {qualification.playoffSize.stage} ({qualification.playoffSize.count})
+          </span>
+        </div>
       </div>
       {tournament.pools.map((pool) => (
         <PoolPodium key={pool.id} pool={pool} showHeading={tournament.pools.length > 1} />
@@ -77,6 +92,7 @@ const TABS = [
   { id: "participants", label: "Participants" },
   { id: "schedule", label: "Schedule" },
   { id: "standings", label: "Standings" },
+  { id: "qualification", label: "Qualification" },
   { id: "bracket", label: "Bracket" },
 ];
 
@@ -214,14 +230,14 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     };
   }, [tournamentId]);
 
-  const handleGenerate = async (mode, poolCount) => {
+  const handleGenerate = async (mode, poolCount, advancesPerPool) => {
     setMatchError("");
     if (tournament?.status === "completed") {
       setMatchError("This tournament is already completed — the schedule can't be regenerated.");
       return;
     }
     setSelectedPool("all");
-    await onGenerate(mode, poolCount);
+    await onGenerate(mode, poolCount, advancesPerPool);
   };
 
   const handleStartMatch = async (matchId) => {
@@ -306,6 +322,8 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
       {tab === "standings" && (
         <TournamentStandingsView tournament={tournament} loading={loading} selectedPool={selectedPool} />
       )}
+
+      {tab === "qualification" && <TournamentQualificationView tournament={tournament} loading={loading} />}
 
       {tab === "bracket" && <Placeholder>Elimination bracket view. Coming soon.</Placeholder>}
     </div>

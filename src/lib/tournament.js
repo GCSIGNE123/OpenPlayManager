@@ -28,9 +28,18 @@ export async function buildAndSaveRoundRobinTournament({
   courtsCount,
   poolCount = 1,
   assignmentMethod = "random",
+  advancesPerPool = 1,
 }) {
   const entrants = buildEntrants(players, mode);
   const groups = assignPools(entrants, poolCount, assignmentMethod);
+  // "Teams Advancing Per Pool" can't exceed the smallest pool's size — the
+  // UI already blocks this before Generate is even clickable, this is the
+  // belt to that suspenders (same pattern as the "2 players per pool"
+  // check Round Robin Pool Support added).
+  const smallestPool = Math.min(...groups.map((g) => g.length));
+  if (advancesPerPool > smallestPool) {
+    throw new Error(`Teams Advancing Per Pool (${advancesPerPool}) can't exceed the smallest pool's size (${smallestPool}).`);
+  }
   const pools = groups.map((group, i) =>
     makeTournamentPool({
       label: poolLabel(i),
@@ -38,7 +47,16 @@ export async function buildAndSaveRoundRobinTournament({
       rounds: generateRoundRobinSchedule({ entrants: group, courtsCount }),
     })
   );
-  const tournament = makeTournament({ sessionCode, format: "roundRobin", mode, courtsCount, poolCount, assignmentMethod, pools });
+  const tournament = makeTournament({
+    sessionCode,
+    format: "roundRobin",
+    mode,
+    courtsCount,
+    poolCount,
+    assignmentMethod,
+    pools,
+    advancesPerPool,
+  });
   return saveTournament(tournament);
 }
 
