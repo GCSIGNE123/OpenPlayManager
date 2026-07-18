@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
-import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, STORAGE_PREFIX, defaultState, emptyCourt } from "./lib/constants.js";
+import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt } from "./lib/constants.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -179,7 +179,15 @@ export default function PickleballOpenPlay() {
     }
   };
 
-  const startSession = async (venue, courtsCount, roster, rotationMode = "continuous", expectedGamesPerPlayer = 6) => {
+  const startSession = async (
+    venue,
+    courtsCount,
+    roster,
+    rotationMode = "continuous",
+    expectedGamesPerPlayer = 6,
+    sessionType = "openPlay",
+    tournamentFormat = null
+  ) => {
     setCreating(true);
     setCreateError("");
     try {
@@ -217,6 +225,8 @@ export default function PickleballOpenPlay() {
         queueIds: [],
         nextMatchups: [],
         matchHistory: [],
+        sessionType,
+        tournamentFormat,
         rotationMode,
         expectedGamesPerPlayer,
         updatedAt: Date.now(),
@@ -987,6 +997,8 @@ export default function PickleballOpenPlay() {
           creating={creating}
           createError={createError}
           rotationModes={ROTATION_MODES}
+          sessionTypes={SESSION_TYPES}
+          tournamentFormats={TOURNAMENT_FORMATS}
         />
       )}
 

@@ -30,6 +30,25 @@ export const ROTATION_MODES = [
   { value: "progressiveSkill", label: "Progressive Skill Rotation" },
 ];
 
+// chosen once at Create Session, alongside (and gating) Rotation Mode — see
+// CreateSessionScreen.jsx. "tournament" is architecture-only for now: it
+// stores a tournamentFormat but no bracket/standings logic exists yet, so a
+// tournament session today still just runs as a normal continuous-queue
+// Open Play session under the hood.
+export const SESSION_TYPES = [
+  { value: "openPlay", label: "Open Play" },
+  { value: "tournament", label: "Tournament" },
+];
+
+// placeholder options only — no bracket generation, round-robin scheduling,
+// or elimination logic reads this field yet. Selecting one just records the
+// organizer's intent on the session for a future tournament-mode feature.
+export const TOURNAMENT_FORMATS = [
+  { value: "roundRobin", label: "Round Robin" },
+  { value: "singleElimination", label: "Single Elimination" },
+  { value: "doubleElimination", label: "Double Elimination" },
+];
+
 // id -> {
 //   id, name, photo, skill ('beginner' | 'intermediate'), checkedIn, skipped,
 //   games, wins, losses, streak, lastResult, pointsFor, pointsAgainst,
@@ -44,6 +63,8 @@ export const defaultState = {
   queueIds: [],
   nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
+  sessionType: "openPlay", // see SESSION_TYPES
+  tournamentFormat: null, // see TOURNAMENT_FORMATS — only set when sessionType is "tournament"; architecture-only, no tournament logic reads this yet
   rotationMode: "continuous", // see ROTATION_MODES
   expectedGamesPerPlayer: 6, // Progressive Skill Rotation only — organizer-configurable, drives session-progress/phase calc, see lib/progressiveSkillPhase.js
   progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js

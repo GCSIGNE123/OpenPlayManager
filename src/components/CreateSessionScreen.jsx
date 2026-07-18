@@ -6,10 +6,20 @@ import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
 
-export default function CreateSessionScreen({ onStart, onBack, creating, createError, rotationModes }) {
+export default function CreateSessionScreen({
+  onStart,
+  onBack,
+  creating,
+  createError,
+  rotationModes,
+  sessionTypes,
+  tournamentFormats,
+}) {
   const [venue, setVenue] = useState("Ormoc City Pickleball — Open Play");
   const [courts, setCourts] = useState(4);
+  const [sessionType, setSessionType] = useState(sessionTypes?.[0]?.value ?? "openPlay");
   const [rotationMode, setRotationMode] = useState(rotationModes?.[0]?.value ?? "continuous");
+  const [tournamentFormat, setTournamentFormat] = useState(tournamentFormats?.[0]?.value ?? "roundRobin");
   const [expectedGamesPerPlayer, setExpectedGamesPerPlayer] = useState(6);
   const [roster, setRoster] = useState([]);
   const [nameInput, setNameInput] = useState("");
@@ -57,7 +67,25 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         placeholder="e.g. Ormoc City Saturday Open Play"
       />
 
-      <SectionLabel>2. Number of courts</SectionLabel>
+      {sessionTypes && sessionTypes.length > 0 && (
+        <>
+          <SectionLabel>2. Session type</SectionLabel>
+          <div style={styles.skillToggle}>
+            {sessionTypes.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                style={styles.skillToggleBtn(sessionType === t.value)}
+                onClick={() => setSessionType(t.value)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <SectionLabel>3. Number of courts</SectionLabel>
       <div style={styles.courtStepper}>
         <button style={styles.scoreBtn} onClick={() => adjustCourts(-1)} aria-label="fewer courts">
           <Minus size={14} strokeWidth={3} />
@@ -68,9 +96,9 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         </button>
       </div>
 
-      {rotationModes && rotationModes.length > 0 && (
+      {sessionType !== "tournament" && rotationModes && rotationModes.length > 0 && (
         <>
-          <SectionLabel>3. Rotation mode</SectionLabel>
+          <SectionLabel>4. Rotation mode</SectionLabel>
           <select
             style={styles.rotationSelect}
             value={rotationMode}
@@ -85,7 +113,28 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         </>
       )}
 
-      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "4" : "3"}. Expected games per player</SectionLabel>
+      {sessionType === "tournament" && tournamentFormats && tournamentFormats.length > 0 && (
+        <>
+          <SectionLabel>4. Tournament format</SectionLabel>
+          <p style={styles.editHint}>
+            Placeholder only for now — tournament scheduling/brackets aren't implemented yet. The session will still
+            run as a normal continuous-queue Open Play session until that lands.
+          </p>
+          <select
+            style={styles.rotationSelect}
+            value={tournamentFormat}
+            onChange={(e) => setTournamentFormat(e.target.value)}
+          >
+            {tournamentFormats.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <SectionLabel>5. Expected games per player</SectionLabel>
       <p style={styles.editHint}>
         How many games each player expects to play this session. Stored with the session — not used anywhere yet.
       </p>
@@ -97,7 +146,7 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
       />
 
-      <SectionLabel>{rotationModes && rotationModes.length > 0 ? "5" : "4"}. Register players joining today ({roster.length})</SectionLabel>
+      <SectionLabel>6. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
         This is just the guest list — everyone still needs to Check In once they're actually at the courts.
         Skill level is used to pair a beginner with an intermediate player as teammates.
@@ -168,7 +217,15 @@ export default function CreateSessionScreen({ onStart, onBack, creating, createE
         style={{ ...styles.primaryBtn, ...styles.startBtn, ...(!canStart ? styles.btnDisabled : {}) }}
         onClick={() =>
           canStart &&
-          onStart(venue.trim(), courts, roster, rotationMode, Math.max(1, Number(expectedGamesPerPlayer) || 1))
+          onStart(
+            venue.trim(),
+            courts,
+            roster,
+            rotationMode,
+            Math.max(1, Number(expectedGamesPerPlayer) || 1),
+            sessionType,
+            sessionType === "tournament" ? tournamentFormat : null
+          )
         }
         disabled={!canStart}
       >
