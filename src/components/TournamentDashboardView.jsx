@@ -25,6 +25,7 @@ import TournamentQualificationView from "./TournamentQualificationView.jsx";
 import TournamentBracketView from "./TournamentBracketView.jsx";
 import TournamentCourtsView from "./TournamentCourtsView.jsx";
 import TournamentSettingsView from "./TournamentSettingsView.jsx";
+import TournamentReportsView from "./TournamentReportsView.jsx";
 
 const qualificationService = new PoolQualificationService();
 const MATCH_FORMAT_LABELS = Object.fromEntries(MATCH_FORMATS.map((f) => [f.value, f.label]));
@@ -126,6 +127,7 @@ const TABS = [
   { id: "qualification", label: "Qualification" },
   { id: "bracket", label: "Bracket" },
   { id: "courts", label: "Courts" },
+  { id: "reports", label: "Reports" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -517,6 +519,8 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onStartPlayoffMatch={handlePlayoffStartMatch}
         />
       )}
+
+      {tab === "reports" && <TournamentReportsView tournament={tournament} loading={loading} />}
 
       {tab === "settings" && (
         <TournamentSettingsView

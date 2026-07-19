@@ -85,7 +85,11 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Bracket Generator
 - [ ] Seeding
 - [ ] Tournament Standings
-- [ ] Tournament Reports
+- [x] Tournament Reports
+- [x] PDF Export
+- [x] CSV Export
+- [ ] Excel Export
+- [ ] Email Reports
 
 ## 🗄️ Player Database
 
