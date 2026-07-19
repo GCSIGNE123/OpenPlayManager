@@ -101,6 +101,13 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Club Branding
 - [ ] Theme Customization
 
+## 🔐 Access Control
+
+- [x] Role-Based Access Control
+- [ ] Multi-Club Management
+- [ ] Custom Roles
+- [ ] Enterprise Edition
+
 ## 🗄️ Player Database
 
 - [x] Player Database Architecture

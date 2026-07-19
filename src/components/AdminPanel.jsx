@@ -5,6 +5,7 @@ import SectionLabel from "./SectionLabel.jsx";
 
 export default function AdminPanel({
   onBack,
+  onManageUsers,
   generateAccessCode,
   generating,
   recentCodes,
@@ -31,6 +32,12 @@ export default function AdminPanel({
       <button style={styles.backBtn} onClick={onBack}>
         <ArrowLeft size={14} strokeWidth={2.5} />
         Back
+      </button>
+
+      <SectionLabel>User Management</SectionLabel>
+      <p style={styles.editHint}>Manage staff/organizer accounts, roles, and access — see Role-Based Access Control.</p>
+      <button type="button" style={styles.secondaryBtn} onClick={onManageUsers}>
+        Manage users →
       </button>
 
       <SectionLabel>Sell access</SectionLabel>

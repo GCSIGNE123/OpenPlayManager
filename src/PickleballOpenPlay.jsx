@@ -34,9 +34,10 @@ import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import TournamentTemplatesScreen from "./components/TournamentTemplatesScreen.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
+import UserManagementScreen from "./components/UserManagementScreen.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -1035,6 +1036,10 @@ export default function PickleballOpenPlay() {
 
       {screen === "templates" && <TournamentTemplatesScreen onBack={goToLanding} />}
 
+      {screen === "users" && adminAuthed && (
+        <UserManagementScreen onBack={() => setScreen("admin")} />
+      )}
+
       {screen === "portal" && (
         <PlayerPortalScreen
           initialCode={portalCode}
@@ -1069,6 +1074,7 @@ export default function PickleballOpenPlay() {
       {screen === "admin" && adminAuthed && (
         <AdminPanel
           onBack={goToLanding}
+          onManageUsers={() => setScreen("users")}
           generateAccessCode={generateAccessCode}
           generating={generating}
           recentCodes={recentCodes}
