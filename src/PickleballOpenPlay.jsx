@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Copy, LogOut, Users } from "lucide-react";
+import { Copy, LogOut, Users, Tv } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt } from "./lib/constants.js";
 import {
@@ -29,11 +29,31 @@ import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
+import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display
   const [sessionCode, setSessionCode] = useState(null);
+  // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
+  // above so a second device can land directly on Display Mode via a
+  // `?display=CODE` URL without ever going through Create/Join at all.
+  // When launched from within an already-loaded session instead (the "TV
+  // Display" header button), this is just set to the same sessionCode.
+  const [displayCode, setDisplayCode] = useState(null);
+
+  // A `?display=CODE` URL param jumps straight into read-only Display Mode
+  // — the only way to get a second browser (the actual TV/projector) onto
+  // a session without typing a join code into the normal landing flow.
+  // Still entirely local: no new sharing/QR infrastructure, just reading
+  // this tab's own URL once on mount.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("display");
+    if (code) {
+      setDisplayCode(code.trim().toUpperCase());
+      setScreen("display");
+    }
+  }, []);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
@@ -1034,6 +1054,10 @@ export default function PickleballOpenPlay() {
         />
       )}
 
+      {screen === "display" && displayCode && (
+        <TournamentDisplayView sessionCode={displayCode} onExit={() => setScreen(sessionCode ? "app" : "landing")} />
+      )}
+
       {screen === "app" && (() => {
         const waitingPlayers = state.queueIds.map((id) => state.players[id]).filter(Boolean);
         const registeredNotHere = Object.values(state.players).filter((p) => !p.checkedIn);
@@ -1060,6 +1084,19 @@ export default function PickleballOpenPlay() {
                     <span style={styles.dot(openCourtsCount > 0)} />
                     <span>{openCourtsCount} court{openCourtsCount === 1 ? "" : "s"} open</span>
                   </div>
+                  {state.sessionType === "tournament" && (
+                    <button
+                      style={styles.leaveBtn}
+                      onClick={() => {
+                        setDisplayCode(sessionCode);
+                        setScreen("display");
+                      }}
+                      aria-label="TV display mode"
+                      title="Open TV Display Mode"
+                    >
+                      <Tv size={14} strokeWidth={2.5} />
+                    </button>
+                  )}
                   <button style={styles.leaveBtn} onClick={leaveSession} aria-label="switch session" title="Switch session">
                     <LogOut size={14} strokeWidth={2.5} />
                   </button>

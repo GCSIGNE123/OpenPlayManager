@@ -61,6 +61,10 @@ Do not implement multiple unrelated features in a single task.
 - [x] Winner Advancement
 - [x] Tournament Court Assignment
 - [x] Match Queue
+- [x] Tournament Display Mode
+- [ ] Public Live Sharing
+- [ ] QR Code Access
+- [ ] Remote Score Entry
 - [ ] Court Optimization
 - [ ] Referee Assignment
 - [ ] Bronze Match
