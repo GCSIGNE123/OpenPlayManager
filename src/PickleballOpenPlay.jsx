@@ -35,9 +35,10 @@ import TournamentTemplatesScreen from "./components/TournamentTemplatesScreen.js
 import DeveloperView from "./components/DeveloperView.jsx";
 import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 import UserManagementScreen from "./components/UserManagementScreen.jsx";
+import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -1024,6 +1025,7 @@ export default function PickleballOpenPlay() {
           onDeveloper={() => setScreen("developer")}
           onTemplates={() => setScreen("templates")}
           onPlayerPortal={() => setScreen("portal")}
+          onLeagues={() => setScreen("leagues")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1039,6 +1041,8 @@ export default function PickleballOpenPlay() {
       {screen === "users" && adminAuthed && (
         <UserManagementScreen onBack={() => setScreen("admin")} />
       )}
+
+      {screen === "leagues" && <LeagueManagerScreen onBack={goToLanding} />}
 
       {screen === "portal" && (
         <PlayerPortalScreen

@@ -6,6 +6,10 @@ export const TEMPLATE_PREFIX = "opl-template-"; // one KV record per custom tour
 export const TEMPLATE_DEFAULT_KEY = "opl-template-default"; // singleton record holding just { templateId } — lets a non-persisted built-in template be marked default without becoming a mutable DB row
 export const USER_PREFIX = "opl-user-"; // one KV record per RBAC user, shared — see lib/userDatabase.js
 export const ROLE_PREFIX = "opl-role-"; // one KV record per CUSTOM role, shared — see engines/Role.js. Built-in roles are NOT stored here (static in-memory, always available, can't be edited/deleted), same precedent as TEMPLATE_PREFIX
+export const LEAGUE_PREFIX = "opl-league-"; // one KV record per League (the recurring club-level container, not a specific season), shared — see lib/leagueModel.js
+export const LEAGUE_SEASON_PREFIX = "opl-league-season-"; // one KV record per LeagueSeason — internally Tournament-shaped (pools/courts/status) so existing tournament engines/services work on it unmodified, see lib/leagueModel.js's header comment
+
+export const SKILL_DIVISIONS = ["Beginner", "Intermediate", "Advanced", "Open"]; // default suggested division names — a League Season can use any of these or a custom name; "future divisions configurable" just means any label works, not a separate catalog to maintain
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts
 export const ADMIN_PIN = "918273"; // demo-only gate — the organizer's PIN for generating access codes
 export const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — easy to read aloud

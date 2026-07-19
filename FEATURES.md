@@ -108,6 +108,13 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Custom Roles
 - [ ] Enterprise Edition
 
+## 📅 League Management
+
+- [x] League Management
+- [ ] Team Leagues
+- [ ] League Playoffs
+- [ ] Promotion/Relegation
+
 ## 🗄️ Player Database
 
 - [x] Player Database Architecture
