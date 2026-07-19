@@ -213,6 +213,19 @@ export function startMatch(tournament, matchId) {
   return next;
 }
 
+// ---- Tournament Court Assignment & Match Queue ----
+// A Court is pure metadata (name + status) — which match, if any, is
+// currently "on" a given court is deliberately NOT tracked here as a
+// separate field. It's derived instead (see CourtAssignmentService.js):
+// a court is occupied exactly when some non-completed match has
+// `match.court === court.number`. That's what makes freeing a court when a
+// match finishes automatic and bug-free — it happens as a side effect of
+// RoundRobinEngine/PlayoffEngine's existing status transitions, with no new
+// code needed to keep a second "current match" field in sync.
+export function makeCourt(number, name) {
+  return { id: uid(), number, name: name || `Court ${number}`, status: "available" }; // 'available' | 'maintenance'
+}
+
 export function makeTournament({
   name,
   sessionCode,
@@ -235,6 +248,13 @@ export function makeTournament({
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
     pools,
+    // Live court registry — seeded 1..courtsCount, independently editable
+    // afterward (rename, add, remove, mark under maintenance) via
+    // lib/tournament.js's court-management helpers. Matches no longer come
+    // pre-assigned a court at generation time (see RoundRobinScheduler /
+    // SingleEliminationBracketGenerator) — CourtAssignmentService is the
+    // only thing that sets match.court now.
+    courts: Array.from({ length: courtsCount }, (_, i) => makeCourt(i + 1)),
     // Playoff Qualification config — how many of each pool's top finishers
     // advance once every pool completes. Not itself a result: qualifiers
     // are pure derived data (see engines/PoolQualificationService.js),

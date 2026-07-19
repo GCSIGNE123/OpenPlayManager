@@ -73,7 +73,7 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
   return (
     <div style={{ ...styles.historyMatchCard, ...(isCompleted ? styles.matchCompletedCard : {}) }}>
       <div style={styles.historyMatchHead}>
-        <span style={styles.courtBadge}>COURT {match.court}</span>
+        <span style={styles.courtBadge}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
         <span style={styles.matchStatusBadge(match.status)}>{STATUS_LABELS[match.status]}</span>
       </div>
 

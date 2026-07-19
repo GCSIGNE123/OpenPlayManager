@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
 import { fetchTournament, getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
-import { saveMatchStart, saveMatchResult, savePlayoffMatchStart, savePlayoffMatchResult, getTournamentEngine } from "../lib/tournament.js";
+import {
+  saveMatchStart,
+  saveMatchResult,
+  savePlayoffMatchStart,
+  savePlayoffMatchResult,
+  saveCourtAssignment,
+  saveCourtRelease,
+  saveCourtReassignment,
+  saveAddCourt,
+  saveRemoveCourt,
+  saveSetCourtStatus,
+  getTournamentEngine,
+} from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 import TournamentQualificationView from "./TournamentQualificationView.jsx";
 import TournamentBracketView from "./TournamentBracketView.jsx";
+import TournamentCourtsView from "./TournamentCourtsView.jsx";
 
 const qualificationService = new PoolQualificationService();
 
@@ -107,6 +120,7 @@ const TABS = [
   { id: "standings", label: "Standings" },
   { id: "qualification", label: "Qualification" },
   { id: "bracket", label: "Bracket" },
+  { id: "courts", label: "Courts" },
 ];
 
 // Static placeholder panel — no data, no logic. Participants/Bracket are
@@ -219,6 +233,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   const [tournament, setTournament] = useState(null);
   const [loading, setLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
+  const [courtError, setCourtError] = useState("");
   const [selectedPool, setSelectedPool] = useState("all");
 
   useEffect(() => {
@@ -303,6 +318,76 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Tournament Court Assignment & Match Queue — same "call the lib
+  // function, setTournament(updated)" shape as every other handler above,
+  // now routed through CourtAssignmentService (via lib/tournament.js's
+  // saveCourt* helpers).
+  const handleAssignMatch = async (matchId, courtNumber) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveCourtAssignment(tournament, matchId, courtNumber);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleReleaseCourt = async (courtNumber) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveCourtRelease(tournament, courtNumber);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleReassignMatch = async (matchId, fromCourtNumber, toCourtNumber) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveCourtReassignment(tournament, matchId, fromCourtNumber, toCourtNumber);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleAddCourt = async (name) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveAddCourt(tournament, name);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleRemoveCourt = async (courtId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveRemoveCourt(tournament, courtId);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleSetCourtStatus = async (courtId, status) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveSetCourtStatus(tournament, courtId, status);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
   const pools = tournament?.pools ?? [];
 
   return (
@@ -373,6 +458,22 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           matchError={matchError}
           onStartMatch={handlePlayoffStartMatch}
           onSaveResult={handlePlayoffSaveResult}
+        />
+      )}
+
+      {tab === "courts" && (
+        <TournamentCourtsView
+          tournament={tournament}
+          loading={loading}
+          courtError={courtError}
+          onAssignMatch={handleAssignMatch}
+          onReleaseCourt={handleReleaseCourt}
+          onReassignMatch={handleReassignMatch}
+          onAddCourt={handleAddCourt}
+          onRemoveCourt={handleRemoveCourt}
+          onSetCourtStatus={handleSetCourtStatus}
+          onStartPoolMatch={handleStartMatch}
+          onStartPlayoffMatch={handlePlayoffStartMatch}
         />
       )}
     </div>

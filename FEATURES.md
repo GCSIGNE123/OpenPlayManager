@@ -59,6 +59,10 @@ Do not implement multiple unrelated features in a single task.
 - [x] Bracket Generation
 - [x] Playoff Match Management
 - [x] Winner Advancement
+- [x] Tournament Court Assignment
+- [x] Match Queue
+- [ ] Court Optimization
+- [ ] Referee Assignment
 - [ ] Bronze Match
 - [ ] Consolation Bracket
 - [ ] Double Elimination Tournament

@@ -27,13 +27,20 @@ function rotate(arr) {
   return [fixed, ...rest];
 }
 
-// Generates every round of a round-robin schedule for `entrants`, assigning
-// courts by cycling 1..courtsCount within each round. If `entrants.length`
-// is odd, a synthetic BYE is added so the circle method's even-count
-// requirement is met — the real entrant paired against it that round gets a
-// recorded bye match (isBye: true) rather than being silently dropped, and
-// the circle method's own symmetry guarantees each real entrant draws the
-// BYE in exactly one round.
+// Generates every round of a round-robin schedule for `entrants`. If
+// `entrants.length` is odd, a synthetic BYE is added so the circle method's
+// even-count requirement is met — the real entrant paired against it that
+// round gets a recorded bye match (isBye: true) rather than being silently
+// dropped, and the circle method's own symmetry guarantees each real
+// entrant draws the BYE in exactly one round.
+//
+// As of Tournament Court Assignment & Match Queue, matches no longer come
+// out of here with a court pre-assigned (the old cycling 1..courtsCount is
+// gone) — every real match starts with court: null. Court assignment is
+// now a live, explicit organizer action via CourtAssignmentService, not
+// something baked into schedule generation; `courtsCount` is kept as a
+// parameter purely for API compatibility with existing callers (it's
+// unused here now).
 export function generateRoundRobinSchedule({ entrants, courtsCount }) {
   if (entrants.length < 2) return [];
 
@@ -46,7 +53,6 @@ export function generateRoundRobinSchedule({ entrants, courtsCount }) {
 
   for (let roundNumber = 1; roundNumber <= totalRounds; roundNumber++) {
     const roundMatches = [];
-    let courtCursor = 0;
 
     for (let i = 0; i < half; i++) {
       const left = arrangement[i];
@@ -58,9 +64,7 @@ export function generateRoundRobinSchedule({ entrants, courtsCount }) {
       if (isBye) {
         roundMatches.push(makeMatch({ round: roundNumber, court: null, teamA, teamB: null, isBye: true }));
       } else {
-        courtCursor += 1;
-        const court = ((courtCursor - 1) % Math.max(courtsCount, 1)) + 1;
-        roundMatches.push(makeMatch({ round: roundNumber, court, teamA, teamB }));
+        roundMatches.push(makeMatch({ round: roundNumber, court: null, teamA, teamB }));
       }
     }
 
