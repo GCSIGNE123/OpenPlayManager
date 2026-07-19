@@ -1,15 +1,14 @@
 import { LogIn, Plus } from "lucide-react";
 import { styles } from "../styles.js";
+import { APP_NAME, TAGLINE, FOOTER_TEXT } from "../lib/brand.js";
 
 export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, onPlayerPortal, joinCode, setJoinCode, handleJoin, joinError, joining }) {
   return (
     <div style={styles.landingWrap}>
       <div style={styles.landingHero}>
         <div style={styles.kicker}>ORMOC CITY, LEYTE</div>
-        <h1 style={styles.landingTitle}>Pickleball Open Play Manager</h1>
-        <p style={styles.landingSub}>
-          Run check-ins, auto-matchmaking, and live scores for your open play sessions.
-        </p>
+        <h1 style={styles.landingTitle}>{APP_NAME}</h1>
+        <p style={styles.landingSub}>{TAGLINE}</p>
       </div>
       <div style={styles.landingCards}>
         <div style={styles.landingCard}>
@@ -58,6 +57,7 @@ export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTempla
       <button style={styles.adminLink} onClick={onDeveloper}>
         Developer? Run the rotation simulator →
       </button>
+      <footer style={styles.footer}>{FOOTER_TEXT}</footer>
     </div>
   );
 }

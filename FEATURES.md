@@ -94,6 +94,13 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Player Login
 - [ ] Messaging
 
+## 🎨 Branding
+
+- [x] Pickleball King Branding
+- [ ] White Label Support
+- [ ] Club Branding
+- [ ] Theme Customization
+
 ## 🗄️ Player Database
 
 - [x] Player Database Architecture

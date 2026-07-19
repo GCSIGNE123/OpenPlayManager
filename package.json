@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Ormoc City Pickleball Open Play Manager — check-ins, auto-matchmaking, live scoring, and standings.",
+  "description": "PickleKing — everything a pickleball club needs in one platform. Check-ins, auto-matchmaking, live scoring, standings, and tournaments.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -17,11 +17,12 @@ export default defineConfig({
         "favicon-32x32.png",
         "apple-touch-icon.png",
       ],
+      // keep in sync with src/lib/brand.js (APP_NAME/TAGLINE) — vite.config.js
+      // runs outside the app bundle, so this is a second duplicate of it
       manifest: {
-        name: "CONNECT.PH Open Play Manager",
-        short_name: "Open Play",
-        description:
-          "Run check-ins, auto-matchmaking, and live scores for pickleball open play sessions. A CONNECT.PH product.",
+        name: "PickleKing",
+        short_name: "PickleKing",
+        description: "Everything a pickleball club needs in one platform. Powered by CONNECT.PH.",
         start_url: "/",
         scope: "/",
         display: "standalone",

@@ -1,4 +1,4 @@
--- Open Play Manager — Supabase schema
+-- PickleKing — Supabase schema
 -- -----------------------------------------------------------------------
 -- Run this once in the Supabase SQL editor (Project → SQL Editor → New query)
 -- for a fresh project. It creates the single key/value table the app uses
@@ -19,7 +19,7 @@ create table if not exists public.opl_kv (
 );
 
 comment on table public.opl_kv is
-  'Generic key/value store backing Open Play Manager sessions and access codes. Replaces the localStorage shim in src/storage.js.';
+  'Generic key/value store backing PickleKing sessions and access codes. Replaces the localStorage shim in src/storage.js.';
 
 -- Row Level Security
 -- -----------------------------------------------------------------------

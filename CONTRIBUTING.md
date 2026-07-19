@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for working on Open Play Manager. This doc covers how to get set up, how the codebase is organized day-to-day, and the Git workflow we use. For a description of the architecture itself, see [PROJECT.md](PROJECT.md).
+Thanks for working on PickleKing. This doc covers how to get set up, how the codebase is organized day-to-day, and the Git workflow we use. For a description of the architecture itself, see [PROJECT.md](PROJECT.md).
 
 ## Prerequisites
 

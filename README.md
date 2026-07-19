@@ -1,6 +1,6 @@
-# Open Play Manager — Ormoc City Pickleball
+# PickleKing
 
-A web app for running pickleball open plays: session check-in with player photos, automatic doubles matchmaking (winners play winners, losers play losers), live scoring by court, standings, and a paid access-code gate for creating new sessions.
+Everything a pickleball club needs in one platform. A web app for running pickleball open plays and tournaments: session check-in with player photos, automatic doubles matchmaking (winners play winners, losers play losers), live scoring by court, standings, a full Tournament Manager (Round Robin, playoffs, brackets, reports), a read-only Player Portal, and a paid access-code gate for creating new sessions.
 
 This started as a Claude.ai artifact prototype and has been packaged here as a standalone Vite + React project backed by [Supabase](https://supabase.com) for storage and real-time sync.
 

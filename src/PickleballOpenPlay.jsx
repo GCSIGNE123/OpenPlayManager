@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users, Tv } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
+import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
 import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt } from "./lib/constants.js";
 import {
   findUniqueAccessCode,
@@ -1105,7 +1106,7 @@ export default function PickleballOpenPlay() {
             <header style={styles.header}>
               <div style={styles.headerInner}>
                 <div>
-                  <div style={styles.kickerOnDark}>OPEN PLAY MANAGER - POWERED BY CONNECTPH</div>
+                  <div style={styles.kickerOnDark}>{APP_NAME.toUpperCase()} · {FOOTER_TEXT.toUpperCase()}</div>
                   <h1 style={styles.title}>{state.venue}</h1>
                 </div>
                 <div style={styles.headerStats}>
@@ -1259,6 +1260,8 @@ export default function PickleballOpenPlay() {
             <footer style={styles.footer}>
               Scores sync live across everyone viewing this session. Share code{" "}
               <strong>{sessionCode}</strong> so others can join this session.
+              <br />
+              {FOOTER_TEXT}
             </footer>
           </>
         );
