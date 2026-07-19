@@ -32,9 +32,10 @@ import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import TournamentTemplatesScreen from "./components/TournamentTemplatesScreen.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
+import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -53,6 +54,19 @@ export default function PickleballOpenPlay() {
     if (code) {
       setDisplayCode(code.trim().toUpperCase());
       setScreen("display");
+    }
+  }, []);
+
+  // `?portal=CODE` mirrors the `?display=CODE` precedent above — a player
+  // who's been sent a direct link lands straight in the Player Portal's
+  // session-code-already-filled state, skipping the landing page's manual
+  // entry box (see PlayerPortalScreen's `initialCode` prop).
+  const [portalCode, setPortalCode] = useState(null);
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("portal");
+    if (code) {
+      setPortalCode(code.trim().toUpperCase());
+      setScreen("portal");
     }
   }, []);
   const [joinCode, setJoinCode] = useState("");
@@ -1007,6 +1021,7 @@ export default function PickleballOpenPlay() {
           onAdmin={() => setScreen("admin")}
           onDeveloper={() => setScreen("developer")}
           onTemplates={() => setScreen("templates")}
+          onPlayerPortal={() => setScreen("portal")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1018,6 +1033,16 @@ export default function PickleballOpenPlay() {
       {screen === "developer" && <DeveloperView onBack={goToLanding} />}
 
       {screen === "templates" && <TournamentTemplatesScreen onBack={goToLanding} />}
+
+      {screen === "portal" && (
+        <PlayerPortalScreen
+          initialCode={portalCode}
+          onExit={() => {
+            setPortalCode(null);
+            goToLanding();
+          }}
+        />
+      )}
 
       {screen === "access" && (
         <AccessScreen

@@ -90,6 +90,9 @@ Do not implement multiple unrelated features in a single task.
 - [x] CSV Export
 - [ ] Excel Export
 - [ ] Email Reports
+- [x] Player Portal
+- [ ] Player Login
+- [ ] Messaging
 
 ## 🗄️ Player Database
 
