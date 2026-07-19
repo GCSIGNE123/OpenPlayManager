@@ -7,6 +7,7 @@
 // never be silently edited, corrupted, or deleted.
 import { uid } from "../lib/random.js";
 import { TEMPLATE_PREFIX, TEMPLATE_DEFAULT_KEY } from "../lib/constants.js";
+import { defaultMatchScoringRules } from "./TournamentSettings.js";
 
 // TournamentTemplate = {
 //   id, name, isBuiltIn (bool),
@@ -16,11 +17,13 @@ import { TEMPLATE_PREFIX, TEMPLATE_DEFAULT_KEY } from "../lib/constants.js";
 //   mode ('singles' | 'doubles'), courtsCount, poolCount, assignmentMethod
 //     (see engines/PoolAssignment.js), advancesPerPool ("Teams Advancing
 //     Per Pool" — the Playoff Qualification config),
-//   matchScoringRules ({ pointsToWin, winBy, bestOf }) — captured for
-//     reference/future use only; nothing in this app enforces scoring
-//     rules yet, so this pre-fills nothing today, same as `seed`/`status`
-//     on a Participant carried through as a placeholder for a later
-//     feature rather than left out entirely,
+//   matchScoringRules ({ matchFormat, winningScore, winByTwo } — see
+//     engines/TournamentSettings.js, the same shape Tournament Settings'
+//     Match Rules section edits) — captured for reference/future use only;
+//     nothing in this app enforces scoring rules yet, so this pre-fills
+//     nothing today, same as `seed`/`status` on a Participant carried
+//     through as a placeholder for a later feature rather than left out
+//     entirely,
 //   defaultCourtNames (string[] | null) — applied to the seeded courts at
 //     schedule-generation time if present, overriding the usual "Court N"
 //     default,
@@ -35,7 +38,7 @@ export function makeTemplate({
   poolCount = 1,
   assignmentMethod = "random",
   advancesPerPool = 1,
-  matchScoringRules = { pointsToWin: 11, winBy: 2, bestOf: 1 },
+  matchScoringRules = defaultMatchScoringRules(),
   defaultCourtNames = null,
   isBuiltIn = false,
 }) {
@@ -71,7 +74,7 @@ export const BUILT_IN_TEMPLATES = [
     courtsCount: 4,
     poolCount: 1,
     advancesPerPool: 1,
-    matchScoringRules: { pointsToWin: 11, winBy: 1, bestOf: 1 },
+    matchScoringRules: { matchFormat: "oneGame", winningScore: 11, winByTwo: false },
   }),
   builtIn("builtin-weekend-round-robin", {
     name: "Weekend Round Robin",
@@ -79,7 +82,7 @@ export const BUILT_IN_TEMPLATES = [
     courtsCount: 4,
     poolCount: 1,
     advancesPerPool: 1,
-    matchScoringRules: { pointsToWin: 11, winBy: 2, bestOf: 1 },
+    matchScoringRules: { matchFormat: "oneGame", winningScore: 11, winByTwo: true },
   }),
   builtIn("builtin-rr-top2-playoffs", {
     name: "Round Robin + Top 2 Playoffs",
@@ -87,7 +90,7 @@ export const BUILT_IN_TEMPLATES = [
     courtsCount: 4,
     poolCount: 2,
     advancesPerPool: 2,
-    matchScoringRules: { pointsToWin: 11, winBy: 2, bestOf: 1 },
+    matchScoringRules: { matchFormat: "oneGame", winningScore: 11, winByTwo: true },
   }),
   builtIn("builtin-16team-single-elim", {
     name: "16-Team Single Elimination",
@@ -95,7 +98,7 @@ export const BUILT_IN_TEMPLATES = [
     courtsCount: 4,
     poolCount: 4,
     advancesPerPool: 4,
-    matchScoringRules: { pointsToWin: 15, winBy: 2, bestOf: 1 },
+    matchScoringRules: { matchFormat: "bestOf3", winningScore: 15, winByTwo: true },
   }),
   builtIn("builtin-beginner-social", {
     name: "Beginner Social Tournament",
@@ -103,7 +106,7 @@ export const BUILT_IN_TEMPLATES = [
     courtsCount: 2,
     poolCount: 1,
     advancesPerPool: 1,
-    matchScoringRules: { pointsToWin: 11, winBy: 1, bestOf: 1 },
+    matchScoringRules: { matchFormat: "oneGame", winningScore: 11, winByTwo: false },
     defaultCourtNames: ["Court 1", "Court 2"],
   }),
 ];

@@ -12,17 +12,22 @@ import {
   saveAddCourt,
   saveRemoveCourt,
   saveSetCourtStatus,
+  saveRenameCourt,
+  saveTournamentSettings,
   getTournamentEngine,
 } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
+import { MATCH_FORMATS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 import TournamentQualificationView from "./TournamentQualificationView.jsx";
 import TournamentBracketView from "./TournamentBracketView.jsx";
 import TournamentCourtsView from "./TournamentCourtsView.jsx";
+import TournamentSettingsView from "./TournamentSettingsView.jsx";
 
 const qualificationService = new PoolQualificationService();
+const MATCH_FORMAT_LABELS = Object.fromEntries(MATCH_FORMATS.map((f) => [f.value, f.label]));
 
 const MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
 const PODIUM_LABELS = { champion: "Champion", runnerUp: "Runner-up", thirdPlace: "Third Place" };
@@ -121,6 +126,7 @@ const TABS = [
   { id: "qualification", label: "Qualification" },
   { id: "bracket", label: "Bracket" },
   { id: "courts", label: "Courts" },
+  { id: "settings", label: "Settings" },
 ];
 
 // Static placeholder panel — no data, no logic. Participants/Bracket are
@@ -186,8 +192,9 @@ function OverviewPanel({ tournament, loading }) {
       </p>
       {tournament.matchScoringRules && (
         <p style={styles.editHint}>
-          Scoring rules (from template, reference only — not enforced): first to {tournament.matchScoringRules.pointsToWin}
-          , win by {tournament.matchScoringRules.winBy}, best of {tournament.matchScoringRules.bestOf}.
+          Match rules (see Settings, reference only — not enforced): {MATCH_FORMAT_LABELS[tournament.matchScoringRules.matchFormat] ?? tournament.matchScoringRules.matchFormat}
+          , first to {tournament.matchScoringRules.winningScore}
+          {tournament.matchScoringRules.winByTwo ? ", win by 2" : ""}.
         </p>
       )}
 
@@ -240,6 +247,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   const [loading, setLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
   const [courtError, setCourtError] = useState("");
+  const [settingsError, setSettingsError] = useState("");
   const [selectedPool, setSelectedPool] = useState("all");
 
   useEffect(() => {
@@ -394,6 +402,33 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Tournament Settings — same "call the lib function, setTournament
+  // (updated)" shape every other tab's handlers already use. Court renames
+  // reuse the existing Courts-tab helper directly (there's exactly one
+  // place a court record gets edited); everything else goes through
+  // saveTournamentSettings, which throws on any currently-locked field.
+  const handleSaveSettings = async (changes) => {
+    if (!tournament) return;
+    setSettingsError("");
+    try {
+      const updated = await saveTournamentSettings(tournament, changes);
+      setTournament(updated);
+    } catch (e) {
+      setSettingsError(e.message);
+    }
+  };
+
+  const handleRenameCourt = async (courtId, name) => {
+    if (!tournament) return;
+    setSettingsError("");
+    try {
+      const updated = await saveRenameCourt(tournament, courtId, name);
+      setTournament(updated);
+    } catch (e) {
+      setSettingsError(e.message);
+    }
+  };
+
   const pools = tournament?.pools ?? [];
 
   return (
@@ -480,6 +515,16 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onSetCourtStatus={handleSetCourtStatus}
           onStartPoolMatch={handleStartMatch}
           onStartPlayoffMatch={handlePlayoffStartMatch}
+        />
+      )}
+
+      {tab === "settings" && (
+        <TournamentSettingsView
+          tournament={tournament}
+          loading={loading}
+          settingsError={settingsError}
+          onSave={handleSaveSettings}
+          onRenameCourt={handleRenameCourt}
         />
       )}
     </div>

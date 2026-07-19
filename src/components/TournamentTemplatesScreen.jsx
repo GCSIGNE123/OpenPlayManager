@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Copy, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentTemplateService, makeTemplate } from "../engines/TournamentTemplateService.js";
+import { MATCH_FORMATS, defaultMatchScoringRules } from "../engines/TournamentSettings.js";
 import { TOURNAMENT_FORMATS } from "../lib/constants.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -13,8 +14,22 @@ const ASSIGNMENT_METHODS = [{ value: "random", label: "Random" }]; // see engine
 // kept separate from it since the form needs string-friendly values for
 // its number inputs (see save()'s Number(...) conversion back).
 function draftFromTemplate(template) {
+  const defaults = defaultMatchScoringRules();
   if (!template) {
-    return { id: null, name: "", format: "roundRobin", mode: "singles", courtsCount: "4", poolCount: "1", assignmentMethod: "random", advancesPerPool: "1", pointsToWin: "11", winBy: "2", bestOf: "1", courtNamesText: "" };
+    return {
+      id: null,
+      name: "",
+      format: "roundRobin",
+      mode: "singles",
+      courtsCount: "4",
+      poolCount: "1",
+      assignmentMethod: "random",
+      advancesPerPool: "1",
+      matchFormat: defaults.matchFormat,
+      winningScore: String(defaults.winningScore),
+      winByTwo: defaults.winByTwo,
+      courtNamesText: "",
+    };
   }
   return {
     id: template.id,
@@ -25,9 +40,9 @@ function draftFromTemplate(template) {
     poolCount: String(template.poolCount),
     assignmentMethod: template.assignmentMethod,
     advancesPerPool: String(template.advancesPerPool),
-    pointsToWin: String(template.matchScoringRules?.pointsToWin ?? 11),
-    winBy: String(template.matchScoringRules?.winBy ?? 2),
-    bestOf: String(template.matchScoringRules?.bestOf ?? 1),
+    matchFormat: template.matchScoringRules?.matchFormat ?? defaults.matchFormat,
+    winningScore: String(template.matchScoringRules?.winningScore ?? defaults.winningScore),
+    winByTwo: template.matchScoringRules?.winByTwo ?? defaults.winByTwo,
     courtNamesText: (template.defaultCourtNames || []).join(", "),
   };
 }
@@ -81,9 +96,9 @@ export default function TournamentTemplatesScreen({ onBack }) {
         assignmentMethod: editing.assignmentMethod,
         advancesPerPool: Number(editing.advancesPerPool) || 0,
         matchScoringRules: {
-          pointsToWin: Number(editing.pointsToWin) || 11,
-          winBy: Number(editing.winBy) || 1,
-          bestOf: Number(editing.bestOf) || 1,
+          matchFormat: editing.matchFormat,
+          winningScore: Number(editing.winningScore) || 11,
+          winByTwo: editing.winByTwo,
         },
         defaultCourtNames: editing.courtNamesText.trim()
           ? editing.courtNamesText.split(",").map((n) => n.trim()).filter(Boolean)
@@ -261,16 +276,29 @@ export default function TournamentTemplatesScreen({ onBack }) {
           <p style={styles.editHint}>Captured for reference — not enforced by scoring yet.</p>
           <div style={styles.settingsPanel}>
             <label style={styles.settingsField}>
-              Points to win
-              <input type="number" min={1} style={styles.expectedGamesInput} value={editing.pointsToWin} onChange={(e) => setEditing({ ...editing, pointsToWin: e.target.value })} />
+              Match format
+              <select style={styles.rotationSelect} value={editing.matchFormat} onChange={(e) => setEditing({ ...editing, matchFormat: e.target.value })}>
+                {MATCH_FORMATS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label style={styles.settingsField}>
-              Win by
-              <input type="number" min={1} style={styles.expectedGamesInput} value={editing.winBy} onChange={(e) => setEditing({ ...editing, winBy: e.target.value })} />
+              Winning score
+              <input type="number" min={1} style={styles.expectedGamesInput} value={editing.winningScore} onChange={(e) => setEditing({ ...editing, winningScore: e.target.value })} />
             </label>
             <label style={styles.settingsField}>
-              Best of
-              <input type="number" min={1} style={styles.expectedGamesInput} value={editing.bestOf} onChange={(e) => setEditing({ ...editing, bestOf: e.target.value })} />
+              Win by two
+              <div style={styles.skillToggle}>
+                <button type="button" style={styles.skillToggleBtn(editing.winByTwo)} onClick={() => setEditing({ ...editing, winByTwo: true })}>
+                  On
+                </button>
+                <button type="button" style={styles.skillToggleBtn(!editing.winByTwo)} onClick={() => setEditing({ ...editing, winByTwo: false })}>
+                  Off
+                </button>
+              </div>
             </label>
           </div>
 

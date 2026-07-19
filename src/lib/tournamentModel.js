@@ -14,6 +14,7 @@
 // Mode, which stays backward-compatible deliberately — see PROJECT.md).
 import { uid } from "./random.js";
 import { TOURNAMENT_PREFIX } from "./constants.js";
+import { defaultMatchScoringRules } from "../engines/TournamentSettings.js";
 
 // A Tournament Participant — a single player for Singles, or a pre-formed
 // 2-player team for Doubles. The scheduling engine only ever deals with
@@ -237,7 +238,10 @@ export function makeTournament({
   pools,
   advancesPerPool = 1,
   courtNames = null, // Tournament Templates' "Default Court Names" — see engines/TournamentTemplateService.js. Applied 1:1 by index; any courts beyond courtNames.length still get the usual "Court N" default
-  matchScoringRules = null, // Tournament Templates' "Match Scoring Rules" — captured for reference only, nothing in this app enforces scoring rules yet
+  matchScoringRules = null, // Tournament Settings' Match Rules — { matchFormat, winningScore, winByTwo }, captured for reference only, nothing in this app enforces scoring rules yet. Defaults via TournamentSettings.defaultMatchScoringRules() if not given
+  playoffEnabled = true, // Tournament Settings' Playoff Settings — real behavior: gates RoundRobinEngine's auto-generate-bracket step
+  autoDetectPlayoffStage = true, // captured for reference only — see TournamentSettings.js header comment
+  manualPlayoffStage = null, // only meaningful when autoDetectPlayoffStage is false; captured for reference only
 }) {
   const now = Date.now();
   const tournament = {
@@ -250,7 +254,10 @@ export function makeTournament({
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
     pools,
-    matchScoringRules,
+    matchScoringRules: matchScoringRules ?? defaultMatchScoringRules(),
+    playoffEnabled,
+    autoDetectPlayoffStage,
+    manualPlayoffStage,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come

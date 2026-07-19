@@ -111,7 +111,12 @@ export class RoundRobinEngine extends TournamentEngine {
     });
     let next = { ...tournament, pools };
     next.status = computeTournamentStatus(next);
-    if (next.status === "completed" && !next.bracket) {
+    // Tournament Settings' "Playoff Enabled" — the one Settings field with
+    // real runtime effect (everything else in Playoff Settings/Match Rules
+    // is captured for reference only, see TournamentSettings.js). Default
+    // true so every tournament created before this field existed keeps
+    // auto-generating a bracket exactly as before.
+    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false) {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
         const { ready, ...bracket } = generated;

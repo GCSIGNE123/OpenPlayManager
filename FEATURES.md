@@ -63,6 +63,9 @@ Do not implement multiple unrelated features in a single task.
 - [x] Match Queue
 - [x] Tournament Display Mode
 - [x] Tournament Templates
+- [x] Tournament Settings
+- [ ] Advanced Seeding
+- [ ] Team Events
 - [ ] Template Import/Export
 - [ ] Shared Organization Templates
 - [ ] Public Live Sharing

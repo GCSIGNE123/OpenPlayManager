@@ -15,9 +15,11 @@ import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
 import { DoubleEliminationEngine } from "../engines/DoubleEliminationEngine.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 
 const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
+const rulesService = new TournamentRulesService();
 
 export function buildEntrants(players, mode) {
   if (mode === "doubles") {
@@ -174,4 +176,15 @@ export async function saveSetCourtStatus(tournament, courtId, status) {
 export async function saveRenameCourt(tournament, courtId, name) {
   const courts = tournament.courts.map((c) => (c.id === courtId ? { ...c, name } : c));
   return saveTournament({ ...tournament, courts });
+}
+
+// ---- Tournament Settings ----
+// changes: Partial<SettingsView> (see engines/TournamentSettings.js) — only
+// the keys being edited. TournamentRulesService.updateSettings validates
+// and throws on any currently-locked field; this is a thin persist wrapper,
+// the same "call the service, saveTournament what it returns" shape every
+// other save* function in this file already uses.
+export async function saveTournamentSettings(tournament, changes) {
+  const updated = rulesService.updateSettings(tournament, changes);
+  return saveTournament(updated);
 }
