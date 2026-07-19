@@ -42,6 +42,7 @@ export async function buildAndSaveLeagueSeason({
   courtsCount,
   mode,
   divisions,
+  eligibilityRequirements = null,
 }) {
   const smallDivision = divisions.find((d) => d.players.length < 2);
   if (smallDivision) throw new Error(`Division "${smallDivision.name}" needs at least 2 players.`);
@@ -57,6 +58,7 @@ export async function buildAndSaveLeagueSeason({
     courtsCount,
     mode,
     pools,
+    eligibilityRequirements,
   });
   return saveLeagueSeason(leagueSeason);
 }

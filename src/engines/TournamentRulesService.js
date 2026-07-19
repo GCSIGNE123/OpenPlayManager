@@ -110,6 +110,7 @@ export class TournamentRulesService {
     if ("autoDetectPlayoffStage" in changes) next.autoDetectPlayoffStage = changes.autoDetectPlayoffStage;
     if ("manualPlayoffStage" in changes) next.manualPlayoffStage = changes.manualPlayoffStage;
     if ("matchScoringRules" in changes) next.matchScoringRules = { ...tournament.matchScoringRules, ...changes.matchScoringRules };
+    if ("eligibilityRequirements" in changes) next.eligibilityRequirements = { ...tournament.eligibilityRequirements, ...changes.eligibilityRequirements }; // Membership Management — never locked, same as name/court names: doesn't affect schedule generation
     // courtsCount is deliberately NOT handled here — pre-tournament-start
     // court count changes go through lib/tournament.js's existing
     // saveAddCourt/saveRemoveCourt (Courts tab), not this generic path, so

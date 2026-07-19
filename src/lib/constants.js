@@ -8,6 +8,7 @@ export const USER_PREFIX = "opl-user-"; // one KV record per RBAC user, shared �
 export const ROLE_PREFIX = "opl-role-"; // one KV record per CUSTOM role, shared — see engines/Role.js. Built-in roles are NOT stored here (static in-memory, always available, can't be edited/deleted), same precedent as TEMPLATE_PREFIX
 export const LEAGUE_PREFIX = "opl-league-"; // one KV record per League (the recurring club-level container, not a specific season), shared — see lib/leagueModel.js
 export const LEAGUE_SEASON_PREFIX = "opl-league-season-"; // one KV record per LeagueSeason — internally Tournament-shaped (pools/courts/status) so existing tournament engines/services work on it unmodified, see lib/leagueModel.js's header comment
+export const MEMBERSHIP_PLAN_PREFIX = "opl-membership-plan-"; // one KV record per CUSTOM membership plan, shared — see lib/membershipPlans.js. Built-in plans (Daily Pass/Monthly/Quarterly/Annual/Lifetime) are NOT stored here, same built-in/custom precedent as TEMPLATE_PREFIX/ROLE_PREFIX
 
 export const SKILL_DIVISIONS = ["Beginner", "Intermediate", "Advanced", "Open"]; // default suggested division names — a League Season can use any of these or a custom name; "future divisions configurable" just means any label works, not a separate catalog to maintain
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts

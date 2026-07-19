@@ -3,6 +3,7 @@ import { Lock, Pencil, Save, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES } from "../engines/TournamentSettings.js";
+import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 const rulesService = new TournamentRulesService();
@@ -106,6 +107,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
 
   const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const setScoring = (key, value) => setDraft((d) => ({ ...d, matchScoringRules: { ...d.matchScoringRules, [key]: value } }));
+  const setEligibility = (key, value) => setDraft((d) => ({ ...d, eligibilityRequirements: { ...d.eligibilityRequirements, [key]: value } }));
 
   const save = () => {
     const changes = {};
@@ -122,6 +124,9 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.manualPlayoffStage = draft.manualPlayoffStage;
     if (!locked.has("matchScoringRules") && JSON.stringify(draft.matchScoringRules) !== JSON.stringify(tournament.matchScoringRules)) {
       changes.matchScoringRules = draft.matchScoringRules;
+    }
+    if (JSON.stringify(draft.eligibilityRequirements) !== JSON.stringify(tournament.eligibilityRequirements)) {
+      changes.eligibilityRequirements = draft.eligibilityRequirements;
     }
     if (Object.keys(changes).length > 0) onSave(changes);
   };
@@ -304,6 +309,44 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             </button>
           </div>
         </SettingRow>
+      </div>
+
+      <h3 style={styles.poolHeading}>Membership Eligibility</h3>
+      <p style={styles.editHint}>Captured for reference — not enforced against the roster here yet (see Membership Management).</p>
+      <div style={styles.settingsPanel}>
+        <label style={styles.settingsField}>
+          Guest access allowed
+          <div style={styles.skillToggle}>
+            <button type="button" style={styles.skillToggleBtn(draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", true)}>
+              On
+            </button>
+            <button type="button" style={styles.skillToggleBtn(!draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", false)}>
+              Off
+            </button>
+          </div>
+        </label>
+        <label style={styles.settingsField}>
+          Require active membership
+          <div style={styles.skillToggle}>
+            <button type="button" style={styles.skillToggleBtn(draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", true)}>
+              Yes
+            </button>
+            <button type="button" style={styles.skillToggleBtn(!draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", false)}>
+              No
+            </button>
+          </div>
+        </label>
+        <label style={styles.settingsField}>
+          Required plan
+          <select style={styles.rotationSelect} value={draft.eligibilityRequirements.requiredPlanId || ""} onChange={(e) => setEligibility("requiredPlanId", e.target.value || null)}>
+            <option value="">Any plan</option>
+            {BUILT_IN_MEMBERSHIP_PLANS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div style={styles.editActions}>

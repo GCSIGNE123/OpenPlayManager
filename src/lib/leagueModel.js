@@ -18,6 +18,7 @@
 import { uid } from "./random.js";
 import { LEAGUE_PREFIX, LEAGUE_SEASON_PREFIX } from "./constants.js";
 import { makeTournament, makeCourt, computeRoundStatus } from "./tournamentModel.js";
+import { defaultEligibilityRequirements } from "../engines/TournamentSettings.js";
 
 // League = { id, name, clubId, createdAt, updatedAt } — a recurring
 // club-level container; a single League can run many LeagueSeasons over
@@ -108,6 +109,7 @@ export function makeLeagueSeason({
   courtsCount,
   mode,
   pools,
+  eligibilityRequirements = null,
 }) {
   const tournament = makeTournament({
     name,
@@ -119,7 +121,20 @@ export function makeLeagueSeason({
     pools,
     playoffEnabled: false, // playoffs are explicitly out of scope for League Management
   });
-  return { ...tournament, leagueId, season, startDate, endDate, matchDay, matchTime };
+  return {
+    ...tournament,
+    leagueId,
+    season,
+    startDate,
+    endDate,
+    matchDay,
+    matchTime,
+    // Membership Management's eligibility hook — see PROJECT.md. Same
+    // captured shape TournamentSettings.defaultEligibilityRequirements
+    // defines; League Manager's division player picker is where this task
+    // actually enforces it live (Tournament Manager only captures it).
+    eligibilityRequirements: eligibilityRequirements ?? defaultEligibilityRequirements(),
+  };
 }
 
 export async function saveLeagueSeason(season) {

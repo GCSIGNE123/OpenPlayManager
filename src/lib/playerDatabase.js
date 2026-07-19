@@ -23,9 +23,25 @@ import { PLAYER_DB_PREFIX } from "./constants.js";
 // id -> {
 //   id, firstName, lastName (nullable), displayName, photo (nullable, data
 //   URL — same format session players already use), gender (nullable),
-//   skill ('beginner' | 'intermediate'), duprRating (nullable number),
-//   contactNumber (nullable), notes (nullable), active (bool),
-//   createdAt, updatedAt (ms epoch)
+//   skill ('beginner' | 'intermediate' — doubles as Membership's "Skill
+//   Level", see PROJECT.md's Membership Management section), duprRating
+//   (nullable number), contactNumber (nullable), notes (nullable — doubles
+//   as Membership's "Notes"), active (bool), createdAt, updatedAt (ms epoch),
+//
+//   -- Membership Management fields (additive; a record from before this
+//   task simply has memberId/membershipStatus/etc. as null/undefined,
+//   read as "no membership set up yet" — see engines/MembershipService.js,
+//   which is the only thing that gives these fields real meaning):
+//   memberId (nullable string, a short organizer-facing code e.g. "M-A1B2C3"),
+//   membershipStatus ('active' | 'expired' | 'suspended' | 'pending' | null —
+//     the STORED status; MembershipService.getMembershipStatus is what
+//     actually decides what a member's status reads as, since an expired
+//     date should win over a stale stored "active" without anyone having to
+//     remember to flip it manually),
+//   membershipPlanId (nullable string — a built-in or custom MembershipPlan id),
+//   joinDate (nullable ms epoch), expirationDate (nullable ms epoch),
+//   emergencyContact (nullable string), duprId (nullable string placeholder
+//   — the player's DUPR account id, distinct from duprRating's number)
 // }
 export function emptyPlayerRecord({
   firstName,
@@ -37,6 +53,13 @@ export function emptyPlayerRecord({
   duprRating = null,
   contactNumber = null,
   notes = null,
+  memberId = null,
+  membershipStatus = null,
+  membershipPlanId = null,
+  joinDate = null,
+  expirationDate = null,
+  emergencyContact = null,
+  duprId = null,
 }) {
   const now = Date.now();
   return {
@@ -51,9 +74,25 @@ export function emptyPlayerRecord({
     contactNumber: contactNumber ? contactNumber.trim() : null,
     notes: notes ? notes.trim() : null,
     active: true,
+    memberId,
+    membershipStatus,
+    membershipPlanId,
+    joinDate,
+    expirationDate,
+    emergencyContact: emergencyContact ? emergencyContact.trim() : null,
+    duprId: duprId ? duprId.trim() : null,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+// A short, organizer-facing member code — not a sequential counter (would
+// need a full player list read to compute safely), just a readable slice
+// of a fresh uid. Called once, at the point a player is actually enrolled
+// in a membership plan (see MembershipService.renewMembership), not at
+// player-record creation — a player with no membership yet has no member id.
+export function generateMemberId() {
+  return `M-${uid().slice(0, 6).toUpperCase()}`;
 }
 
 // Every player record in the database. N+1 (list then get-each) rather than

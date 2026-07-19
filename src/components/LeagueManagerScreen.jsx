@@ -5,20 +5,40 @@ import { SKILL_DIVISIONS } from "../lib/constants.js";
 import { fetchAllLeagues, saveLeague, makeLeague, fetchSeasonsForLeague, fetchLeagueSeason } from "../lib/leagueModel.js";
 import { buildAndSaveLeagueSeason, saveLeagueMatchStart, saveLeagueMatchResult, saveSwapWeekMatches } from "../lib/league.js";
 import { fetchAllPlayers } from "../lib/playerDatabase.js";
+import { fetchAllMembershipPlans } from "../lib/membershipPlans.js";
+import { defaultEligibilityRequirements } from "../engines/TournamentSettings.js";
+import { MembershipService } from "../engines/MembershipService.js";
 import SectionLabel from "./SectionLabel.jsx";
 import LeagueSeasonDashboardView from "./LeagueSeasonDashboardView.jsx";
+
+const membershipService = new MembershipService();
 
 // One division draft in the New Season form: a name (defaults to one of
 // the 4 suggested SKILL_DIVISIONS, or any custom text — "future divisions
 // configurable" per the spec just means any label works here) plus a set
 // of selected player ids from the Player Database.
-function DivisionEditor({ division, onChange, onRemove, allPlayers }) {
-  const togglePlayer = (id) => {
+//
+// This is the one place this task wires MembershipService.validateEligibility
+// into a live block — see PROJECT.md's Membership Management section for
+// why Tournament Settings only captures the same requirements without
+// enforcing them here too. Adding an ineligible player is refused with the
+// service's own reason string, not silently allowed.
+function DivisionEditor({ division, onChange, onRemove, allPlayers, membershipPlans, eligibilityRequirements }) {
+  const [blockedMessage, setBlockedMessage] = useState(null);
+
+  const togglePlayer = (player) => {
+    const alreadyIn = division.playerIds.includes(player.id);
+    if (!alreadyIn) {
+      const { eligible, reason } = membershipService.validateEligibility(player, eligibilityRequirements);
+      if (!eligible) {
+        setBlockedMessage(`${player.displayName}: ${reason}`);
+        return;
+      }
+    }
+    setBlockedMessage(null);
     onChange({
       ...division,
-      playerIds: division.playerIds.includes(id)
-        ? division.playerIds.filter((p) => p !== id)
-        : [...division.playerIds, id],
+      playerIds: alreadyIn ? division.playerIds.filter((p) => p !== player.id) : [...division.playerIds, player.id],
     });
   };
 
@@ -35,6 +55,7 @@ function DivisionEditor({ division, onChange, onRemove, allPlayers }) {
         </button>
       </div>
       <p style={styles.editHint}>{division.playerIds.length} player(s) selected</p>
+      {blockedMessage && <p style={styles.editWarning}>{blockedMessage}</p>}
       <ul style={styles.qualifiersList}>
         {allPlayers.map((p) => (
           <li key={p.id} style={styles.qualifiersListItem}>
@@ -42,7 +63,7 @@ function DivisionEditor({ division, onChange, onRemove, allPlayers }) {
             <button
               type="button"
               style={division.playerIds.includes(p.id) ? styles.primaryBtn : styles.secondaryBtn}
-              onClick={() => togglePlayer(p.id)}
+              onClick={() => togglePlayer(p)}
             >
               {division.playerIds.includes(p.id) ? "Added" : "Add"}
             </button>
@@ -53,7 +74,7 @@ function DivisionEditor({ division, onChange, onRemove, allPlayers }) {
   );
 }
 
-function NewSeasonForm({ league, allPlayers, onCancel, onCreated }) {
+function NewSeasonForm({ league, allPlayers, membershipPlans, onCancel, onCreated }) {
   const [name, setName] = useState(`${league.name} Season`);
   const [season, setSeason] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -63,6 +84,7 @@ function NewSeasonForm({ league, allPlayers, onCancel, onCreated }) {
   const [courtsCount, setCourtsCount] = useState("4");
   const [mode, setMode] = useState("singles");
   const [divisions, setDivisions] = useState([{ name: SKILL_DIVISIONS[0], playerIds: [] }]);
+  const [eligibility, setEligibility] = useState(defaultEligibilityRequirements());
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -92,6 +114,7 @@ function NewSeasonForm({ league, allPlayers, onCancel, onCreated }) {
           name: d.name,
           players: allPlayers.filter((p) => d.playerIds.includes(p.id)).map((p) => ({ id: p.id, name: p.displayName })),
         })),
+        eligibilityRequirements: eligibility,
       });
       onCreated(season2);
     } catch (e) {
@@ -152,12 +175,64 @@ function NewSeasonForm({ league, allPlayers, onCancel, onCreated }) {
         </label>
       </div>
 
+      <SectionLabel>Membership Eligibility</SectionLabel>
+      <p style={styles.editHint}>Enforced live below — an ineligible player can't be added to a division.</p>
+      <div style={styles.settingsPanel}>
+        <label style={styles.settingsField}>
+          Guest access allowed
+          <div style={styles.skillToggle}>
+            <button type="button" style={styles.skillToggleBtn(eligibility.allowGuests)} onClick={() => setEligibility({ ...eligibility, allowGuests: true })}>
+              On
+            </button>
+            <button type="button" style={styles.skillToggleBtn(!eligibility.allowGuests)} onClick={() => setEligibility({ ...eligibility, allowGuests: false })}>
+              Off
+            </button>
+          </div>
+        </label>
+        <label style={styles.settingsField}>
+          Require active membership
+          <div style={styles.skillToggle}>
+            <button
+              type="button"
+              style={styles.skillToggleBtn(eligibility.requireActiveMembership)}
+              onClick={() => setEligibility({ ...eligibility, requireActiveMembership: true })}
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              style={styles.skillToggleBtn(!eligibility.requireActiveMembership)}
+              onClick={() => setEligibility({ ...eligibility, requireActiveMembership: false })}
+            >
+              No
+            </button>
+          </div>
+        </label>
+        <label style={styles.settingsField}>
+          Required plan
+          <select
+            style={styles.rotationSelect}
+            value={eligibility.requiredPlanId || ""}
+            onChange={(e) => setEligibility({ ...eligibility, requiredPlanId: e.target.value || null })}
+          >
+            <option value="">Any plan</option>
+            {membershipPlans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <SectionLabel>Divisions</SectionLabel>
       {divisions.map((d, i) => (
         <DivisionEditor
           key={i}
           division={d}
           allPlayers={allPlayers}
+          membershipPlans={membershipPlans}
+          eligibilityRequirements={eligibility}
           onChange={(next) => updateDivision(i, next)}
           onRemove={() => removeDivision(i)}
         />
@@ -191,6 +266,7 @@ function NewSeasonForm({ league, allPlayers, onCancel, onCreated }) {
 export default function LeagueManagerScreen({ onBack }) {
   const [leagues, setLeagues] = useState([]);
   const [allPlayers, setAllPlayers] = useState([]);
+  const [membershipPlans, setMembershipPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [seasons, setSeasons] = useState([]);
@@ -201,10 +277,11 @@ export default function LeagueManagerScreen({ onBack }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([fetchAllLeagues(), fetchAllPlayers()])
-      .then(([l, p]) => {
+    Promise.all([fetchAllLeagues(), fetchAllPlayers(), fetchAllMembershipPlans()])
+      .then(([l, p, plans]) => {
         setLeagues(l);
         setAllPlayers(p.filter((pl) => pl.active));
+        setMembershipPlans(plans);
       })
       .catch(() => setError("Couldn't load leagues."))
       .finally(() => setLoading(false));
@@ -283,6 +360,7 @@ export default function LeagueManagerScreen({ onBack }) {
           <NewSeasonForm
             league={selectedLeague}
             allPlayers={allPlayers}
+            membershipPlans={membershipPlans}
             onCancel={() => setShowNewSeasonForm(false)}
             onCreated={onSeasonCreated}
           />

@@ -25,6 +25,18 @@ export const MATCH_FORMATS = [
   { value: "bestOf5", label: "Best of 5 (placeholder)" },
 ];
 
+// Membership Management's eligibility hook — see PROJECT.md. Captured on
+// every tournament (default: guests allowed, no membership required) and
+// editable here, but NOT enforced against the roster/join flow yet — the
+// same "captured for reference, not enforced everywhere" precedent
+// matchScoringRules already set. MembershipService.validateEligibility is
+// the real, tested check; League Manager's player picker is the one place
+// this task wires it into a live block — see PROJECT.md's Membership
+// Management section for why Tournament stops at "captured."
+export function defaultEligibilityRequirements() {
+  return { requireActiveMembership: false, requiredPlanId: null, allowGuests: true };
+}
+
 export const PLAYOFF_STAGES = [
   { value: "roundOf16", label: "Round of 16" },
   { value: "quarterfinals", label: "Quarterfinals" },
@@ -49,5 +61,6 @@ export function deriveSettingsView(tournament) {
     autoDetectPlayoffStage: tournament.autoDetectPlayoffStage ?? true,
     manualPlayoffStage: tournament.manualPlayoffStage ?? null,
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
+    eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };
 }

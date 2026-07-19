@@ -124,4 +124,11 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Season History
 - [ ] DUPR Integration
 
+## 💳 Membership Management
+
+- [x] Membership Management
+- [ ] Online Payments
+- [ ] Auto Renewal
+- [ ] Family Memberships
+
 ## ✅ Completed
