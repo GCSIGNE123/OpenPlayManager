@@ -236,6 +236,8 @@ export function makeTournament({
   assignmentMethod = "random",
   pools,
   advancesPerPool = 1,
+  courtNames = null, // Tournament Templates' "Default Court Names" — see engines/TournamentTemplateService.js. Applied 1:1 by index; any courts beyond courtNames.length still get the usual "Court N" default
+  matchScoringRules = null, // Tournament Templates' "Match Scoring Rules" — captured for reference only, nothing in this app enforces scoring rules yet
 }) {
   const now = Date.now();
   const tournament = {
@@ -248,13 +250,14 @@ export function makeTournament({
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
     pools,
+    matchScoringRules,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come
     // pre-assigned a court at generation time (see RoundRobinScheduler /
     // SingleEliminationBracketGenerator) — CourtAssignmentService is the
     // only thing that sets match.court now.
-    courts: Array.from({ length: courtsCount }, (_, i) => makeCourt(i + 1)),
+    courts: Array.from({ length: courtsCount }, (_, i) => makeCourt(i + 1, courtNames?.[i])),
     // Playoff Qualification config — how many of each pool's top finishers
     // advance once every pool completes. Not itself a result: qualifiers
     // are pure derived data (see engines/PoolQualificationService.js),

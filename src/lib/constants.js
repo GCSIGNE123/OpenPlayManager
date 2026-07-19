@@ -2,6 +2,8 @@ export const STORAGE_PREFIX = "opl-session-";
 export const ACCESS_PREFIX = "opl-access-";
 export const PLAYER_DB_PREFIX = "opl-player-"; // one KV record per player, shared across every session — see lib/playerDatabase.js
 export const TOURNAMENT_PREFIX = "opl-tournament-"; // one KV record per tournament, independent of the Open Play session's own state shape — see lib/tournamentModel.js
+export const TEMPLATE_PREFIX = "opl-template-"; // one KV record per custom tournament template, shared — see engines/TournamentTemplateService.js. Built-in templates are NOT stored here (static in-memory presets, always available, can't be edited/deleted)
+export const TEMPLATE_DEFAULT_KEY = "opl-template-default"; // singleton record holding just { templateId } — lets a non-persisted built-in template be marked default without becoming a mutable DB row
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts
 export const ADMIN_PIN = "918273"; // demo-only gate — the organizer's PIN for generating access codes
 export const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — easy to read aloud
@@ -82,6 +84,15 @@ export const defaultState = {
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   sessionType: "openPlay", // see SESSION_TYPES
   tournamentFormat: null, // see TOURNAMENT_FORMATS — only set when sessionType is "tournament"; architecture-only, no tournament logic reads this yet
+  // Tournament Templates — set at Create Session if the organizer picked
+  // "Use Template" instead of "Start From Scratch" (see
+  // CreateSessionScreen.jsx/TournamentTemplateService.js). Read once by
+  // TournamentScheduleView.jsx to pre-fill its Singles/Doubles, Number of
+  // Pools, Pool Assignment Method, and Teams Advancing Per Pool defaults
+  // the first time it renders — never read again after that, and never
+  // itself generates a schedule. null for every Open Play session and for
+  // any tournament session created via "Start From Scratch".
+  pendingTournamentTemplate: null,
   rotationMode: "continuous", // see ROTATION_MODES — Open Play only; labeled "Rotation Strategy" in the UI
   expectedGamesPerPlayer: 6, // Open Play only — organizer-configurable, drives Progressive Skill Rotation's session-progress/phase calc, see lib/progressiveSkillPhase.js
   progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js

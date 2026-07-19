@@ -184,6 +184,12 @@ function OverviewPanel({ tournament, loading }) {
       <p style={{ ...styles.editHint, marginTop: 10 }}>
         {tournament.name} — {progress.percent}% complete, status: <strong>{tournament.status}</strong>.
       </p>
+      {tournament.matchScoringRules && (
+        <p style={styles.editHint}>
+          Scoring rules (from template, reference only — not enforced): first to {tournament.matchScoringRules.pointsToWin}
+          , win by {tournament.matchScoringRules.winBy}, best of {tournament.matchScoringRules.bestOf}.
+        </p>
+      )}
 
       <h3 style={{ ...styles.poolHeading, marginTop: 18 }}>Pools</h3>
       <div style={styles.tournamentStandingsScroll}>

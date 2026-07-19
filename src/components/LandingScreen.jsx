@@ -1,7 +1,7 @@
 import { LogIn, Plus } from "lucide-react";
 import { styles } from "../styles.js";
 
-export default function LandingScreen({ onCreate, onAdmin, onDeveloper, joinCode, setJoinCode, handleJoin, joinError, joining }) {
+export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, joinCode, setJoinCode, handleJoin, joinError, joining }) {
   return (
     <div style={styles.landingWrap}>
       <div style={styles.landingHero}>
@@ -48,6 +48,9 @@ export default function LandingScreen({ onCreate, onAdmin, onDeveloper, joinCode
       </div>
       <button style={styles.adminLink} onClick={onAdmin}>
         Organizer? Manage access codes →
+      </button>
+      <button style={styles.adminLink} onClick={onTemplates}>
+        Manage tournament templates →
       </button>
       <button style={styles.adminLink} onClick={onDeveloper}>
         Developer? Run the rotation simulator →

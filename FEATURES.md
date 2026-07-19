@@ -62,6 +62,9 @@ Do not implement multiple unrelated features in a single task.
 - [x] Tournament Court Assignment
 - [x] Match Queue
 - [x] Tournament Display Mode
+- [x] Tournament Templates
+- [ ] Template Import/Export
+- [ ] Shared Organization Templates
 - [ ] Public Live Sharing
 - [ ] QR Code Access
 - [ ] Remote Score Entry

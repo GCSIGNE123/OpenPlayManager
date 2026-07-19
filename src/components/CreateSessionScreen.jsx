@@ -3,9 +3,12 @@ import { ArrowLeft, Camera, ChevronDown, ChevronRight, LogIn, Minus, Plus, Searc
 import { styles } from "../styles.js";
 import { resizeImageToAvatar } from "../lib/utils.js";
 import { emptyPlayerRecord, fetchAllPlayers, filterPlayersByQuery, savePlayerRecord } from "../lib/playerDatabase.js";
+import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
+
+const templateService = new TournamentTemplateService();
 
 export default function CreateSessionScreen({
   onStart,
@@ -23,6 +26,41 @@ export default function CreateSessionScreen({
   const [tournamentFormat, setTournamentFormat] = useState(tournamentFormats?.[0]?.value ?? "roundRobin");
   const [expectedGamesPerPlayer, setExpectedGamesPerPlayer] = useState(6);
   const [roster, setRoster] = useState([]);
+
+  // ---- Tournament Templates — see engines/TournamentTemplateService.js ----
+  // "Start From Scratch" (the default) means templateConfig stays null and
+  // nothing about this flow changes. "Use Template" pre-fills Number of
+  // Courts here immediately; the rest of the template (mode/pools/
+  // assignment method/qualifiers/court names/scoring rules) rides along on
+  // the session record as `pendingTournamentTemplate` and is read once by
+  // TournamentScheduleView the first time it renders, since those fields
+  // don't exist until schedule-generation time in this app.
+  const [templateChoice, setTemplateChoice] = useState("scratch"); // "scratch" | "template"
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) || null;
+
+  useEffect(() => {
+    if (sessionType !== "tournament" || templates.length > 0) return;
+    templateService
+      .fetchAllTemplates()
+      .then(async (list) => {
+        setTemplates(list);
+        const defaultId = await templateService.getDefaultTemplateId();
+        if (defaultId && list.some((t) => t.id === defaultId)) setSelectedTemplateId(defaultId);
+        else if (list.length > 0) setSelectedTemplateId(list[0].id);
+      })
+      .catch(() => {}); // template picker just won't populate — "Start From Scratch" still works
+  }, [sessionType, templates.length]);
+
+  // Applying a template pre-fills Number of Courts right away; the format
+  // toggle also follows the template so the two stay consistent with each
+  // other, same as picking it manually would.
+  useEffect(() => {
+    if (templateChoice !== "template" || !selectedTemplate) return;
+    setCourts(selectedTemplate.courtsCount);
+    setTournamentFormat(selectedTemplate.format);
+  }, [templateChoice, selectedTemplate]);
 
   // ---- Player Database — see lib/playerDatabase.js ----
   const [playerDb, setPlayerDb] = useState([]);
@@ -198,9 +236,57 @@ export default function CreateSessionScreen({
         </>
       )}
 
-      {sessionType === "tournament" && tournamentFormats && tournamentFormats.length > 0 && (
+      {sessionType === "tournament" && (
         <>
-          <SectionLabel>4. Tournament format</SectionLabel>
+          <SectionLabel>4. Create tournament</SectionLabel>
+          <div style={styles.skillToggle}>
+            <button
+              type="button"
+              style={styles.skillToggleBtn(templateChoice === "scratch")}
+              onClick={() => setTemplateChoice("scratch")}
+            >
+              Start From Scratch
+            </button>
+            <button
+              type="button"
+              style={styles.skillToggleBtn(templateChoice === "template")}
+              onClick={() => setTemplateChoice("template")}
+              disabled={templates.length === 0}
+            >
+              Use Template
+            </button>
+          </div>
+
+          {templateChoice === "template" && (
+            <>
+              {templates.length === 0 ? (
+                <p style={styles.editHint}>No templates yet — create one from "Manage tournament templates" on the landing page.</p>
+              ) : (
+                <>
+                  <select
+                    style={styles.rotationSelect}
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  >
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTemplate && (
+                    <p style={styles.editHint}>
+                      Pre-fills {selectedTemplate.mode === "doubles" ? "Doubles" : "Singles"}, {selectedTemplate.poolCount} pool
+                      {selectedTemplate.poolCount === 1 ? "" : "s"}, top {selectedTemplate.advancesPerPool} advancing, and{" "}
+                      {selectedTemplate.courtsCount} courts — all still editable on the Schedule tab before you generate it.
+                    </p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          <SectionLabel>5. Tournament format</SectionLabel>
           <p style={styles.editHint}>
             Placeholder only for now — tournament scheduling/brackets aren't implemented yet. Selecting a format just
             records it on the session; no bracket, seeding, or scoring logic exists until those are built as
@@ -462,7 +548,10 @@ export default function CreateSessionScreen({
             rotationMode,
             Math.max(1, Number(expectedGamesPerPlayer) || 1),
             sessionType,
-            sessionType === "tournament" ? tournamentFormat : null
+            sessionType === "tournament" ? tournamentFormat : null,
+            sessionType === "tournament" && templateChoice === "template" && selectedTemplate
+              ? templateService.applyTemplate(selectedTemplate)
+              : null
           )
         }
         disabled={!canStart}

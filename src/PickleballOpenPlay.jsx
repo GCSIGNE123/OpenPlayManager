@@ -30,10 +30,11 @@ import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
+import TournamentTemplatesScreen from "./components/TournamentTemplatesScreen.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -210,7 +211,8 @@ export default function PickleballOpenPlay() {
     rotationMode = "continuous",
     expectedGamesPerPlayer = 6,
     sessionType = "openPlay",
-    tournamentFormat = null
+    tournamentFormat = null,
+    templateConfig = null
   ) => {
     setCreating(true);
     setCreateError("");
@@ -254,6 +256,7 @@ export default function PickleballOpenPlay() {
         tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
         expectedGamesPerPlayer,
+        pendingTournamentTemplate: templateConfig, // see lib/constants.js/TournamentTemplateService.js — read once by TournamentScheduleView to pre-fill its defaults, never touched again after that
         updatedAt: Date.now(),
       };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
@@ -307,6 +310,12 @@ export default function PickleballOpenPlay() {
         courtsCount: state.courts.length,
         poolCount,
         advancesPerPool,
+        // Tournament Templates — carried through from Create Session if the
+        // organizer picked "Use Template" (see pendingTournamentTemplate
+        // above); undefined for every other session, which
+        // buildAndSaveRoundRobinTournament already treats as "no override."
+        courtNames: state.pendingTournamentTemplate?.defaultCourtNames ?? undefined,
+        matchScoringRules: state.pendingTournamentTemplate?.matchScoringRules ?? undefined,
       });
       await save({ ...state, tournamentId: tournament.id });
     } catch (e) {
@@ -997,6 +1006,7 @@ export default function PickleballOpenPlay() {
           onCreate={() => setScreen("access")}
           onAdmin={() => setScreen("admin")}
           onDeveloper={() => setScreen("developer")}
+          onTemplates={() => setScreen("templates")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1006,6 +1016,8 @@ export default function PickleballOpenPlay() {
       )}
 
       {screen === "developer" && <DeveloperView onBack={goToLanding} />}
+
+      {screen === "templates" && <TournamentTemplatesScreen onBack={goToLanding} />}
 
       {screen === "access" && (
         <AccessScreen

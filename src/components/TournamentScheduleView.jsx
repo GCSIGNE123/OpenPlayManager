@@ -249,11 +249,24 @@ export default function TournamentScheduleView({
   onSaveResult,
   selectedPool,
 }) {
-  const [mode, setMode] = useState(() => tournament?.mode ?? "singles");
-  const [poolCount, setPoolCount] = useState(() => tournament?.poolCount ?? 1);
-  const [customPoolCount, setCustomPoolCount] = useState("");
-  const [advancesPerPool, setAdvancesPerPool] = useState(() => tournament?.advancesPerPool ?? 1);
-  const [customAdvances, setCustomAdvances] = useState("");
+  // Tournament Templates — if the organizer picked "Use Template" at
+  // Create Session, its config rides along as state.pendingTournamentTemplate
+  // (see CreateSessionScreen.jsx/PickleballOpenPlay.jsx's startSession).
+  // Read once here as the fallback default, below an already-generated
+  // tournament's own values (never overrides a real tournament) and above
+  // this component's own hardcoded defaults. Still fully editable from here
+  // — this only changes what the form starts pre-filled with.
+  const template = state.pendingTournamentTemplate;
+
+  const [mode, setMode] = useState(() => tournament?.mode ?? template?.mode ?? "singles");
+  const [poolCount, setPoolCount] = useState(() => tournament?.poolCount ?? template?.poolCount ?? 1);
+  const [customPoolCount, setCustomPoolCount] = useState(() =>
+    template && !POOL_COUNT_OPTIONS.includes(template.poolCount) ? String(template.poolCount) : ""
+  );
+  const [advancesPerPool, setAdvancesPerPool] = useState(() => tournament?.advancesPerPool ?? template?.advancesPerPool ?? 1);
+  const [customAdvances, setCustomAdvances] = useState(() =>
+    template && !ADVANCES_OPTIONS.includes(template.advancesPerPool) ? String(template.advancesPerPool) : ""
+  );
   const [expandedRounds, setExpandedRounds] = useState(() => new Set());
 
   // Round 1 of every pool starts expanded, same as the single-pool view

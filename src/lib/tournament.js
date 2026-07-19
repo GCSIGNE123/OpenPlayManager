@@ -34,6 +34,8 @@ export async function buildAndSaveRoundRobinTournament({
   poolCount = 1,
   assignmentMethod = "random",
   advancesPerPool = 1,
+  courtNames = null, // Tournament Templates' "Default Court Names" — see makeTournament
+  matchScoringRules = null, // Tournament Templates' "Match Scoring Rules" — see makeTournament
 }) {
   const entrants = buildEntrants(players, mode);
   const groups = assignPools(entrants, poolCount, assignmentMethod);
@@ -61,6 +63,8 @@ export async function buildAndSaveRoundRobinTournament({
     assignmentMethod,
     pools,
     advancesPerPool,
+    courtNames,
+    matchScoringRules,
   });
   return saveTournament(tournament);
 }
