@@ -12,8 +12,11 @@ const REPORT_TYPES = [
   { id: "summary", label: "Tournament Summary" },
   { id: "standings", label: "Standings" },
   { id: "matches", label: "Match Results" },
+  { id: "playoffs", label: "Playoff Results" },
+  { id: "playerStats", label: "Player Statistics" },
   { id: "courts", label: "Court Usage" },
   { id: "pools", label: "Pools" },
+  { id: "timeline", label: "Timeline" },
 ];
 
 // Every report type resolves to one-or-more { title, columns, rows } tables
@@ -24,7 +27,10 @@ function buildTables(reportType, tournament) {
   if (reportType === "summary") return [reportService.generateTournamentSummary(tournament)];
   if (reportType === "standings") return [reportService.generateStandingsReport(tournament)];
   if (reportType === "matches") return [reportService.generateMatchReport(tournament)];
+  if (reportType === "playoffs") return [reportService.generatePlayoffReport(tournament)];
+  if (reportType === "playerStats") return [reportService.generatePlayerStatistics(tournament)];
   if (reportType === "courts") return [reportService.generateCourtUtilizationReport(tournament)];
+  if (reportType === "timeline") return [reportService.generateTournamentTimeline(tournament)];
   return reportService.generatePoolReport(tournament);
 }
 
@@ -89,6 +95,7 @@ function ReportTable({ table }) {
 // dashboard chrome around it.
 export default function TournamentReportsView({ tournament, loading }) {
   const [reportType, setReportType] = useState("summary");
+  const [exportError, setExportError] = useState("");
 
   const tables = useMemo(() => {
     if (!tournament) return [];
@@ -101,6 +108,20 @@ export default function TournamentReportsView({ tournament, loading }) {
   }
 
   const activeLabel = REPORT_TYPES.find((r) => r.id === reportType).label;
+
+  // Sprint 5 Validation — "Prevent exporting incomplete tournaments as final
+  // reports." TournamentReportService.assertExportable is the actual rule;
+  // this just surfaces its message instead of letting window.print()/the CSV
+  // download fire on a report that's still mid-tournament.
+  const runExport = (fn) => {
+    try {
+      reportService.assertExportable(tournament);
+      setExportError("");
+      fn();
+    } catch (e) {
+      setExportError(e.message);
+    }
+  };
 
   return (
     <div>
@@ -127,19 +148,24 @@ export default function TournamentReportsView({ tournament, loading }) {
       </div>
 
       <div style={styles.editActions}>
-        <button type="button" style={styles.secondaryBtn} onClick={() => exportService.exportPDF()}>
+        <button type="button" style={styles.secondaryBtn} onClick={() => runExport(() => exportService.exportPDF())}>
           <Printer size={13} strokeWidth={2.5} />
           Print
         </button>
-        <button type="button" style={styles.secondaryBtn} onClick={() => exportService.exportPDF()}>
+        <button type="button" style={styles.secondaryBtn} onClick={() => runExport(() => exportService.exportPDF())}>
           <Download size={13} strokeWidth={2.5} />
           Export PDF
         </button>
-        <button type="button" style={styles.secondaryBtn} onClick={() => exportService.exportCSV(flattenForExport(tables))}>
+        <button
+          type="button"
+          style={styles.secondaryBtn}
+          onClick={() => runExport(() => exportService.exportCSV(flattenForExport(tables)))}
+        >
           <Download size={13} strokeWidth={2.5} />
           Export CSV
         </button>
       </div>
+      {exportError && <p style={styles.editWarning}>{exportError}</p>}
 
       <div id="tournament-report-print-area">
         <h2 style={{ ...styles.poolHeading, fontSize: 18 }}>{activeLabel}</h2>

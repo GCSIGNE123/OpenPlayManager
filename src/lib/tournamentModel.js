@@ -313,12 +313,31 @@ export function makeTournament({
     bracket: null,
     createdAt: now,
     updatedAt: now,
+    // Tournament Reports & History — additive, default false. See
+    // saveTournament's header comment for how this locks the record once
+    // set; qualificationFinalizedAt (stamped by RoundRobinEngine the moment
+    // every pool first completes) and bracket.generatedAt (stamped when
+    // SingleEliminationBracketGenerator's result is attached) are the other
+    // two additive fields this task adds, both absent until their event
+    // actually happens — used by TournamentReportService.generateTournamentTimeline.
+    archived: false,
   };
   tournament.status = computeTournamentStatus(tournament);
   return tournament;
 }
 
-export async function saveTournament(tournament) {
+// Tournament Reports & History — `archived` (additive, default false) marks
+// a completed tournament as locked for good: every mutating save* wrapper in
+// lib/tournament.js funnels through this one function, so this is the single
+// chokepoint that makes an archived tournament read-only everywhere at once,
+// rather than needing a guard in every engine call site. The one legitimate
+// write to an already-archived record is the archive action itself (see
+// TournamentHistoryService.archiveTournament + lib/tournament.js's
+// saveArchiveTournament), which passes { allowArchived: true } explicitly.
+export async function saveTournament(tournament, { allowArchived = false } = {}) {
+  if (tournament.archived && !allowArchived) {
+    throw new Error("This tournament is archived and read-only.");
+  }
   const stamped = { ...tournament, updatedAt: Date.now() };
   await window.storage.set(`${TOURNAMENT_PREFIX}${tournament.id}`, JSON.stringify(stamped), true);
   return stamped;
@@ -332,4 +351,26 @@ export async function fetchTournament(id) {
   } catch (e) {
     return null; // deleted, or never existed
   }
+}
+
+// Tournament History — same fetchAll* pattern as leagueModel.js/
+// playerDatabase.js/ratingModel.js: list every key under the prefix, fetch
+// and parse each record, drop anything that fails to parse.
+export async function fetchAllTournaments() {
+  const { keys } = await window.storage.list(TOURNAMENT_PREFIX, true);
+  const records = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const res = await window.storage.get(key, true);
+        return JSON.parse(res.value);
+      } catch (e) {
+        return null;
+      }
+    })
+  );
+  return records.filter(Boolean);
+}
+
+export async function deleteTournament(id) {
+  await window.storage.delete(`${TOURNAMENT_PREFIX}${id}`, true);
 }

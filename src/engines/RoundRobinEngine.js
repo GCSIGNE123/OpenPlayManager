@@ -111,6 +111,14 @@ export class RoundRobinEngine extends TournamentEngine {
     });
     let next = { ...tournament, pools };
     next.status = computeTournamentStatus(next);
+    // Tournament Reports & History's Tournament Timeline — "Qualification
+    // Finalized" is the moment pool play (and therefore qualifier
+    // determination) first completes tournament-wide. Stamped once, never
+    // overwritten, so a later reopen-and-redo doesn't erase the original
+    // timeline event.
+    if (next.status === "completed" && !next.qualificationFinalizedAt) {
+      next = { ...next, qualificationFinalizedAt: Date.now() };
+    }
     // Tournament Settings' "Playoff Enabled" — the one Settings field with
     // real runtime effect (everything else in Playoff Settings/Match Rules
     // is captured for reference only, see TournamentSettings.js). Default
@@ -120,7 +128,7 @@ export class RoundRobinEngine extends TournamentEngine {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
         const { ready, ...bracket } = generated;
-        next = { ...next, bracket };
+        next = { ...next, bracket: { ...bracket, generatedAt: Date.now() } };
       }
     }
     return next;

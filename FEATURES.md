@@ -111,10 +111,14 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Seeding
 - [ ] Tournament Standings
 - [x] Tournament Reports
+- [x] Tournament Summary
+- [x] Tournament History
 - [x] PDF Export
 - [x] CSV Export
 - [ ] Excel Export
 - [ ] Email Reports
+- [ ] Season Reports
+- [ ] League Reports
 - [x] Player Portal
 - [ ] Player Login
 - [ ] Messaging

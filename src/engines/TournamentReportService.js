@@ -184,4 +184,135 @@ export class TournamentReportService {
       };
     });
   }
+
+  // Per-participant career line for THIS tournament, spanning both pool play
+  // and (if the participant advanced) the bracket — built by reusing
+  // RoundRobinStandingsService.calculateStandings() for the pool half
+  // (matchesPlayed/wins/losses/pointsFor/pointsAgainst, not re-derived here)
+  // then folding in every completed bracket match keyed by participantId,
+  // the same id a pool entrant and its SeededTeam share. Final Placement
+  // reads off the same podiumFor() every other report already uses, so it
+  // can never disagree with the Tournament Summary's own Champion/Runner-up.
+  generatePlayerStatistics(tournament) {
+    const stats = new Map();
+    for (const pool of tournament.pools) {
+      for (const row of standingsService.calculateStandings(pool)) {
+        stats.set(row.participantId, {
+          participantId: row.participantId,
+          label: row.label,
+          pool: pool.label,
+          matchesPlayed: row.matchesPlayed,
+          wins: row.wins,
+          losses: row.losses,
+          pointsFor: row.pointsFor,
+          pointsAgainst: row.pointsAgainst,
+        });
+      }
+    }
+    for (const round of tournament.bracket?.rounds || []) {
+      for (const match of round.matches) {
+        if (match.isBye || match.status !== "completed") continue;
+        for (const team of [match.teamA, match.teamB]) {
+          const entry = team && stats.get(team.participantId);
+          if (!entry) continue;
+          entry.matchesPlayed += 1;
+          if (match.winner === team.participantId) entry.wins += 1;
+          else entry.losses += 1;
+          const isTeamA = team === match.teamA;
+          entry.pointsFor += (isTeamA ? match.score?.teamA : match.score?.teamB) ?? 0;
+          entry.pointsAgainst += (isTeamA ? match.score?.teamB : match.score?.teamA) ?? 0;
+        }
+      }
+    }
+    const podium = podiumFor(tournament);
+    const rows = [...stats.values()].map((e) => {
+      const winPct = e.matchesPlayed === 0 ? 0 : e.wins / e.matchesPlayed;
+      const placement = e.label === podium.champion ? "Champion" : e.label === podium.runnerUp ? "Runner-up" : "—";
+      return [
+        e.label,
+        tournament.pools.length > 1 ? e.pool : undefined,
+        String(e.matchesPlayed),
+        String(e.wins),
+        String(e.losses),
+        `${Math.round(winPct * 100)}%`,
+        String(e.pointsFor),
+        String(e.pointsAgainst),
+        placement,
+      ].filter((v) => v !== undefined);
+    });
+    const columns = ["Player / Team", "Matches Played", "Wins", "Losses", "Win %", "Points Scored", "Points Conceded", "Final Placement"];
+    if (tournament.pools.length > 1) columns.splice(1, 0, "Pool");
+    return { title: "Player Statistics", columns, rows };
+  }
+
+  // Bracket matches only, grouped by round (Quarterfinals/Semifinals/Final —
+  // whatever SingleEliminationBracketGenerator named the rounds), broken out
+  // from the generic Match Results report so a spectator can read straight
+  // down "playoffs only" without pool-play matches mixed in.
+  generatePlayoffReport(tournament) {
+    if (!tournament.bracket) {
+      return { title: "Playoff Results", columns: ["Match #", "Round", "Participants", "Score", "Winner", "Court", "Date & Time"], rows: [] };
+    }
+    const rows = tournament.bracket.rounds.flatMap((round) =>
+      round.matches
+        .filter((m) => !m.isBye)
+        .map((match) => [
+          String(match.matchNumber),
+          round.name,
+          `${match.teamA?.label ?? "TBD"} vs ${match.teamB?.label ?? "TBD"}`,
+          match.status === "completed" ? `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}` : "—",
+          match.winner == null ? "—" : match.winner === match.teamA?.participantId ? match.teamA.label : match.teamB?.label ?? "—",
+          match.court != null ? String(match.court) : "—",
+          match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
+        ])
+    );
+    return { title: "Playoff Results", columns: ["Match #", "Round", "Participants", "Score", "Winner", "Court", "Date & Time"], rows };
+  }
+
+  // Chronological event log, synthesized entirely from timestamps that
+  // already exist on the record (tournament.createdAt, per-pool
+  // completedAt, tournament.qualificationFinalizedAt, bracket.generatedAt,
+  // per-round completion inferred as the latest completedAt among that
+  // round's own matches, bracket.completedAt for Champion Declared) — no
+  // separate event log is persisted, same "derive, don't persist" precedent
+  // as every other report here.
+  generateTournamentTimeline(tournament) {
+    const events = [{ label: "Tournament Created", timestamp: tournament.createdAt }];
+    for (const pool of tournament.pools) {
+      if (pool.status === "completed" && pool.completedAt) {
+        events.push({ label: `${pool.label} Completed`, timestamp: pool.completedAt });
+      }
+    }
+    if (tournament.qualificationFinalizedAt) {
+      events.push({ label: "Qualification Finalized", timestamp: tournament.qualificationFinalizedAt });
+    }
+    if (tournament.bracket?.generatedAt) {
+      events.push({ label: "Bracket Generated", timestamp: tournament.bracket.generatedAt });
+    }
+    for (const round of tournament.bracket?.rounds || []) {
+      if (round.status !== "completed") continue;
+      const completions = round.matches.filter((m) => !m.isBye).map((m) => m.completedAt ?? 0);
+      const ts = completions.length ? Math.max(...completions) : 0;
+      if (ts > 0) events.push({ label: `${round.name} Completed`, timestamp: ts });
+    }
+    if (tournament.bracket?.completedAt) {
+      events.push({ label: `Champion Declared — ${tournament.bracket.champion?.label ?? "—"}`, timestamp: tournament.bracket.completedAt });
+    }
+    events.sort((a, b) => a.timestamp - b.timestamp);
+    return {
+      title: "Tournament Timeline",
+      columns: ["Event", "Date & Time"],
+      rows: events.map((e) => [e.label, new Date(e.timestamp).toLocaleString()]),
+    };
+  }
+
+  // Sprint 5 Validation — "Prevent exporting incomplete tournaments as final
+  // reports." Called by TournamentReportsView before invoking ExportService,
+  // which itself stays format-agnostic (see ExportService.js's header
+  // comment) and so doesn't know what "complete" means for a tournament.
+  assertExportable(tournament) {
+    if (tournament.status !== "completed") {
+      throw new Error("This tournament isn't complete yet — finish all matches before exporting a final report.");
+    }
+  }
 }

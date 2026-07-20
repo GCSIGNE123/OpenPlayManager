@@ -7,7 +7,8 @@
 // engines/RoundRobinScheduler.js (the scheduling algorithm itself, called
 // once per pool — it has no idea pools exist), which don't need to know
 // anything about session players.
-import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch, findMatch } from "./tournamentModel.js";
+import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch, findMatch, deleteTournament } from "./tournamentModel.js";
+import { TournamentHistoryService } from "../engines/TournamentHistoryService.js";
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
 import { assignPools, poolLabel } from "../engines/PoolAssignment.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
@@ -29,6 +30,7 @@ const rulesService = new TournamentRulesService();
 const ratingEngine = new RatingEngine();
 const achievementService = new AchievementService();
 const qualificationService = new PoolQualificationService();
+const historyService = new TournamentHistoryService();
 
 // A pool match's teamA/teamB are full Participant objects (id, playerIds).
 // A bracket match's teamA/teamB are SeededTeam objects (participantId,
@@ -359,4 +361,18 @@ export async function saveUnpinMatch(tournament, matchId) {
 export async function saveTournamentSettings(tournament, changes) {
   const updated = rulesService.updateSettings(tournament, changes);
   return saveTournament(updated);
+}
+
+// ---- Tournament Reports & History ----
+// The one save* wrapper in this file that passes { allowArchived: true } —
+// every other wrapper relies on saveTournament's default (false) to reject
+// writes to an already-archived record, which is exactly what keeps an
+// archived tournament read-only everywhere else.
+export async function saveArchiveTournament(tournament) {
+  const updated = historyService.archiveTournament(tournament);
+  return saveTournament(updated, { allowArchived: true });
+}
+
+export async function removeTournament(id) {
+  return deleteTournament(id);
 }

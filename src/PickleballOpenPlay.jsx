@@ -40,6 +40,7 @@ import UserManagementScreen from "./components/UserManagementScreen.jsx";
 import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
 import MembershipScreen from "./components/MembershipScreen.jsx";
 import RatingsScreen from "./components/RatingsScreen.jsx";
+import TournamentHistoryScreen from "./components/TournamentHistoryScreen.jsx";
 
 const ratingEngine = new RatingEngine();
 const achievementService = new AchievementService();
@@ -1056,6 +1057,7 @@ export default function PickleballOpenPlay() {
           onLeagues={() => setScreen("leagues")}
           onMembership={() => setScreen("membership")}
           onRatings={() => setScreen("ratings")}
+          onTournamentHistory={() => setScreen("tournamentHistory")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1077,6 +1079,8 @@ export default function PickleballOpenPlay() {
       {screen === "membership" && <MembershipScreen onBack={goToLanding} />}
 
       {screen === "ratings" && <RatingsScreen onBack={goToLanding} />}
+
+      {screen === "tournamentHistory" && <TournamentHistoryScreen onBack={goToLanding} />}
 
       {screen === "portal" && (
         <PlayerPortalScreen
