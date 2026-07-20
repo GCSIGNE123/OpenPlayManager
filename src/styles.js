@@ -1285,20 +1285,34 @@ export const styles = {
     fontWeight: 700,
     color: "var(--ink)",
   },
+  // status: 'pending' | 'inProgress' | 'completed' everywhere this was
+  // already used (pool matches, League matches), plus two bracket-only
+  // additions from the Winner Advancement Engine — 'locked' (waiting on a
+  // previous round, distinct from 'pending'/"ready to play") and 'ready'
+  // (both participants known, not yet started) — see
+  // PlayoffEngine.getMatchState. Every existing call site keeps working
+  // unchanged since it never passes those two new values.
   matchStatusBadge: (status) => ({
     fontFamily: "'Space Mono', monospace",
     fontSize: 10,
     fontWeight: 700,
     letterSpacing: "0.04em",
     textTransform: "uppercase",
-    color: status === "completed" ? "var(--chalk)" : "var(--ink)",
+    color: status === "completed" ? "var(--chalk)" : status === "locked" ? "var(--color-text-faint)" : "var(--ink)",
     background:
-      status === "completed" ? "var(--court)" : status === "inProgress" ? "var(--ball)" : "var(--color-bg)",
-    border: status === "pending" ? "1.5px solid var(--line)" : "none",
+      status === "completed"
+        ? "var(--court)"
+        : status === "inProgress"
+          ? "var(--ball)"
+          : status === "ready"
+            ? "rgba(0,150,80,0.1)"
+            : "var(--color-bg)",
+    border: status === "pending" || status === "ready" ? "1.5px solid var(--line)" : status === "locked" ? "1.5px dashed var(--line)" : "none",
     borderRadius: 5,
     padding: "3px 7px",
     flexShrink: 0,
     display: "inline-block",
+    opacity: status === "locked" ? 0.6 : 1,
   }),
   byeTag: {
     fontSize: 12,

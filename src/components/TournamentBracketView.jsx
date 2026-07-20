@@ -3,20 +3,25 @@ import { Check, Play, Pencil, X, LockOpen } from "lucide-react";
 import { styles } from "../styles.js";
 import { getTournamentEngine } from "../lib/tournament.js";
 import { SingleEliminationBracketGenerator } from "../engines/SingleEliminationBracketGenerator.js";
+import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 const previewGenerator = new SingleEliminationBracketGenerator();
+const playoffEngine = new PlayoffEngine();
 
-const STATUS_LABELS = { pending: "Pending", inProgress: "In Progress", completed: "Completed" };
+const STATUS_LABELS = { locked: "Locked", ready: "Ready", inProgress: "In Progress", completed: "Completed" };
 
-// One playoff match card. Three states:
+// One playoff match card. Four states, per the Winner Advancement Engine
+// (PlayoffEngine.getMatchState — the mapping comes from the bracket
+// structure itself, not re-inferred here):
 //  - locked: teamA and/or teamB is still null ("TBD") — this round hasn't
 //    been unlocked yet, since PlayoffEngine only fills a slot in once the
 //    feeding match from the previous round completes. No actions render.
-//  - playable: both teams known, not yet completed — Start Match / Enter
-//    Scores / Save Result, same flow the pool Schedule tab's MatchCard uses.
-//  - completed: visually distinguished, Edit Result available unless the
-//    whole bracket is locked (bracket.status === "completed").
+//  - ready: both teams known, not yet started — Start Match.
+//  - inProgress: Enter Scores / Save Result, same flow the pool Schedule
+//    tab's MatchCard uses.
+//  - completed: winner highlighted, loser dimmed; Edit Result available
+//    unless the whole bracket is locked (bracket.status === "completed").
 function BracketMatchCard({ match, bracketCompleted, onStartMatch, onSaveResult }) {
   const [editing, setEditing] = useState(false);
   const [scoreA, setScoreA] = useState("");
@@ -24,8 +29,9 @@ function BracketMatchCard({ match, bracketCompleted, onStartMatch, onSaveResult 
   const [winnerId, setWinnerId] = useState(null);
   const [localError, setLocalError] = useState("");
 
-  const locked = !match.teamA || !match.teamB;
-  const isCompleted = match.status === "completed";
+  const matchState = playoffEngine.getMatchState(match);
+  const locked = matchState === "locked";
+  const isCompleted = matchState === "completed";
   const canEdit = isCompleted && !bracketCompleted;
 
   const openForm = () => {
@@ -63,31 +69,34 @@ function BracketMatchCard({ match, bracketCompleted, onStartMatch, onSaveResult 
     <div style={{ ...styles.historyMatchCard, ...(isCompleted ? styles.matchCompletedCard : {}) }}>
       <div style={styles.historyMatchHead}>
         <span style={styles.courtBadge}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
-        <span style={styles.matchStatusBadge(match.status)}>{STATUS_LABELS[match.status]}</span>
+        <span style={styles.matchStatusBadge(matchState)}>{STATUS_LABELS[matchState]}</span>
       </div>
 
       {!editing && (
         <>
           <div style={styles.historyMatchTeams}>
-            {[match.teamA, match.teamB].map((team, i) => (
-              <div key={i} style={styles.historyTeamLine}>
-                {team ? (
-                  <>
-                    <span>
-                      <span style={styles.bracketSeedTag}>#{team.seed}</span>
-                      {team.label}
-                    </span>
-                    {isCompleted && (
-                      <span style={{ ...styles.historyScore, ...(match.winner === team.participantId ? styles.historyScoreWin : {}) }}>
-                        {i === 0 ? match.score.teamA : match.score.teamB}
+            {[match.teamA, match.teamB].map((team, i) => {
+              const isLoser = isCompleted && team && match.winner !== team.participantId;
+              return (
+                <div key={i} style={{ ...styles.historyTeamLine, ...(isLoser ? { opacity: 0.5 } : {}) }}>
+                  {team ? (
+                    <>
+                      <span>
+                        <span style={styles.bracketSeedTag}>#{team.seed}</span>
+                        {team.label}
                       </span>
-                    )}
-                  </>
-                ) : (
-                  <span style={styles.bracketTbdLabel}>TBD — waiting on a previous round</span>
-                )}
-              </div>
-            ))}
+                      {isCompleted && (
+                        <span style={{ ...styles.historyScore, ...(match.winner === team.participantId ? styles.historyScoreWin : {}) }}>
+                          {i === 0 ? match.score.teamA : match.score.teamB}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span style={styles.bracketTbdLabel}>TBD — waiting on a previous round</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {!locked && (
             <div style={styles.editActions}>
@@ -167,6 +176,40 @@ function BracketMatchCard({ match, bracketCompleted, onStartMatch, onSaveResult 
   );
 }
 
+// "Tournament Progress" for the playoff stage, per the Winner Advancement
+// Engine spec — Current Round/Matches Remaining/Completed Matches/Current
+// Active Matches. Pure derived data (same pattern as everything else in
+// this app), recomputed fresh on every render straight from the bracket;
+// only shown while the bracket is still in progress — the Champion/
+// Runner-up banner above already covers the completed case.
+function BracketProgressPanel({ bracket }) {
+  const allMatches = bracket.rounds.flatMap((r) => r.matches);
+  const completed = allMatches.filter((m) => m.status === "completed").length;
+  const active = allMatches.filter((m) => m.status === "inProgress").length;
+  const remaining = allMatches.length - completed;
+  const currentRound = playoffEngine.getCurrentRound(bracket);
+  return (
+    <div style={styles.sessionInfoCard}>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Current Round</span>
+        <span style={styles.sessionInfoValue}>{currentRound.name}</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Matches Remaining</span>
+        <span style={styles.sessionInfoValue}>{remaining}</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Completed Matches</span>
+        <span style={styles.sessionInfoValue}>{completed}</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Current Active Matches</span>
+        <span style={styles.sessionInfoValue}>{active}</span>
+      </div>
+    </div>
+  );
+}
+
 function BracketRoundColumn({ round, bracketCompleted, onStartMatch, onSaveResult }) {
   return (
     <div style={styles.bracketRoundColumn}>
@@ -235,7 +278,10 @@ export default function TournamentBracketView({ tournament, loading, matchError,
             </div>
           </>
         ) : (
-          <p style={styles.editHint}>{bracket.size}-team elimination bracket, seeded by Standard Cross-Pool Seeding.</p>
+          <>
+            <p style={styles.editHint}>{bracket.size}-team elimination bracket, seeded by Standard Cross-Pool Seeding.</p>
+            <BracketProgressPanel bracket={bracket} />
+          </>
         )}
         {matchError && <p style={styles.editWarning}>{matchError}</p>}
         <div style={styles.bracketScroll}>

@@ -71,6 +71,10 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Manual Seeding
 - [ ] Double Elimination Brackets
 - [x] Automatic Winner Advancement
+- [x] Winner Advancement Engine
+- [x] Automatic Tournament Completion
+- [ ] Bronze Medal Match
+- [ ] Best-of-3 Finals
 - [x] Tournament Court Assignment
 - [x] Match Queue
 - [x] Court Assignment Engine
