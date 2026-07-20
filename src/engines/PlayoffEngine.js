@@ -15,6 +15,9 @@
 // what "the next round is locked" means; there's no separate flag to
 // maintain in sync with it.
 import { computeRoundStatus } from "../lib/tournamentModel.js";
+import { PlayoffAdvancementService } from "./PlayoffAdvancementService.js";
+
+const advancementService = new PlayoffAdvancementService();
 
 function findBracketMatch(bracket, matchId) {
   for (let roundIndex = 0; roundIndex < bracket.rounds.length; roundIndex++) {
@@ -45,19 +48,16 @@ export class PlayoffEngine {
     return match.status; // "inProgress" | "paused" | "completed"
   }
 
-  // round: BracketRound (see PlayoffBracketGenerator)
-  // returns: boolean — every match in the round has a recorded result
+  // Delegates to PlayoffAdvancementService — see that file. Kept as a
+  // same-named method on PlayoffEngine so every existing caller
+  // (isTournamentComplete below, BracketViewModel, TournamentBracketView)
+  // keeps working unchanged.
   isRoundComplete(round) {
-    return round.matches.length > 0 && round.matches.every((m) => m.status === "completed");
+    return advancementService.isRoundComplete(round);
   }
 
-  // The earliest round that still has an unfinished (non-completed) match
-  // — "Current Round" for the Bracket Progress display. Falls back to the
-  // final round once every round is done (there's nothing left to call
-  // "current" otherwise), so this always returns a real round rather than
-  // null/undefined.
   getCurrentRound(bracket) {
-    return bracket.rounds.find((r) => r.matches.some((m) => m.status !== "completed")) ?? bracket.rounds[bracket.rounds.length - 1];
+    return advancementService.getCurrentRound(bracket);
   }
 
   // Live Playoff Bracket & Match Operations — see PROJECT.md. Every match
@@ -82,40 +82,14 @@ export class PlayoffEngine {
     return this.isRoundComplete(finalRound);
   }
 
-  // The actual write: places `winnerTeam` into `slot` ("teamA"|"teamB") of
-  // the match numbered `nextMatchNumber` within round index `nextRoundIndex`
-  // — the one primitive advanceWinner() delegates to below. Pulled out as
-  // its own named method per the spec's architecture list; advanceWinner
-  // still owns figuring out WHERE a winner goes (the matchNumber ->
-  // ceil(matchNumber/2) mapping), this just performs the write once that's
-  // decided.
+  // Delegates to PlayoffAdvancementService — see that file for the actual
+  // logic and PROJECT.md for the Winner Advancement Engine writeup.
   populateNextMatch(bracket, nextRoundIndex, nextMatchNumber, slot, winnerTeam) {
-    return bracket.rounds.map((r, i) => {
-      if (i !== nextRoundIndex) return r;
-      const matches = r.matches.map((m) => (m.matchNumber === nextMatchNumber ? { ...m, [slot]: winnerTeam } : m));
-      return { ...r, matches };
-    });
+    return advancementService.populateNextMatch(bracket, nextRoundIndex, nextMatchNumber, slot, winnerTeam);
   }
 
-  // Determines WHERE a winner goes and hands the actual write off to
-  // populateNextMatch(). matchNumber -> ceil(matchNumber/2) is a standard,
-  // generic bracket-tree mapping (odd matchNumber -> teamA, even ->
-  // teamB) — not a seed-optimal placement (Advanced Seeding is out of
-  // scope), just structurally consistent adjacency that preserves the
-  // bracket shape PlayoffBracketGenerator already built.
-  // bracket: Bracket; matchId: the just-completed match's id
-  // winnerTeam: SeededTeam (the winning side's full team object, not just
-  // an id — so the next round's slot has a real label/seed to display)
-  // returns: BracketRound[] — bracket.rounds with the winner advanced in
   advanceWinner(bracket, matchId, winnerTeam) {
-    const found = findBracketMatch(bracket, matchId);
-    if (!found) return bracket.rounds;
-    const nextRoundIndex = found.roundIndex + 1;
-    if (nextRoundIndex >= bracket.rounds.length) return bracket.rounds; // championship match — no next round to advance into
-
-    const nextMatchNumber = Math.ceil(found.match.matchNumber / 2);
-    const slot = found.match.matchNumber % 2 === 1 ? "teamA" : "teamB";
-    return this.populateNextMatch(bracket, nextRoundIndex, nextMatchNumber, slot, winnerTeam);
+    return advancementService.advanceWinner(bracket, matchId, winnerTeam);
   }
 
   // "Start Match": pending -> inProgress. Rejects a bracket that's already
@@ -132,7 +106,9 @@ export class PlayoffEngine {
     }
     const rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now(), lastUpdatedAt: Date.now() } : m));
+      const matches = r.matches.map((m) =>
+        m.id === matchId ? { ...advancementService.updateMatchStatus(m, "inProgress"), startedAt: Date.now() } : m
+      );
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...bracket, rounds };
@@ -155,7 +131,7 @@ export class PlayoffEngine {
     if (!found || found.match.status !== "inProgress") return bracket;
     const rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "paused", lastUpdatedAt: Date.now() } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? advancementService.updateMatchStatus(m, "paused") : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...bracket, rounds };
@@ -169,7 +145,7 @@ export class PlayoffEngine {
     if (!found || found.match.status !== "paused") return bracket;
     const rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", lastUpdatedAt: Date.now() } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? advancementService.updateMatchStatus(m, "inProgress") : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...bracket, rounds };
@@ -236,12 +212,10 @@ export class PlayoffEngine {
     const loserTeam = winnerTeam === found.match.teamA ? found.match.teamB : found.match.teamA;
 
     const updatedMatch = {
-      ...found.match,
+      ...advancementService.updateMatchStatus(found.match, "completed"),
       score: { teamA: numA, teamB: numB },
       winner: winnerId,
-      status: "completed",
       completedAt: Date.now(),
-      lastUpdatedAt: Date.now(),
     };
     let rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
@@ -274,53 +248,7 @@ export class PlayoffEngine {
   // localError handling) depend on; this is a separate, richer check for a
   // caller that wants the full picture at once.
   validateAdvancement(bracket, matchId, result) {
-    const errors = [];
-
-    if (bracket.status === "completed") {
-      errors.push("This tournament is already completed — no further edits are allowed.");
-      return { valid: false, errors }; // nothing else is worth checking once this is true
-    }
-
-    const found = findBracketMatch(bracket, matchId);
-    if (!found) {
-      errors.push("Match not found.");
-      return { valid: false, errors };
-    }
-    if (found.match.status === "completed") {
-      errors.push("This match already has a recorded result — advancing it again would advance the same participant twice.");
-    }
-    if (!found.match.teamA || !found.match.teamB) {
-      errors.push("Both participants must be known before this match can be advanced — it's waiting on a previous round.");
-    }
-    if (result && !result.winnerId) {
-      errors.push("A match can't be advanced without a winner.");
-    }
-    if (result?.winnerId && found.match.teamA && found.match.teamB) {
-      if (result.winnerId !== found.match.teamA.participantId && result.winnerId !== found.match.teamB.participantId) {
-        errors.push("Winner must be one of this match's two participants.");
-      }
-    }
-
-    // "No duplicate participants in the bracket" — scoped to ACTIVE (not
-    // yet completed) matches only. A winner legitimately appears twice
-    // across the bracket as a whole once they've advanced (their old,
-    // completed match still shows them as its historical teamA/teamB, and
-    // their new match now seats them too) — that's normal advancement, not
-    // a duplicate. The real invariant is that a participant should never
-    // be simultaneously live in two different NOT-YET-DECIDED matches at
-    // once, which would mean they could theoretically win/advance from two
-    // places at the same time.
-    const activeSeatedIds = bracket.rounds
-      .flatMap((r) => r.matches)
-      .filter((m) => m.status !== "completed")
-      .flatMap((m) => [m.teamA?.participantId, m.teamB?.participantId])
-      .filter(Boolean);
-    const duplicateActiveIds = activeSeatedIds.filter((id, i) => activeSeatedIds.indexOf(id) !== i);
-    if (duplicateActiveIds.length > 0) {
-      errors.push("Duplicate participants found among active bracket matches — a participant can only be live in one match at a time.");
-    }
-
-    return { valid: errors.length === 0, errors };
+    return advancementService.validateAdvancement(bracket, matchId, result);
   }
 
   // Round Robin Playoff Engine — see PROJECT.md. Unlocks a completed
