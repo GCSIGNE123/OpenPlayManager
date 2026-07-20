@@ -17,11 +17,70 @@ import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
+import { RatingEngine } from "../engines/RatingEngine.js";
+import { AchievementService } from "../engines/AchievementService.js";
+import { fetchPlayer } from "./playerDatabase.js";
 
 const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
 const courtAssignmentEngine = new CourtAssignmentEngine();
 const rulesService = new TournamentRulesService();
+const ratingEngine = new RatingEngine();
+const achievementService = new AchievementService();
+
+// A pool match's teamA/teamB are full Participant objects (id, playerIds).
+// A bracket match's teamA/teamB are SeededTeam objects (participantId,
+// label — playerIds isn't carried through bracket seeding, see
+// BracketSeeding.js/SingleEliminationBracketGenerator.js), so their
+// underlying playerIds have to be looked back up from the original pool
+// entrant they came from, matched by participantId.
+function resolvePlayerIds(tournament, team) {
+  if (team.playerIds) return team.playerIds; // pool match — already a Participant
+  const participantId = team.participantId;
+  for (const pool of tournament.pools || []) {
+    const entrant = pool.entrants.find((e) => e.id === participantId);
+    if (entrant) return entrant.playerIds;
+  }
+  return [];
+}
+
+// Club Rating & Ranking Engine — the one hook point every completed
+// pool/bracket match funnels through. Awaited (not truly fire-and-forget)
+// so King Slayer/Tournament Champion checks that run right after always
+// see fully-updated ratings — but any rating-side error still can't
+// corrupt the tournament record itself, since this only ever writes to
+// separate opl-playerrating-*/opl-ratinghistory-*/opl-achievement-* keys,
+// never to the tournament object saveTournament persists. Silently skips
+// any participant without a Player Database id, per RatingEngine's own
+// documented identity constraint.
+// Exported so lib/league.js's saveLeagueMatchResult can reuse this exact
+// hook (source: "league") instead of duplicating it — a LeagueSeason's
+// matches are plain pool matches (Participant teamA/teamB, playerIds
+// already present), so this needs no changes to also work there.
+export async function rateMatch(tournament, match, source) {
+  if (!match.teamA || !match.teamB || match.winner == null) return;
+  const teamAId = match.teamA.id ?? match.teamA.participantId;
+  const winnerIsA = match.winner === teamAId;
+  const winnerIds = resolvePlayerIds(tournament, winnerIsA ? match.teamA : match.teamB);
+  const loserIds = resolvePlayerIds(tournament, winnerIsA ? match.teamB : match.teamA);
+
+  // King Slayer — "was this loser the #1 ranked player" has to be checked
+  // BEFORE processMatchResult below updates anyone's rating, or the
+  // just-defeated #1 could already have moved off the top by the time
+  // it's checked.
+  const loserWasTopRanked = (await Promise.all(loserIds.map((id) => ratingEngine.isTopRanked(id)))).some(Boolean);
+
+  const rated = await ratingEngine.processMatchResult({ winnerIds, loserIds, matchId: match.id, source });
+  for (const { playerId, result, rating } of rated) {
+    if (result === "win") await achievementService.awardAchievements(playerId, { totalWins: rating.wins });
+  }
+  if (loserWasTopRanked) {
+    for (const winnerId of winnerIds) {
+      const player = await fetchPlayer(winnerId);
+      if (player) await achievementService.awardKingSlayer(winnerId, loserIds[0], match.id);
+    }
+  }
+}
 
 export function buildEntrants(players, mode) {
   if (mode === "doubles") {
@@ -113,6 +172,7 @@ export async function saveMatchResult(tournament, matchId, result) {
   const updated = engine.updateMatchResult(tournament, matchId, result);
   const { match } = findMatch(updated, matchId);
   const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (!match.isBye) await rateMatch(updated, match, tournament.format === "league" ? "league" : "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -135,6 +195,17 @@ export async function savePlayoffMatchResult(tournament, matchId, result) {
   const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
   const updated = { ...tournament, bracket };
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(updated, match, "tournament");
+  // Tournament Champion — awarded the moment the championship match
+  // completes the whole bracket, to every one of the champion team's
+  // underlying players (both, for doubles).
+  if (bracket.status === "completed" && bracket.champion) {
+    const championIds = resolvePlayerIds(updated, bracket.champion);
+    for (const playerId of championIds) {
+      const player = await fetchPlayer(playerId);
+      if (player) await achievementService.awardTournamentChampion(playerId, tournament.id);
+    }
+  }
   return saveTournament(withAutoFill);
 }
 

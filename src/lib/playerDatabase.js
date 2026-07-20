@@ -114,6 +114,18 @@ export async function fetchAllPlayers() {
   return records.filter(Boolean);
 }
 
+// Single-record lookup — used by the Club Rating & Ranking Engine to check
+// whether a given id is a real Player Database record before awarding any
+// rating (a session-only walk-in id isn't one; see engines/RatingEngine.js).
+export async function fetchPlayer(id) {
+  try {
+    const res = await window.storage.get(`${PLAYER_DB_PREFIX}${id}`, true);
+    return JSON.parse(res.value);
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function savePlayerRecord(record) {
   const stamped = { ...record, updatedAt: Date.now() };
   await window.storage.set(`${PLAYER_DB_PREFIX}${record.id}`, JSON.stringify(stamped), true);

@@ -10,6 +10,7 @@ import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { makeLeagueSeason, makeLeagueWeek, saveLeagueSeason, computeWeekDate } from "./leagueModel.js";
+import { rateMatch } from "./tournament.js";
 
 const roundRobinEngine = new RoundRobinEngine();
 const courtAssignmentService = new CourtAssignmentService();
@@ -81,6 +82,7 @@ export async function saveLeagueMatchResult(season, matchId, result) {
   const updated = roundRobinEngine.updateMatchResult(season, matchId, result);
   const { match } = findMatch(updated, matchId);
   const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (!match.isBye) await rateMatch(updated, match, "league");
   return saveLeagueSeason(withAutoFill);
 }
 

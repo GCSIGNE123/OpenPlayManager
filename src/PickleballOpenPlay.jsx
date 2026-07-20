@@ -18,6 +18,8 @@ import {
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
+import { RatingEngine } from "./engines/RatingEngine.js";
+import { AchievementService } from "./engines/AchievementService.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -37,9 +39,32 @@ import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 import UserManagementScreen from "./components/UserManagementScreen.jsx";
 import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
 import MembershipScreen from "./components/MembershipScreen.jsx";
+import RatingsScreen from "./components/RatingsScreen.jsx";
+
+const ratingEngine = new RatingEngine();
+const achievementService = new AchievementService();
+
+// Club Rating & Ranking Engine's Open Play hook — see PROJECT.md. Fire-
+// and-forget (not awaited by endMatch, which isn't async) so a rating-side
+// hiccup can never block or delay ending a live match; ratingEngine
+// itself silently skips any player without a Player Database id (a
+// walk-in), per its own documented identity constraint.
+function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
+  if (!aWon && !bWon) return; // a tie has no winner to rate
+  const winnerIds = aWon ? teamA : teamB;
+  const loserIds = aWon ? teamB : teamA;
+  ratingEngine
+    .processMatchResult({ winnerIds, loserIds, matchId: uid(), source: "openPlay" })
+    .then((rated) => {
+      for (const { playerId, result, rating } of rated) {
+        if (result === "win") achievementService.awardAchievements(playerId, { totalWins: rating.wins });
+      }
+    })
+    .catch(() => {}); // best-effort — never surfaces an error into the live match flow
+}
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | membership
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | membership | ratings
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -779,6 +804,8 @@ export default function PickleballOpenPlay() {
     };
     const matchHistory = [...(state.matchHistory || []), matchRecord];
 
+    rateOpenPlayMatch(teamA, teamB, aWon, bWon);
+
     // pooling applies to standalone Winner Pool Rotation, and to Progressive
     // Skill Rotation while it's in the Mentorship phase (see
     // isPoolingRotation) — plus, regardless of the phase *this* match just
@@ -1028,6 +1055,7 @@ export default function PickleballOpenPlay() {
           onPlayerPortal={() => setScreen("portal")}
           onLeagues={() => setScreen("leagues")}
           onMembership={() => setScreen("membership")}
+          onRatings={() => setScreen("ratings")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1047,6 +1075,8 @@ export default function PickleballOpenPlay() {
       {screen === "leagues" && <LeagueManagerScreen onBack={goToLanding} />}
 
       {screen === "membership" && <MembershipScreen onBack={goToLanding} />}
+
+      {screen === "ratings" && <RatingsScreen onBack={goToLanding} />}
 
       {screen === "portal" && (
         <PlayerPortalScreen

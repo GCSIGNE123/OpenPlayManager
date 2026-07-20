@@ -127,7 +127,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Player Database Architecture
 - [ ] Player Management UI (edit/deactivate)
 - [ ] Player Statistics
-- [ ] Club Rankings
+- [x] Club Rankings
 - [ ] Season History
 - [ ] DUPR Integration
 
@@ -137,5 +137,14 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Online Payments
 - [ ] Auto Renewal
 - [ ] Family Memberships
+
+## ⭐ Club Rating & Ranking Engine
+
+- [x] Club Rating Engine
+- [x] Rating History
+- [x] Club Leaderboards
+- [ ] DUPR Integration
+- [ ] National Rankings
+- [ ] Cross-Club Ratings
 
 ## ✅ Completed
