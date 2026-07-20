@@ -67,13 +67,14 @@ Do not implement multiple unrelated features in a single task.
 - [x] Automatic Qualification
 - [x] Automatic Bracket Generation
 - [x] Automatic Playoff Bracket Generator
-- [ ] Bronze Medal Match
+- [x] Bronze Medal Match
 - [ ] Manual Seeding
 - [ ] Double Elimination Brackets
 - [x] Automatic Winner Advancement
 - [x] Winner Advancement Engine
 - [x] Automatic Tournament Completion
-- [ ] Bronze Medal Match
+- [x] Bronze Medal Match
+- [ ] Placement Matches
 - [ ] Best-of-3 Finals
 - [x] Live Playoff Bracket
 - [x] Court Assignment

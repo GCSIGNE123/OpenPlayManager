@@ -271,6 +271,7 @@ export function makeTournament({
   playoffEnabled = true, // Tournament Settings' Playoff Settings — real behavior: gates RoundRobinEngine's auto-generate-bracket step
   autoDetectPlayoffStage = true, // captured for reference only — see TournamentSettings.js header comment
   manualPlayoffStage = null, // only meaningful when autoDetectPlayoffStage is false; captured for reference only
+  bronzeMatchEnabled = false, // Bronze Medal Match — real behavior: gates PlayoffBracketGenerator attaching bracket.bronzeMatch. Editable via the Settings tab only (same precedent playoffEnabled already set), locked once playoffs start.
 }) {
   const now = Date.now();
   const tournament = {
@@ -287,6 +288,7 @@ export function makeTournament({
     playoffEnabled,
     autoDetectPlayoffStage,
     manualPlayoffStage,
+    bronzeMatchEnabled,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come

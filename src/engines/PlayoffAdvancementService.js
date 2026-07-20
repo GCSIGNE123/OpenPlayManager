@@ -87,6 +87,20 @@ export class PlayoffAdvancementService {
     return this.populateNextMatch(bracket, nextRoundIndex, nextMatchNumber, slot, winnerTeam);
   }
 
+  // Bronze Medal Match — see PROJECT.md. Seats a semifinal LOSER into
+  // bracket.bronzeMatch, mirroring populateNextMatch's odd->teamA/
+  // even->teamB slot convention by the semifinal's own matchNumber (there
+  // are always exactly two semifinal matches feeding one bronze match, so
+  // this needs no round-index bookkeeping the way populateNextMatch does).
+  // Pure — returns a new bronzeMatch object, never mutates the one passed
+  // in; the caller (PlayoffEngine.updateBracket) decides whether to call
+  // this at all (only when bronzeMatch exists and the just-completed match
+  // was in the semifinal round).
+  populateBronzeMatch(bronzeMatch, semifinalMatchNumber, loserTeam) {
+    const slot = semifinalMatchNumber % 2 === 1 ? "teamA" : "teamB";
+    return { ...bronzeMatch, [slot]: loserTeam };
+  }
+
   // Winner Advancement Engine — see PROJECT.md. Every rule the spec's
   // "Validation" section names, as one real, callable, testable method
   // returning every failing check at once — the same `{valid, errors[]}`

@@ -197,7 +197,10 @@ export async function savePlayoffMatchStart(tournament, matchId) {
 // the just-completed match.
 export async function savePlayoffMatchResult(tournament, matchId, result) {
   const bracket = playoffEngine.updateBracket(tournament.bracket, matchId, result);
-  const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  // Bronze Medal Match is a sibling field, not a round inside bracket.rounds
+  // (see PlayoffBracketGenerator's header comment) — checked as a fallback
+  // so its own completion still gets court auto-fill/rating credit.
+  const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId) ?? (bracket.bronzeMatch?.id === matchId ? bracket.bronzeMatch : null);
   const updated = { ...tournament, bracket };
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
   if (match) await rateMatch(updated, match, "tournament");

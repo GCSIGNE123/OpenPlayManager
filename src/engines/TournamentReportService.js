@@ -40,6 +40,12 @@ function collectAllMatches(tournament) {
         if (!match.isBye) matches.push({ match, source: "bracket", sourceLabel: round.name });
       }
     }
+    // Bronze Medal Match — a sibling field, not a round inside
+    // tournament.bracket.rounds (see PlayoffBracketGenerator's header
+    // comment for why), so it needs its own explicit inclusion here.
+    if (tournament.bracket.bronzeMatch) {
+      matches.push({ match: tournament.bracket.bronzeMatch, source: "bracket", sourceLabel: "Bronze Medal Match" });
+    }
   }
   return matches;
 }
@@ -51,12 +57,16 @@ function podiumFor(tournament) {
   // own podium (stamped by RoundRobinCompletionService) is the tournament
   // result; a multi-pool tournament with no bracket has no single
   // tournament-wide champion (pools are independent — see
-  // TournamentDashboardView's PoolPodium), so all three read "—".
+  // TournamentDashboardView's PoolPodium), so all four read "—".
   if (tournament.bracket?.status === "completed") {
     return {
       champion: tournament.bracket.champion?.label ?? null,
       runnerUp: tournament.bracket.runnerUp?.label ?? null,
-      thirdPlace: null, // no bronze-medal match exists yet — see FEATURES.md's Bronze Match backlog item
+      // Only real once a Bronze Medal Match exists and has been played —
+      // tournament.bracket.thirdPlace/fourthPlace are null until then
+      // (see PlayoffEngine.updateBracket's bronze-completion branch).
+      thirdPlace: tournament.bracket.thirdPlace?.label ?? null,
+      fourthPlace: tournament.bracket.fourthPlace?.label ?? null,
     };
   }
   if (tournament.pools.length === 1) {
@@ -65,9 +75,10 @@ function podiumFor(tournament) {
       champion: pool.champion?.label ?? null,
       runnerUp: pool.runnerUp?.label ?? null,
       thirdPlace: pool.thirdPlace?.label ?? null,
+      fourthPlace: null,
     };
   }
-  return { champion: null, runnerUp: null, thirdPlace: null };
+  return { champion: null, runnerUp: null, thirdPlace: null, fourthPlace: null };
 }
 
 export class TournamentReportService {
@@ -84,9 +95,13 @@ export class TournamentReportService {
         ["Number of Pools", String(tournament.pools.length)],
         ["Total Matches", String(progress.total)],
         ["Matches Completed", String(progress.completed)],
-        ["Champion", podium.champion ?? "—"],
-        ["Runner-up", podium.runnerUp ?? "—"],
-        ["Third Place", podium.thirdPlace ?? "—"],
+        // Podium order, per PROJECT.md's Bronze Medal Match section —
+        // Fourth Place only ever has a real value when a Bronze Medal
+        // Match was enabled and has been played; otherwise "—".
+        ["🥇 Champion", podium.champion ?? "—"],
+        ["🥈 Runner-up", podium.runnerUp ?? "—"],
+        ["🥉 Third Place", podium.thirdPlace ?? "—"],
+        ["🏅 Fourth Place", podium.fourthPlace ?? "—"],
       ],
     };
   }
@@ -209,25 +224,34 @@ export class TournamentReportService {
         });
       }
     }
-    for (const round of tournament.bracket?.rounds || []) {
-      for (const match of round.matches) {
-        if (match.isBye || match.status !== "completed") continue;
-        for (const team of [match.teamA, match.teamB]) {
-          const entry = team && stats.get(team.participantId);
-          if (!entry) continue;
-          entry.matchesPlayed += 1;
-          if (match.winner === team.participantId) entry.wins += 1;
-          else entry.losses += 1;
-          const isTeamA = team === match.teamA;
-          entry.pointsFor += (isTeamA ? match.score?.teamA : match.score?.teamB) ?? 0;
-          entry.pointsAgainst += (isTeamA ? match.score?.teamB : match.score?.teamA) ?? 0;
-        }
+    const bracketMatches = [...(tournament.bracket?.rounds || []).flatMap((r) => r.matches)];
+    if (tournament.bracket?.bronzeMatch) bracketMatches.push(tournament.bracket.bronzeMatch);
+    for (const match of bracketMatches) {
+      if (match.isBye || match.status !== "completed") continue;
+      for (const team of [match.teamA, match.teamB]) {
+        const entry = team && stats.get(team.participantId);
+        if (!entry) continue;
+        entry.matchesPlayed += 1;
+        if (match.winner === team.participantId) entry.wins += 1;
+        else entry.losses += 1;
+        const isTeamA = team === match.teamA;
+        entry.pointsFor += (isTeamA ? match.score?.teamA : match.score?.teamB) ?? 0;
+        entry.pointsAgainst += (isTeamA ? match.score?.teamB : match.score?.teamA) ?? 0;
       }
     }
     const podium = podiumFor(tournament);
     const rows = [...stats.values()].map((e) => {
       const winPct = e.matchesPlayed === 0 ? 0 : e.wins / e.matchesPlayed;
-      const placement = e.label === podium.champion ? "Champion" : e.label === podium.runnerUp ? "Runner-up" : "—";
+      const placement =
+        e.label === podium.champion
+          ? "Champion"
+          : e.label === podium.runnerUp
+            ? "Runner-up"
+            : e.label === podium.thirdPlace
+              ? "Third Place"
+              : e.label === podium.fourthPlace
+                ? "Fourth Place"
+                : "—";
       return [
         e.label,
         tournament.pools.length > 1 ? e.pool : undefined,
@@ -253,19 +277,21 @@ export class TournamentReportService {
     if (!tournament.bracket) {
       return { title: "Playoff Results", columns: ["Match #", "Round", "Participants", "Score", "Winner", "Court", "Date & Time"], rows: [] };
     }
-    const rows = tournament.bracket.rounds.flatMap((round) =>
-      round.matches
-        .filter((m) => !m.isBye)
-        .map((match) => [
-          String(match.matchNumber),
-          round.name,
-          `${match.teamA?.label ?? "TBD"} vs ${match.teamB?.label ?? "TBD"}`,
-          match.status === "completed" ? `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}` : "—",
-          match.winner == null ? "—" : match.winner === match.teamA?.participantId ? match.teamA.label : match.teamB?.label ?? "—",
-          match.court != null ? String(match.court) : "—",
-          match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
-        ])
-    );
+    const matchRow = (match, roundName) => [
+      String(match.matchNumber),
+      roundName,
+      `${match.teamA?.label ?? "TBD"} vs ${match.teamB?.label ?? "TBD"}`,
+      match.status === "completed" ? `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}` : "—",
+      match.winner == null ? "—" : match.winner === match.teamA?.participantId ? match.teamA.label : match.teamB?.label ?? "—",
+      match.court != null ? String(match.court) : "—",
+      match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
+    ];
+    const rows = tournament.bracket.rounds.flatMap((round) => round.matches.filter((m) => !m.isBye).map((m) => matchRow(m, round.name)));
+    // Bronze Medal Match — a sibling field, not a round inside
+    // tournament.bracket.rounds, appended after the semifinal/final rows
+    // rather than mixed into the rounds.flatMap above so it doesn't need a
+    // synthetic round object.
+    if (tournament.bracket.bronzeMatch) rows.push(matchRow(tournament.bracket.bronzeMatch, "Bronze Medal Match"));
     return { title: "Playoff Results", columns: ["Match #", "Round", "Participants", "Score", "Winner", "Court", "Date & Time"], rows };
   }
 
@@ -295,8 +321,21 @@ export class TournamentReportService {
       const ts = completions.length ? Math.max(...completions) : 0;
       if (ts > 0) events.push({ label: `${round.name} Completed`, timestamp: ts });
     }
-    if (tournament.bracket?.completedAt) {
-      events.push({ label: `Champion Declared — ${tournament.bracket.champion?.label ?? "—"}`, timestamp: tournament.bracket.completedAt });
+    if (tournament.bracket?.bronzeMatch?.status === "completed" && tournament.bracket.bronzeMatch.completedAt) {
+      events.push({ label: "Bronze Medal Match Completed", timestamp: tournament.bracket.bronzeMatch.completedAt });
+    }
+    // Champion Declared uses the Final match's OWN completedAt, not
+    // bracket.completedAt — the latter now only stamps once the whole
+    // bracket locks, which (with Bronze Medal Match enabled) can happen
+    // later than the Final itself, since champion/runnerUp are decided the
+    // moment the Final completes regardless of whether Bronze has finished
+    // yet (see PlayoffEngine.updateBracket).
+    if (tournament.bracket?.champion) {
+      const finalRound = tournament.bracket.rounds[tournament.bracket.rounds.length - 1];
+      const finalMatch = finalRound.matches.find((m) => m.status === "completed");
+      if (finalMatch?.completedAt) {
+        events.push({ label: `Champion Declared — ${tournament.bracket.champion.label}`, timestamp: finalMatch.completedAt });
+      }
     }
     events.sort((a, b) => a.timestamp - b.timestamp);
     return {

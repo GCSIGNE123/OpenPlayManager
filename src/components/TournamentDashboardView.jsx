@@ -114,7 +114,9 @@ function CompletedOverviewPanel({ tournament }) {
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Total Playoff Matches</span>
           <span style={styles.sessionInfoValue}>
-            {tournament.bracket ? tournament.bracket.rounds.reduce((sum, r) => sum + r.matches.length, 0) : qualification.playoffSize.count - 1}
+            {tournament.bracket
+              ? tournament.bracket.rounds.reduce((sum, r) => sum + r.matches.length, 0) + (tournament.bracket.bronzeMatch ? 1 : 0)
+              : qualification.playoffSize.count - 1}
           </span>
         </div>
         <div style={styles.sessionInfoItem}>
@@ -131,6 +133,18 @@ function CompletedOverviewPanel({ tournament }) {
               <span style={styles.sessionInfoLabel}>🥈 Bracket Runner-up</span>
               <span style={styles.sessionInfoValue}>{tournament.bracket.runnerUp?.label ?? "—"}</span>
             </div>
+            {tournament.bracket.bronzeMatch && (
+              <>
+                <div style={styles.sessionInfoItem}>
+                  <span style={styles.sessionInfoLabel}>🥉 Third Place</span>
+                  <span style={styles.sessionInfoValue}>{tournament.bracket.thirdPlace?.label ?? "—"}</span>
+                </div>
+                <div style={styles.sessionInfoItem}>
+                  <span style={styles.sessionInfoLabel}>🏅 Fourth Place</span>
+                  <span style={styles.sessionInfoValue}>{tournament.bracket.fourthPlace?.label ?? "—"}</span>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

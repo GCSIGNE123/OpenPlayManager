@@ -60,6 +60,7 @@ export function deriveSettingsView(tournament) {
     playoffEnabled: tournament.playoffEnabled ?? true,
     autoDetectPlayoffStage: tournament.autoDetectPlayoffStage ?? true,
     manualPlayoffStage: tournament.manualPlayoffStage ?? null,
+    bronzeMatchEnabled: tournament.bronzeMatchEnabled ?? false,
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

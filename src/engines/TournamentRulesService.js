@@ -19,7 +19,7 @@ const POOL_PLAY_LOCK = ["format", "poolCount", "assignmentMethod"];
 // PROJECT.md for why (resizing courts mid-match risks orphaning an
 // in-progress assignment; the Courts tab's tested Add/Remove Court actions
 // are the supported way to change court count once play has begun).
-const PLAYOFFS_LOCK = [...POOL_PLAY_LOCK, "mode", "advancesPerPool", "playoffEnabled", "autoDetectPlayoffStage", "manualPlayoffStage", "matchScoringRules"];
+const PLAYOFFS_LOCK = [...POOL_PLAY_LOCK, "mode", "advancesPerPool", "playoffEnabled", "autoDetectPlayoffStage", "manualPlayoffStage", "matchScoringRules", "bronzeMatchEnabled"];
 
 export class TournamentRulesService {
   // 'notStarted' — no pool match has started anywhere yet, everything
@@ -109,6 +109,7 @@ export class TournamentRulesService {
     if ("playoffEnabled" in changes) next.playoffEnabled = changes.playoffEnabled;
     if ("autoDetectPlayoffStage" in changes) next.autoDetectPlayoffStage = changes.autoDetectPlayoffStage;
     if ("manualPlayoffStage" in changes) next.manualPlayoffStage = changes.manualPlayoffStage;
+    if ("bronzeMatchEnabled" in changes) next.bronzeMatchEnabled = changes.bronzeMatchEnabled;
     if ("matchScoringRules" in changes) next.matchScoringRules = { ...tournament.matchScoringRules, ...changes.matchScoringRules };
     if ("eligibilityRequirements" in changes) next.eligibilityRequirements = { ...tournament.eligibilityRequirements, ...changes.eligibilityRequirements }; // Membership Management — never locked, same as name/court names: doesn't affect schedule generation
     // courtsCount is deliberately NOT handled here — pre-tournament-start

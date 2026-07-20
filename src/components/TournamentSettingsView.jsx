@@ -122,6 +122,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.autoDetectPlayoffStage = draft.autoDetectPlayoffStage;
     if (!locked.has("manualPlayoffStage") && draft.manualPlayoffStage !== (tournament.manualPlayoffStage ?? null))
       changes.manualPlayoffStage = draft.manualPlayoffStage;
+    if (!locked.has("bronzeMatchEnabled") && draft.bronzeMatchEnabled !== (tournament.bronzeMatchEnabled ?? false))
+      changes.bronzeMatchEnabled = draft.bronzeMatchEnabled;
     if (!locked.has("matchScoringRules") && JSON.stringify(draft.matchScoringRules) !== JSON.stringify(tournament.matchScoringRules)) {
       changes.matchScoringRules = draft.matchScoringRules;
     }
@@ -218,6 +220,26 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             </button>
             <button type="button" disabled={locked.has("playoffEnabled")} style={styles.skillToggleBtn(!draft.playoffEnabled)} onClick={() => set("playoffEnabled", false)}>
               No
+            </button>
+          </div>
+        </SettingRow>
+        <SettingRow label="Bronze Medal Match" fieldKey="bronzeMatchEnabled" locked={locked} hint="When enabled, semifinal losers play for 3rd/4th place, generated alongside the bracket.">
+          <div style={styles.skillToggle}>
+            <button
+              type="button"
+              disabled={locked.has("bronzeMatchEnabled")}
+              style={styles.skillToggleBtn(draft.bronzeMatchEnabled)}
+              onClick={() => set("bronzeMatchEnabled", true)}
+            >
+              Enabled
+            </button>
+            <button
+              type="button"
+              disabled={locked.has("bronzeMatchEnabled")}
+              style={styles.skillToggleBtn(!draft.bronzeMatchEnabled)}
+              onClick={() => set("bronzeMatchEnabled", false)}
+            >
+              Disabled
             </button>
           </div>
         </SettingRow>

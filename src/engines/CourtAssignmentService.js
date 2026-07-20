@@ -41,6 +41,13 @@ export function collectMatches(tournament) {
         matches.push({ match, source: "bracket", sourceLabel: round.name });
       }
     }
+    // Bronze Medal Match — a sibling field, not a round inside
+    // tournament.bracket.rounds (see PlayoffBracketGenerator's header
+    // comment for why), so it needs its own explicit inclusion here for
+    // court assignment/queue/occupancy to see it at all.
+    if (tournament.bracket.bronzeMatch) {
+      matches.push({ match: tournament.bracket.bronzeMatch, source: "bracket", sourceLabel: "Bronze Medal Match" });
+    }
   }
   return matches;
 }
@@ -82,6 +89,10 @@ function updateMatchIn(tournament, matchId, updater) {
           ...round,
           matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
         })),
+        bronzeMatch:
+          tournament.bracket.bronzeMatch && tournament.bracket.bronzeMatch.id === matchId
+            ? updater(tournament.bracket.bronzeMatch)
+            : tournament.bracket.bronzeMatch,
       }
     : tournament.bracket;
   return { ...tournament, pools, bracket };

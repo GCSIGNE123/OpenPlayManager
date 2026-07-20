@@ -77,5 +77,11 @@ export function buildBracketViewModel(bracket, selectedMatchId = null) {
         onAdvancementPath: pathIds.has(m.id),
       })),
     })),
+    // Bronze Medal Match — a sibling field, not a round inside
+    // bracket.rounds (see PlayoffBracketGenerator's header comment for
+    // why), enriched the same way every round match is so the Bracket
+    // view can render it with BracketMatchCard unchanged. null when
+    // disabled or not applicable.
+    bronzeMatch: bracket.bronzeMatch ? { ...bracket.bronzeMatch, state: playoffEngine.getMatchState(bracket.bronzeMatch), onAdvancementPath: false } : null,
   };
 }

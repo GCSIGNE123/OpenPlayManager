@@ -192,6 +192,31 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
 
     const seeds = this.seedParticipants(qualification.qualifiedTeams);
     const rounds = this.createRounds(seeds);
-    return { ready: true, id: uid(), size, seeds, rounds, status: "ready", completedAt: null, champion: null, runnerUp: null };
+    const bracket = { ready: true, id: uid(), size, seeds, rounds, status: "ready", completedAt: null, champion: null, runnerUp: null };
+
+    // Bronze Medal Match — see PROJECT.md. A sibling field, not a round
+    // inside `rounds`: inserting it into the rounds array would break the
+    // roundIndex+1 adjacency PlayoffAdvancementService's advanceWinner/
+    // populateNextMatch rely on for every OTHER bracket, so this keeps that
+    // logic completely untouched. Only attached when the organizer enabled
+    // it AND there's an actual semifinal round to draw losers from — a
+    // 2-team bracket (rounds.length === 1, just the Final) has no
+    // semifinal, so bronze is silently skipped rather than erroring.
+    if (tournament.bronzeMatchEnabled && rounds.length >= 2) {
+      bracket.bronzeMatch = this.createBronzeMatch();
+      bracket.thirdPlace = null;
+      bracket.fourthPlace = null;
+    }
+
+    return bracket;
+  }
+
+  // One match, seeded from nothing (both semifinal losers fill it in later
+  // via PlayoffAdvancementService.populateBronzeMatch). `round: "bronze"` is
+  // a sentinel, never read as a number anywhere downstream — every real
+  // consumer reads the wrapping round object's `.name`/`.roundNumber`
+  // instead, and the bronze match has no such wrapper.
+  createBronzeMatch() {
+    return makeBracketMatch({ round: "bronze", matchNumber: 1 });
   }
 }

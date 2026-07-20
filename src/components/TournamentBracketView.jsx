@@ -269,7 +269,7 @@ function BracketMatchCard({
 // Current Round/Remaining/Completed/Active panel). Pure derived data from
 // BracketViewModel — recomputed fresh on every render.
 function BracketProgressPanel({ bracket, viewModel }) {
-  const allMatches = bracket.rounds.flatMap((r) => r.matches);
+  const allMatches = bracket.rounds.flatMap((r) => r.matches).concat(bracket.bronzeMatch ? [bracket.bronzeMatch] : []);
   const completed = allMatches.filter((m) => m.status === "completed").length;
   const active = playoffEngine.getActiveMatches(bracket).length;
   const remaining = allMatches.length - completed;
@@ -412,6 +412,18 @@ export default function TournamentBracketView({
                 <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
                 <span style={styles.sessionInfoValue}>{bracket.runnerUp?.label ?? "—"}</span>
               </div>
+              {bracket.bronzeMatch && (
+                <>
+                  <div style={styles.sessionInfoItem}>
+                    <span style={styles.sessionInfoLabel}>🥉 Third Place</span>
+                    <span style={styles.sessionInfoValue}>{bracket.thirdPlace?.label ?? "—"}</span>
+                  </div>
+                  <div style={styles.sessionInfoItem}>
+                    <span style={styles.sessionInfoLabel}>🏅 Fourth Place</span>
+                    <span style={styles.sessionInfoValue}>{bracket.fourthPlace?.label ?? "—"}</span>
+                  </div>
+                </>
+              )}
             </div>
             <p style={styles.editHint}>
               The tournament is locked — no further score editing until reopened by an administrator. Reopening
@@ -439,19 +451,43 @@ export default function TournamentBracketView({
         )}
         {matchError && <p style={styles.editWarning}>{matchError}</p>}
         <div style={styles.bracketScroll}>
-          {viewModel.rounds.map((round) => (
-            <BracketRoundColumn
-              key={round.roundNumber}
-              round={round}
-              bracketCompleted={bracketCompleted}
-              collapsed={collapsedRounds.has(round.roundNumber)}
-              onToggleCollapse={() => toggleCollapse(round.roundNumber)}
-              selectedMatchId={selectedMatchId}
-              availableCourts={availableCourts}
-              roundRef={(el) => (roundRefs.current[round.roundNumber] = el)}
-              handlers={handlers}
-            />
-          ))}
+          {viewModel.rounds.flatMap((round, i) => {
+            const column = (
+              <BracketRoundColumn
+                key={round.roundNumber}
+                round={round}
+                bracketCompleted={bracketCompleted}
+                collapsed={collapsedRounds.has(round.roundNumber)}
+                onToggleCollapse={() => toggleCollapse(round.roundNumber)}
+                selectedMatchId={selectedMatchId}
+                availableCourts={availableCourts}
+                roundRef={(el) => (roundRefs.current[round.roundNumber] = el)}
+                handlers={handlers}
+              />
+            );
+            // Bronze Medal Match — rendered as its own clearly-labeled
+            // column right after the semifinal round (i === rounds.length -
+            // 2), so it sits alongside the Championship Match rather than
+            // nested inside either round's own column — "both should be
+            // visible simultaneously" per PROJECT.md.
+            if (viewModel.bronzeMatch && i === viewModel.rounds.length - 2) {
+              return [
+                column,
+                <div key="bronze-match" style={styles.bracketRoundColumn}>
+                  <p style={{ ...styles.poolHeading, margin: 0 }}>🥉 Bronze Medal Match</p>
+                  <BracketMatchCard
+                    match={viewModel.bronzeMatch}
+                    bracketCompleted={bracketCompleted}
+                    selected={viewModel.bronzeMatch.id === selectedMatchId}
+                    onAdvancementPath={false}
+                    availableCourts={availableCourts}
+                    {...handlers}
+                  />
+                </div>,
+              ];
+            }
+            return [column];
+          })}
         </div>
       </div>
     );

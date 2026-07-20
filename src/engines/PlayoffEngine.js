@@ -19,13 +19,39 @@ import { PlayoffAdvancementService } from "./PlayoffAdvancementService.js";
 
 const advancementService = new PlayoffAdvancementService();
 
+// Bronze Medal Match — see PROJECT.md. bracket.bronzeMatch is a sibling
+// field, not a round inside bracket.rounds (see PlayoffBracketGenerator's
+// header comment for why), so this also checks it as a fallback. isBronze
+// is what writeBackMatch below branches on to know where to write updates
+// back — roundIndex stays null for the bronze match, since it has no round.
 function findBracketMatch(bracket, matchId) {
   for (let roundIndex = 0; roundIndex < bracket.rounds.length; roundIndex++) {
     const round = bracket.rounds[roundIndex];
     const match = round.matches.find((m) => m.id === matchId);
-    if (match) return { round, match, roundIndex };
+    if (match) return { round, match, roundIndex, isBronze: false };
+  }
+  if (bracket.bronzeMatch?.id === matchId) {
+    return { round: null, match: bracket.bronzeMatch, roundIndex: null, isBronze: true };
   }
   return null;
+}
+
+// The one place every status/score write-back happens, for both a normal
+// round match and the bronze match — replaces three near-identical
+// `rounds.map(...)` blocks that startMatch/pauseMatch/resumeMatch each used
+// to inline, and is what makes those three methods (and updateBracket)
+// work on the bronze match with no further special-casing: `found` (from
+// findBracketMatch above) already knows where `updatedMatch` belongs.
+function writeBackMatch(bracket, found, updatedMatch) {
+  if (found.isBronze) {
+    return { ...bracket, bronzeMatch: updatedMatch };
+  }
+  const rounds = bracket.rounds.map((r, i) => {
+    if (i !== found.roundIndex) return r;
+    const matches = r.matches.map((m) => (m.id === updatedMatch.id ? updatedMatch : m));
+    return { ...r, matches, status: computeRoundStatus(matches) };
+  });
+  return { ...bracket, rounds };
 }
 
 export class PlayoffEngine {
@@ -63,8 +89,13 @@ export class PlayoffEngine {
   // Live Playoff Bracket & Match Operations — see PROJECT.md. Every match
   // across every round currently "inProgress" or "paused" — what the Live
   // Tournament Dashboard's "Active Matches" count and list come from.
+  // Includes the bronze match (not part of `rounds`) when it's live too.
   getActiveMatches(bracket) {
-    return bracket.rounds.flatMap((r) => r.matches.filter((m) => m.status === "inProgress" || m.status === "paused"));
+    const active = bracket.rounds.flatMap((r) => r.matches.filter((m) => m.status === "inProgress" || m.status === "paused"));
+    if (bracket.bronzeMatch && (bracket.bronzeMatch.status === "inProgress" || bracket.bronzeMatch.status === "paused")) {
+      active.push(bracket.bronzeMatch);
+    }
+    return active;
   }
 
   // Every match in getCurrentRound()'s round — "Current Round" matches for
@@ -76,10 +107,14 @@ export class PlayoffEngine {
 
   // bracket: Bracket
   // returns: boolean — the championship match (the bracket's last round)
-  // has a recorded result, meaning a champion is decided
+  // has a recorded result AND, if a Bronze Medal Match exists, it's also
+  // completed. Tournament completion "waits for both the Final and Bronze
+  // Match when enabled" — see PROJECT.md's Bronze Medal Match section.
   isTournamentComplete(bracket) {
     const finalRound = bracket.rounds[bracket.rounds.length - 1];
-    return this.isRoundComplete(finalRound);
+    if (!this.isRoundComplete(finalRound)) return false;
+    if (bracket.bronzeMatch) return bracket.bronzeMatch.status === "completed";
+    return true;
   }
 
   // Delegates to PlayoffAdvancementService — see that file for the actual
@@ -104,14 +139,8 @@ export class PlayoffEngine {
     if (!found.match.teamA || !found.match.teamB) {
       throw new Error("Both teams must be known before this match can start — it's waiting on a previous round.");
     }
-    const rounds = bracket.rounds.map((r, i) => {
-      if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) =>
-        m.id === matchId ? { ...advancementService.updateMatchStatus(m, "inProgress"), startedAt: Date.now() } : m
-      );
-      return { ...r, matches, status: computeRoundStatus(matches) };
-    });
-    return { ...bracket, rounds };
+    const updatedMatch = { ...advancementService.updateMatchStatus(found.match, "inProgress"), startedAt: Date.now() };
+    return writeBackMatch(bracket, found, updatedMatch);
   }
 
   // Live Playoff Bracket & Match Operations — see PROJECT.md. Pause/Resume
@@ -129,12 +158,7 @@ export class PlayoffEngine {
     }
     const found = findBracketMatch(bracket, matchId);
     if (!found || found.match.status !== "inProgress") return bracket;
-    const rounds = bracket.rounds.map((r, i) => {
-      if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? advancementService.updateMatchStatus(m, "paused") : m));
-      return { ...r, matches, status: computeRoundStatus(matches) };
-    });
-    return { ...bracket, rounds };
+    return writeBackMatch(bracket, found, advancementService.updateMatchStatus(found.match, "paused"));
   }
 
   resumeMatch(bracket, matchId) {
@@ -143,12 +167,7 @@ export class PlayoffEngine {
     }
     const found = findBracketMatch(bracket, matchId);
     if (!found || found.match.status !== "paused") return bracket;
-    const rounds = bracket.rounds.map((r, i) => {
-      if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? advancementService.updateMatchStatus(m, "inProgress") : m));
-      return { ...r, matches, status: computeRoundStatus(matches) };
-    });
-    return { ...bracket, rounds };
+    return writeBackMatch(bracket, found, advancementService.updateMatchStatus(found.match, "inProgress"));
   }
 
   // "Mark a walkover (WO)" — completes a match without a real score: the
@@ -167,11 +186,15 @@ export class PlayoffEngine {
       throw new Error("Walkover winner must be one of this match's two participants.");
     }
     const updated = this.updateBracket(bracket, matchId, { scoreA: 0, scoreB: 0, winnerId });
+    const overlay = { score: { teamA: null, teamB: null }, walkover: true, lastUpdatedAt: Date.now() };
+    if (found.isBronze) {
+      return { ...updated, bronzeMatch: { ...updated.bronzeMatch, ...overlay } };
+    }
     return {
       ...updated,
       rounds: updated.rounds.map((r) => ({
         ...r,
-        matches: r.matches.map((m) => (m.id === matchId ? { ...m, score: { teamA: null, teamB: null }, walkover: true, lastUpdatedAt: Date.now() } : m)),
+        matches: r.matches.map((m) => (m.id === matchId ? { ...m, ...overlay } : m)),
       })),
     };
   }
@@ -217,20 +240,42 @@ export class PlayoffEngine {
       winner: winnerId,
       completedAt: Date.now(),
     };
-    let rounds = bracket.rounds.map((r, i) => {
-      if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? updatedMatch : m));
-      return { ...r, matches, status: computeRoundStatus(matches) };
-    });
+    let next = writeBackMatch(bracket, found, updatedMatch);
 
-    const advancedBracket = { ...bracket, rounds };
-    rounds = this.advanceWinner(advancedBracket, matchId, winnerTeam);
-
-    let next = { ...bracket, rounds };
-    if (this.isTournamentComplete(next)) {
-      next = { ...next, status: "completed", completedAt: Date.now(), champion: winnerTeam, runnerUp: loserTeam };
+    if (found.isBronze) {
+      // Bronze Medal Match completion — see PROJECT.md. Sets 3rd/4th place,
+      // never champion/runnerUp, and never advances anyone anywhere (this
+      // IS the last match either of these two participants play).
+      next = { ...next, thirdPlace: winnerTeam, fourthPlace: loserTeam };
     } else {
-      const anyStartedOrDone = rounds.some((r) => r.matches.some((m) => m.status === "inProgress" || m.status === "completed"));
+      next = { ...next, rounds: this.advanceWinner(next, matchId, winnerTeam) };
+
+      // The just-completed match's own SEMIFINAL round (the one immediately
+      // before the Final, whatever the overall bracket size) is where a
+      // Bronze Medal Match's two participants come from — see
+      // PlayoffAdvancementService.populateBronzeMatch. A no-op bracket-shape
+      // check when bronzeMatch doesn't exist (disabled, or no semifinal to
+      // draw from at all).
+      if (next.bronzeMatch && found.roundIndex === bracket.rounds.length - 2) {
+        next = { ...next, bronzeMatch: advancementService.populateBronzeMatch(next.bronzeMatch, found.match.matchNumber, loserTeam) };
+      }
+
+      // Champion/runner-up are decided the moment the FINAL specifically
+      // completes — independent of whether the Bronze Match (if enabled)
+      // has finished yet, so results appear immediately rather than waiting
+      // on an unrelated match. Locking the whole bracket (below) is what
+      // waits for both.
+      if (found.roundIndex === bracket.rounds.length - 1) {
+        next = { ...next, champion: winnerTeam, runnerUp: loserTeam };
+      }
+    }
+
+    if (this.isTournamentComplete(next)) {
+      next = { ...next, status: "completed", completedAt: Date.now() };
+    } else {
+      const anyStartedOrDone =
+        next.rounds.some((r) => r.matches.some((m) => m.status === "inProgress" || m.status === "completed")) ||
+        (next.bronzeMatch && (next.bronzeMatch.status === "inProgress" || next.bronzeMatch.status === "completed"));
       next = { ...next, status: anyStartedOrDone ? "running" : "ready" };
     }
     return next;
@@ -268,6 +313,11 @@ export class PlayoffEngine {
   // papered over with cascade-repair logic this task doesn't ask for.
   reopenBracket(bracket) {
     if (bracket.status !== "completed") return bracket;
-    return { ...bracket, status: "running", completedAt: null, champion: null, runnerUp: null };
+    const next = { ...bracket, status: "running", completedAt: null, champion: null, runnerUp: null };
+    if (bracket.bronzeMatch) {
+      next.thirdPlace = null;
+      next.fourthPlace = null;
+    }
+    return next;
   }
 }
