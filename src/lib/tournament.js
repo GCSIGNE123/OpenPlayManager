@@ -19,6 +19,7 @@ import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 import { RatingEngine } from "../engines/RatingEngine.js";
 import { AchievementService } from "../engines/AchievementService.js";
+import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import { fetchPlayer } from "./playerDatabase.js";
 
 const playoffEngine = new PlayoffEngine();
@@ -27,6 +28,7 @@ const courtAssignmentEngine = new CourtAssignmentEngine();
 const rulesService = new TournamentRulesService();
 const ratingEngine = new RatingEngine();
 const achievementService = new AchievementService();
+const qualificationService = new PoolQualificationService();
 
 // A pool match's teamA/teamB are full Participant objects (id, playerIds).
 // A bracket match's teamA/teamB are SeededTeam objects (participantId,
@@ -102,14 +104,15 @@ export async function buildAndSaveRoundRobinTournament({
 }) {
   const entrants = buildEntrants(players, mode);
   const groups = assignPools(entrants, poolCount, assignmentMethod);
-  // "Teams Advancing Per Pool" can't exceed the smallest pool's size — the
-  // UI already blocks this before Generate is even clickable, this is the
-  // belt to that suspenders (same pattern as the "2 players per pool"
-  // check Round Robin Pool Support added).
-  const smallestPool = Math.min(...groups.map((g) => g.length));
-  if (advancesPerPool > smallestPool) {
-    throw new Error(`Teams Advancing Per Pool (${advancesPerPool}) can't exceed the smallest pool's size (${smallestPool}).`);
-  }
+  // "Teams Advancing Per Pool" can't exceed the smallest pool's size, and
+  // (Pool Qualification Engine) at least one qualifier is required — the
+  // UI already blocks both before Generate is even clickable, this is the
+  // belt to that suspenders. Reuses PoolQualificationService.validateQualifiers
+  // rather than re-deriving these same two rules here.
+  qualificationService.validateQualifiers(
+    groups.map((g) => ({ entrants: g })),
+    advancesPerPool
+  );
   const pools = groups.map((group, i) =>
     makeTournamentPool({
       label: poolLabel(i),

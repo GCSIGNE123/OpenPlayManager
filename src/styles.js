@@ -1470,19 +1470,27 @@ export const styles = {
     borderRadius: 999,
     padding: "3px 10px",
   },
-  qualificationTag: (qualified) => ({
-    fontFamily: "'Space Mono', monospace",
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: "0.04em",
-    textTransform: "uppercase",
-    color: qualified ? "var(--color-success)" : "var(--color-text-faint)",
-    background: qualified ? "rgba(0,150,80,0.1)" : "var(--color-bg)",
-    border: `1px solid ${qualified ? "var(--color-success)" : "var(--line)"}`,
-    borderRadius: 5,
-    padding: "3px 7px",
-    display: "inline-block",
-  }),
+  // status: "qualified" | "eliminated" | "pending" — Pool Qualification
+  // Engine's three-state Qualification Status column (🟢/🔴/⏳). Accepts a
+  // bare boolean too (legacy true/false = qualified/eliminated) so any
+  // older call site that hasn't been touched keeps rendering correctly.
+  qualificationTag: (status) => {
+    const s = status === true ? "qualified" : status === false ? "eliminated" : status;
+    const color = s === "qualified" ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--color-text-faint)";
+    return {
+      fontFamily: "'Space Mono', monospace",
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      color: s === "pending" ? "var(--ink)" : color,
+      background: s === "qualified" ? "rgba(0,150,80,0.1)" : s === "pending" ? "rgba(230,178,0,0.12)" : "var(--color-bg)",
+      border: `1px solid ${s === "qualified" ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--line)"}`,
+      borderRadius: 5,
+      padding: "3px 7px",
+      display: "inline-block",
+    };
+  },
   qualifiersList: {
     listStyle: "none",
     margin: 0,

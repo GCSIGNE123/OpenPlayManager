@@ -6,33 +6,92 @@
 // (tournament, poolId), the same call the Standings tab makes) and slices
 // off the top N. Any future pooled format reuses this unchanged as long as
 // its engine implements getStandings the same way.
+//
+// Pool Qualification Engine — see PROJECT.md. Qualification is finalized
+// PER POOL, independent of sibling pools: a pool's own rows read
+// "qualified"/"eliminated" the moment THAT pool completes, even while a
+// sibling pool is still mid-match and reads "pending". The aggregate
+// `qualifiedTeams`/`playoffSize` (what bracket generation actually
+// consumes) still requires every pool done — a cross-pool bracket seed
+// list isn't meaningful until every pool's numbers are final — so `ready`
+// keeps its pre-existing meaning/contract for that one consumer
+// (SingleEliminationBracketGenerator.generateBracket), unchanged.
 import { QualificationService } from "./QualificationService.js";
 import { exactStageName } from "./playoffStages.js";
 
-const NOT_READY = { ready: false, pools: [], qualifiedTeams: [], playoffSize: null };
-
 export class PoolQualificationService extends QualificationService {
-  // Qualified teams only mean anything once every pool has actually
-  // finished — with a pool still in progress, "top N" would be provisional
-  // and could still change, so this returns an explicit "not ready" shape
-  // rather than a misleading partial answer.
-  determineQualifiers(tournament, engine) {
-    if (tournament.status !== "completed") return NOT_READY;
+  // "A pool is considered complete only when every scheduled match has
+  // been completed" — reuses the pool's own `status` field (already
+  // computed by lib/tournamentModel.js's computePoolStatus off real match
+  // statuses; not re-derived here) rather than re-walking matches itself.
+  isPoolComplete(pool) {
+    return pool.status === "completed";
+  }
 
-    const advancesPerPool = tournament.advancesPerPool ?? 1;
+  // standings: StandingsRow[] (from engine.getStandings — ranking/tie-break
+  // logic lives there, never duplicated here). Returns the same rows with
+  // a qualificationStatus tag: "pending" whenever the pool itself isn't
+  // done yet (a provisional "top N" could still change), otherwise
+  // "qualified"/"eliminated" by rank vs. qualifiersPerPool.
+  getQualificationStatus(pool, standings, qualifiersPerPool) {
+    if (!this.isPoolComplete(pool)) {
+      return standings.map((row) => ({ ...row, qualificationStatus: "pending", qualified: false }));
+    }
+    return standings.map((row) => {
+      const qualified = row.rank <= qualifiersPerPool;
+      return { ...row, qualificationStatus: qualified ? "qualified" : "eliminated", qualified };
+    });
+  }
+
+  // Every row across every pool currently marked "qualified" — real
+  // (finalized) results only, since a pool still "pending" never produces
+  // a qualified row in the first place.
+  getQualifiedParticipants(tournament, engine) {
+    return this.determineQualifiers(tournament, engine).pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "qualified"));
+  }
+
+  getEliminatedParticipants(tournament, engine) {
+    return this.determineQualifiers(tournament, engine).pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "eliminated"));
+  }
+
+  // Validates a proposed qualifiers-per-pool value against the tournament's
+  // actual pools — reused at both tournament creation (buildAndSave
+  // RoundRobinTournament) and Settings-update time (TournamentRulesService),
+  // rather than each call site re-deriving these same two rules.
+  validateQualifiers(pools, qualifiersPerPool, playoffEnabled = true) {
+    if (playoffEnabled && !(qualifiersPerPool >= 1)) {
+      throw new Error("At least one qualifier per pool is required when playoffs are enabled.");
+    }
+    const smallestPool = Math.min(...pools.map((p) => p.entrants.length));
+    if (qualifiersPerPool > smallestPool) {
+      throw new Error(`Qualifiers Per Pool (${qualifiersPerPool}) can't exceed the smallest pool's size (${smallestPool}).`);
+    }
+  }
+
+  // The full picture: every pool's own standings+status, plus the
+  // aggregate cross-pool qualifiedTeams list (only populated once every
+  // pool is complete — see file header). `ready` is that same "all pools
+  // done" flag, kept under its pre-existing name for
+  // SingleEliminationBracketGenerator's existing `!qualification.ready`
+  // check.
+  determineQualifiers(tournament, engine) {
+    const qualifiersPerPool = tournament.advancesPerPool ?? 1;
     const pools = tournament.pools.map((pool) => {
       const standings = engine.getStandings(tournament, pool.id);
-      const rows = standings.map((row) => ({ ...row, qualified: row.rank <= advancesPerPool }));
-      return { poolId: pool.id, poolLabel: pool.label, rows };
+      const rows = this.getQualificationStatus(pool, standings, qualifiersPerPool);
+      return { poolId: pool.id, poolLabel: pool.label, complete: this.isPoolComplete(pool), rows };
     });
 
-    const qualifiedTeams = pools.flatMap((p) =>
-      p.rows
-        .filter((r) => r.qualified)
-        .map((r) => ({ poolId: p.poolId, poolLabel: p.poolLabel, rank: r.rank, participantId: r.participantId, label: r.label }))
-    );
+    const ready = pools.every((p) => p.complete);
+    const qualifiedTeams = ready
+      ? pools.flatMap((p) =>
+          p.rows
+            .filter((r) => r.qualificationStatus === "qualified")
+            .map((r) => ({ poolId: p.poolId, poolLabel: p.poolLabel, rank: r.rank, participantId: r.participantId, label: r.label }))
+        )
+      : [];
 
-    return { ready: true, pools, qualifiedTeams, playoffSize: this.calculatePlayoffSize(qualifiedTeams.length) };
+    return { ready, pools, qualifiedTeams, playoffSize: ready ? this.calculatePlayoffSize(qualifiedTeams.length) : null };
   }
 
   // Maps a qualifier count onto the bracket size it implies. Counts that

@@ -162,6 +162,15 @@ function OverviewPanel({ tournament, loading }) {
   const progress = getTournamentProgress(tournament);
   const engine = tournament.format === "roundRobin" ? getTournamentEngine(tournament.format) : null;
 
+  // Pool Qualification Engine — see PROJECT.md. Pools Completed/Remaining
+  // read straight off each pool's own status; Qualified/Eliminated come
+  // from determineQualifiers' per-pool rows, which are already live even
+  // while sibling pools are still "pending" (see PoolQualificationService).
+  const poolsCompleted = tournament.pools.filter((p) => p.status === "completed").length;
+  const qualification = engine ? qualificationService.determineQualifiers(tournament, engine) : null;
+  const qualifiedCount = qualification ? qualification.pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "qualified")).length : 0;
+  const eliminatedCount = qualification ? qualification.pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "eliminated")).length : 0;
+
   const poolStats = tournament.pools.map((pool) => {
     const poolProgress = getPoolProgress(pool);
     // A pool's leader only means something once one of its matches has
@@ -190,6 +199,22 @@ function OverviewPanel({ tournament, loading }) {
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Number of Pools</span>
           <span style={styles.sessionInfoValue}>{tournament.pools.length}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Pools Completed</span>
+          <span style={styles.sessionInfoValue}>{poolsCompleted}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Pools Remaining</span>
+          <span style={styles.sessionInfoValue}>{tournament.pools.length - poolsCompleted}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Qualified</span>
+          <span style={styles.sessionInfoValue}>{qualifiedCount}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Eliminated</span>
+          <span style={styles.sessionInfoValue}>{eliminatedCount}</span>
         </div>
       </div>
       <div style={styles.tournamentProgressTrack}>
