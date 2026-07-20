@@ -301,7 +301,11 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       </div>
 
       <h3 style={styles.poolHeading}>Match Rules</h3>
-      <p style={styles.editHint}>Captured for reference — not enforced by scoring yet.</p>
+      <p style={styles.editHint}>
+        Winning score/win-by-two are reference only, not enforced. Match Format is real for the Championship
+        Match specifically: Best of 3 makes the Final a series (won by whoever wins 2 games first); every other
+        match still ignores this setting.
+      </p>
       <div style={styles.settingsPanel}>
         <SettingRow label="Match format" fieldKey="matchScoringRules" locked={locked}>
           <select

@@ -20,9 +20,11 @@ import { BracketGeneratorService } from "./BracketGeneratorService.js";
 import { PoolQualificationService } from "./PoolQualificationService.js";
 import { assignSeeds as assignSeedsForBracket } from "./BracketSeeding.js";
 import { stageNameForCount } from "./playoffStages.js";
+import { ChampionshipSeriesService } from "./ChampionshipSeriesService.js";
 import { uid } from "../lib/random.js";
 
 const qualificationService = new PoolQualificationService();
+const seriesService = new ChampionshipSeriesService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, seeds: [], rounds: [] };
 
@@ -211,6 +213,17 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
       bracket.bronzeMatch = this.createBronzeMatch();
       bracket.thirdPlace = null;
       bracket.fourthPlace = null;
+    }
+
+    // Best-of-3 Finals — see PROJECT.md. Every OTHER bracket size gets
+    // Game 2 seeded later, once PlayoffEngine.updateBracket sees both
+    // semifinals complete and the Final's teams become known. A 2-team
+    // bracket has no semifinal at all — the Final IS round 1, already
+    // seeded with real teams right here — so this is the one case where
+    // Game 2 needs seeding immediately at generation time rather than
+    // waiting for a completion event.
+    if (tournament.matchScoringRules?.matchFormat === "bestOf3" && rounds.length === 1) {
+      rounds[0].matches = seriesService.startSeries(rounds[0].matches);
     }
 
     return bracket;

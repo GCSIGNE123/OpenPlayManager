@@ -85,25 +85,36 @@ export class TournamentReportService {
   generateTournamentSummary(tournament) {
     const progress = getTournamentProgress(tournament);
     const podium = podiumFor(tournament);
-    return {
-      title: "Tournament Summary",
-      columns: ["Field", "Value"],
-      rows: [
-        ["Tournament Name", tournament.name],
-        ["Date", new Date(tournament.createdAt).toLocaleDateString()],
-        ["Number of Players / Teams", String(tournament.pools.reduce((sum, p) => sum + p.entrants.length, 0))],
-        ["Number of Pools", String(tournament.pools.length)],
-        ["Total Matches", String(progress.total)],
-        ["Matches Completed", String(progress.completed)],
-        // Podium order, per PROJECT.md's Bronze Medal Match section —
-        // Fourth Place only ever has a real value when a Bronze Medal
-        // Match was enabled and has been played; otherwise "—".
-        ["🥇 Champion", podium.champion ?? "—"],
-        ["🥈 Runner-up", podium.runnerUp ?? "—"],
-        ["🥉 Third Place", podium.thirdPlace ?? "—"],
-        ["🏅 Fourth Place", podium.fourthPlace ?? "—"],
-      ],
-    };
+    const rows = [
+      ["Tournament Name", tournament.name],
+      ["Date", new Date(tournament.createdAt).toLocaleDateString()],
+      ["Number of Players / Teams", String(tournament.pools.reduce((sum, p) => sum + p.entrants.length, 0))],
+      ["Number of Pools", String(tournament.pools.length)],
+      ["Total Matches", String(progress.total)],
+      ["Matches Completed", String(progress.completed)],
+      // Podium order, per PROJECT.md's Bronze Medal Match section —
+      // Fourth Place only ever has a real value when a Bronze Medal
+      // Match was enabled and has been played; otherwise "—".
+      ["🥇 Champion", podium.champion ?? "—"],
+      ["🥈 Runner-up", podium.runnerUp ?? "—"],
+      ["🥉 Third Place", podium.thirdPlace ?? "—"],
+      ["🏅 Fourth Place", podium.fourthPlace ?? "—"],
+    ];
+
+    // Best-of-3 Finals — see PROJECT.md. The Final round holds more than
+    // one match exactly when it was a series (2 or 3 games) — no separate
+    // "was this bestOf3" flag needed, the round's own match count already
+    // tells the story. Each game's score is listed in podium order,
+    // matching the spec's own Tournament Summary example exactly.
+    const finalRound = tournament.bracket?.rounds[tournament.bracket.rounds.length - 1];
+    if (finalRound && finalRound.matches.length > 1) {
+      rows.push(["Championship Series", ""]);
+      finalRound.matches.forEach((game, i) => {
+        rows.push([`Game ${i + 1}`, game.status === "completed" ? `${game.score.teamA}–${game.score.teamB}` : "—"]);
+      });
+    }
+
+    return { title: "Tournament Summary", columns: ["Field", "Value"], rows };
   }
 
   // Flattens every pool's standings into one table, prefixed with the pool
@@ -286,7 +297,17 @@ export class TournamentReportService {
       match.court != null ? String(match.court) : "—",
       match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
     ];
-    const rows = tournament.bracket.rounds.flatMap((round) => round.matches.filter((m) => !m.isBye).map((m) => matchRow(m, round.name)));
+    // Best-of-3 Finals — ONLY the last round can ever be a series (every
+    // other round's multiple matches are separate matchups, e.g. SF1/SF2,
+    // not games of the same series — round.matches.length > 1 alone isn't
+    // enough to tell). Label each game distinctly ("Championship Match —
+    // Game N") rather than identical "Championship Match" rows.
+    const finalRoundIndex = tournament.bracket.rounds.length - 1;
+    const rows = tournament.bracket.rounds.flatMap((round, i) =>
+      round.matches
+        .filter((m) => !m.isBye)
+        .map((m) => matchRow(m, i === finalRoundIndex && round.matches.length > 1 ? `${round.name} — Game ${m.matchNumber}` : round.name))
+    );
     // Bronze Medal Match — a sibling field, not a round inside
     // tournament.bracket.rounds, appended after the semifinal/final rows
     // rather than mixed into the rounds.flatMap above so it doesn't need a

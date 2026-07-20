@@ -16,8 +16,10 @@
 // maintain in sync with it.
 import { computeRoundStatus } from "../lib/tournamentModel.js";
 import { PlayoffAdvancementService } from "./PlayoffAdvancementService.js";
+import { ChampionshipSeriesService } from "./ChampionshipSeriesService.js";
 
 const advancementService = new PlayoffAdvancementService();
+const seriesService = new ChampionshipSeriesService();
 
 // Bronze Medal Match — see PROJECT.md. bracket.bronzeMatch is a sibling
 // field, not a round inside bracket.rounds (see PlayoffBracketGenerator's
@@ -179,13 +181,13 @@ export class PlayoffEngine {
   // Reuses updateBracket entirely rather than duplicating its winner-
   // advancement/tournament-completion logic — the only difference is what
   // "result" it's called with.
-  recordWalkover(bracket, matchId, winnerId) {
+  recordWalkover(bracket, matchId, winnerId, options) {
     const found = findBracketMatch(bracket, matchId);
     if (!found) throw new Error("Match not found.");
     if (winnerId !== found.match.teamA?.participantId && winnerId !== found.match.teamB?.participantId) {
       throw new Error("Walkover winner must be one of this match's two participants.");
     }
-    const updated = this.updateBracket(bracket, matchId, { scoreA: 0, scoreB: 0, winnerId });
+    const updated = this.updateBracket(bracket, matchId, { scoreA: 0, scoreB: 0, winnerId }, options);
     const overlay = { score: { teamA: null, teamB: null }, walkover: true, lastUpdatedAt: Date.now() };
     if (found.isBronze) {
       return { ...updated, bronzeMatch: { ...updated.bronzeMatch, ...overlay } };
@@ -205,7 +207,11 @@ export class PlayoffEngine {
   // statuses, and — the moment isTournamentComplete() becomes true —
   // stamps champion/runnerUp/completedAt and locks the bracket
   // (status: "completed", rejecting further edits from that point on).
-  updateBracket(bracket, matchId, result) {
+  // options.seriesFormat: "bestOf3" | undefined — see PROJECT.md's Best-of-3
+  // Finals section. Passed straight from tournament.matchScoringRules.
+  // matchFormat by the caller (lib/tournament.js), since PlayoffEngine only
+  // ever sees a bracket, never the tournament itself.
+  updateBracket(bracket, matchId, result, options = {}) {
     if (bracket.status === "completed") {
       throw new Error("This bracket is already completed — results can't be edited.");
     }
@@ -260,12 +266,35 @@ export class PlayoffEngine {
         next = { ...next, bronzeMatch: advancementService.populateBronzeMatch(next.bronzeMatch, found.match.matchNumber, loserTeam) };
       }
 
-      // Champion/runner-up are decided the moment the FINAL specifically
-      // completes — independent of whether the Bronze Match (if enabled)
-      // has finished yet, so results appear immediately rather than waiting
-      // on an unrelated match. Locking the whole bracket (below) is what
-      // waits for both.
-      if (found.roundIndex === bracket.rounds.length - 1) {
+      // Best-of-3 Finals — see PROJECT.md. Runs after EVERY non-bronze
+      // completion, not just ones inside the Final round: the trigger for
+      // seeding Game 2 is a SEMIFINAL completing (which is what makes
+      // advanceWinner populate Game 1's teams above), not the Final round's
+      // own match completing. startSeries()/completeGame() are both cheap,
+      // idempotent no-ops whenever their condition isn't met, so calling
+      // them unconditionally here is safe and correct — no isFinalRound
+      // gate needed. advanceWinner/populateNextMatch are never touched by
+      // any of this.
+      if (options.seriesFormat === "bestOf3") {
+        const finalRoundIndex = next.rounds.length - 1;
+        let finalMatches = next.rounds[finalRoundIndex].matches;
+        finalMatches = seriesService.startSeries(finalMatches);
+        finalMatches = seriesService.completeGame(finalMatches);
+        next = {
+          ...next,
+          rounds: next.rounds.map((r, i) => (i === finalRoundIndex ? { ...r, matches: finalMatches, status: computeRoundStatus(finalMatches) } : r)),
+        };
+        if (seriesService.isSeriesComplete(finalMatches)) {
+          const champion = seriesService.determineChampion(finalMatches);
+          const reference = finalMatches[0];
+          next = { ...next, champion, runnerUp: champion.participantId === reference.teamA.participantId ? reference.teamB : reference.teamA };
+        }
+      } else if (found.roundIndex === bracket.rounds.length - 1) {
+        // Single-match Final — unchanged. Champion/runner-up decided the
+        // moment the Final completes, independent of whether the Bronze
+        // Match (if enabled) has finished yet, so results appear
+        // immediately rather than waiting on an unrelated match. Locking
+        // the whole bracket (below) is what waits for both.
         next = { ...next, champion: winnerTeam, runnerUp: loserTeam };
       }
     }

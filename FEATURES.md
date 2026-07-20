@@ -75,7 +75,8 @@ Do not implement multiple unrelated features in a single task.
 - [x] Automatic Tournament Completion
 - [x] Bronze Medal Match
 - [ ] Placement Matches
-- [ ] Best-of-3 Finals
+- [x] Best-of-3 Finals
+- [ ] Best-of-5 Finals
 - [x] Live Playoff Bracket
 - [x] Court Assignment
 - [x] Match Operations

@@ -6,12 +6,14 @@ import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { buildBracketViewModel } from "../engines/BracketViewModel.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.js";
 import { SEEDING_METHODS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 const previewGenerator = new PlayoffBracketGenerator();
 const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
+const seriesService = new ChampionshipSeriesService();
 
 const STATUS_LABELS = { locked: "Locked", ready: "Ready", inProgress: "In Progress", paused: "Paused", completed: "Completed" };
 const SEEDING_METHOD_LABELS = Object.fromEntries(SEEDING_METHODS.map((m) => [m.value, m.label]));
@@ -306,6 +308,38 @@ function BracketProgressPanel({ bracket, viewModel }) {
   );
 }
 
+// Best-of-3 Finals — see PROJECT.md. The Final round holds more than one
+// match exactly when it's a series; this renders only then. Current score
+// and "Next: Game N" are pure derivations over the round's own matches via
+// ChampionshipSeriesService — nothing here is persisted.
+function ChampionshipSeriesPanel({ finalRound }) {
+  if (finalRound.matches.length < 2) return null;
+  const score = seriesService.getSeriesScore(finalRound.matches);
+  const reference = finalRound.matches[0];
+  const complete = seriesService.isSeriesComplete(finalRound.matches);
+  const nextGame = finalRound.matches.find((m) => m.status !== "completed");
+  return (
+    <div style={styles.sessionInfoCard}>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Championship Series</span>
+        <span style={styles.sessionInfoValue}>Best of 3</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>{reference.teamA?.label}</span>
+        <span style={styles.sessionInfoValue}>{score[reference.teamA?.participantId] ?? 0}</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>{reference.teamB?.label}</span>
+        <span style={styles.sessionInfoValue}>{score[reference.teamB?.participantId] ?? 0}</span>
+      </div>
+      <div style={styles.sessionInfoItem}>
+        <span style={styles.sessionInfoLabel}>Series Status</span>
+        <span style={styles.sessionInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
+      </div>
+    </div>
+  );
+}
+
 function BracketRoundColumn({ round, bracketCompleted, collapsed, onToggleCollapse, selectedMatchId, availableCourts, roundRef, handlers }) {
   return (
     <div style={styles.bracketRoundColumn} ref={roundRef}>
@@ -427,6 +461,7 @@ export default function TournamentBracketView({
                 </>
               )}
             </div>
+            <ChampionshipSeriesPanel finalRound={bracket.rounds[bracket.rounds.length - 1]} />
             <p style={styles.editHint}>
               The tournament is locked — no further score editing until reopened by an administrator. Reopening
               makes every match's result editable again, but correcting an earlier round after later rounds have
@@ -451,6 +486,7 @@ export default function TournamentBracketView({
               </button>
             </div>
             <BracketProgressPanel bracket={bracket} viewModel={viewModel} />
+            <ChampionshipSeriesPanel finalRound={bracket.rounds[bracket.rounds.length - 1]} />
           </>
         )}
         {matchError && <p style={styles.editWarning}>{matchError}</p>}

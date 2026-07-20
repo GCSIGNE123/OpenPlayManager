@@ -28,6 +28,7 @@ import {
   getTournamentEngine,
 } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
+import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.js";
 import { MATCH_FORMATS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
@@ -40,6 +41,7 @@ import TournamentSettingsView from "./TournamentSettingsView.jsx";
 import TournamentReportsView from "./TournamentReportsView.jsx";
 
 const qualificationService = new PoolQualificationService();
+const seriesService = new ChampionshipSeriesService();
 const MATCH_FORMAT_LABELS = Object.fromEntries(MATCH_FORMATS.map((f) => [f.value, f.label]));
 
 const MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
@@ -151,6 +153,37 @@ function CompletedOverviewPanel({ tournament }) {
           </>
         )}
       </div>
+      {tournament.bracket && (() => {
+        // Best-of-3 Finals — see PROJECT.md. The Final round holds more
+        // than one match exactly when it's a series; nothing to show
+        // otherwise (a single-match Final's Champion/Runner-up above
+        // already covers it).
+        const finalRound = tournament.bracket.rounds[tournament.bracket.rounds.length - 1];
+        if (finalRound.matches.length < 2) return null;
+        const score = seriesService.getSeriesScore(finalRound.matches);
+        const reference = finalRound.matches[0];
+        const complete = seriesService.isSeriesComplete(finalRound.matches);
+        const nextGame = finalRound.matches.find((m) => m.status !== "completed");
+        const gamesRemaining = complete ? 0 : 3 - finalRound.matches.filter((m) => m.status === "completed").length;
+        return (
+          <div style={styles.sessionInfoCard}>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Championship Series</span>
+              <span style={styles.sessionInfoValue}>
+                {reference.teamA?.label} {score[reference.teamA?.participantId] ?? 0} – {score[reference.teamB?.participantId] ?? 0} {reference.teamB?.label}
+              </span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Games Remaining</span>
+              <span style={styles.sessionInfoValue}>{gamesRemaining}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Series Status</span>
+              <span style={styles.sessionInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
+            </div>
+          </div>
+        );
+      })()}
       {tournament.pools.map((pool) => (
         <PoolPodium key={pool.id} pool={pool} showHeading={tournament.pools.length > 1} />
       ))}
