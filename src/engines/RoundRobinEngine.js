@@ -146,8 +146,8 @@ export class RoundRobinEngine extends TournamentEngine {
     if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false && usesAutoGeneratingSeeding && !next.allowManualQualificationOverride) {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
-        const { ready, ...bracket } = generated;
-        next = { ...next, bracket: { ...bracket, generatedAt: Date.now() } };
+        const { ready, consolationBracket, ...bracket } = generated;
+        next = { ...next, bracket: { ...bracket, generatedAt: Date.now() }, consolationBracket: consolationBracket ?? null };
       }
     }
     return next;

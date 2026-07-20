@@ -22,6 +22,8 @@ import { RatingEngine } from "../engines/RatingEngine.js";
 import { AchievementService } from "../engines/AchievementService.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
+import { PlayoffAdvancementService } from "../engines/PlayoffAdvancementService.js";
+import { PlacementBracketService } from "../engines/PlacementBracketService.js";
 import { getSeedingStrategy } from "../engines/BracketSeeding.js";
 import { QualificationAuditService } from "../engines/QualificationAuditService.js";
 import { fetchPlayerRating } from "./ratingModel.js";
@@ -29,6 +31,8 @@ import { fetchPlayer } from "./playerDatabase.js";
 
 const playoffEngine = new PlayoffEngine();
 const bracketGenerator = new PlayoffBracketGenerator();
+const advancementService = new PlayoffAdvancementService();
+const placementService = new PlacementBracketService();
 const courtAssignmentService = new CourtAssignmentService();
 const courtAssignmentEngine = new CourtAssignmentEngine();
 const rulesService = new TournamentRulesService();
@@ -193,27 +197,63 @@ export async function saveMatchResult(tournament, matchId, result) {
 // rather than tournament.pools via startMatch/RoundRobinEngine — a
 // completely separate engine (see PlayoffEngine.js's file header for why).
 
+// Consolation & Placement Brackets — see PlacementBracketService.js. A
+// given matchId lives in EITHER tournament.bracket OR
+// tournament.consolationBracket (never both — the two brackets partition
+// participants) — every save* below that used to assume `tournament.bracket`
+// unconditionally now resolves which sibling field actually holds it first.
+function matchExistsInBracket(bracket, matchId) {
+  if (!bracket) return false;
+  if (bracket.rounds.some((r) => r.matches.some((m) => m.id === matchId))) return true;
+  return bracket.bronzeMatch?.id === matchId;
+}
+
+function resolveBracketField(tournament, matchId) {
+  if (matchExistsInBracket(tournament.bracket, matchId)) return "bracket";
+  if (matchExistsInBracket(tournament.consolationBracket, matchId)) return "consolationBracket";
+  throw new Error("Match not found.");
+}
+
 export async function savePlayoffMatchStart(tournament, matchId) {
-  const bracket = playoffEngine.startMatch(tournament.bracket, matchId);
-  return saveTournament({ ...tournament, bracket });
+  const field = resolveBracketField(tournament, matchId);
+  const bracket = playoffEngine.startMatch(tournament[field], matchId);
+  return saveTournament({ ...tournament, [field]: bracket });
 }
 
 // Same auto-fill trigger as saveMatchResult above, for the bracket side —
 // see that function's comment for why the freed court is read straight off
 // the just-completed match.
 export async function savePlayoffMatchResult(tournament, matchId, result) {
-  const bracket = playoffEngine.updateBracket(tournament.bracket, matchId, result, { seriesFormat: tournament.matchScoringRules?.matchFormat });
+  const field = resolveBracketField(tournament, matchId);
+  const before = tournament[field];
+  const found = before.rounds.find((r) => r.matches.some((m) => m.id === matchId));
+  const wasChampionshipFirstRound = field === "bracket" && found?.roundNumber === 1;
+  const priorMatch = wasChampionshipFirstRound ? found.matches.find((m) => m.id === matchId) : null;
+
+  const bracket = playoffEngine.updateBracket(before, matchId, result, { seriesFormat: tournament.matchScoringRules?.matchFormat });
   // Bronze Medal Match is a sibling field, not a round inside bracket.rounds
   // (see PlayoffBracketGenerator's header comment) — checked as a fallback
   // so its own completion still gets court auto-fill/rating credit.
   const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId) ?? (bracket.bronzeMatch?.id === matchId ? bracket.bronzeMatch : null);
-  const updated = { ...tournament, bracket };
+  let updated = { ...tournament, [field]: bracket };
+
+  // Consolation & Placement Brackets — a completed championship FIRST-round
+  // match seats its loser straight into the consolation bracket's round 1,
+  // the moment the result is saved — see PlacementBracketService.
+  // seatConsolationParticipant's own comment for the shared adjacency math.
+  if (wasChampionshipFirstRound && updated.consolationBracket) {
+    const winnerId = match.winner;
+    const loserTeam = winnerId === priorMatch.teamA.participantId ? priorMatch.teamB : priorMatch.teamA;
+    const consolationBracket = placementService.seatConsolationParticipant(updated.consolationBracket, match.matchNumber, loserTeam, advancementService);
+    updated = { ...updated, consolationBracket };
+  }
+
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
   if (match) await rateMatch(updated, match, "tournament");
   // Tournament Champion — awarded the moment the championship match
   // completes the whole bracket, to every one of the champion team's
   // underlying players (both, for doubles).
-  if (bracket.status === "completed" && bracket.champion) {
+  if (field === "bracket" && bracket.status === "completed" && bracket.champion) {
     const championIds = resolvePlayerIds(updated, bracket.champion);
     for (const playerId of championIds) {
       const player = await fetchPlayer(playerId);
@@ -241,13 +281,15 @@ export async function saveReopenBracket(tournament) {
 // directly, same as the Courts tab already does.
 
 export async function savePauseMatch(tournament, matchId) {
-  const bracket = playoffEngine.pauseMatch(tournament.bracket, matchId);
-  return saveTournament({ ...tournament, bracket });
+  const field = resolveBracketField(tournament, matchId);
+  const bracket = playoffEngine.pauseMatch(tournament[field], matchId);
+  return saveTournament({ ...tournament, [field]: bracket });
 }
 
 export async function saveResumeMatch(tournament, matchId) {
-  const bracket = playoffEngine.resumeMatch(tournament.bracket, matchId);
-  return saveTournament({ ...tournament, bracket });
+  const field = resolveBracketField(tournament, matchId);
+  const bracket = playoffEngine.resumeMatch(tournament[field], matchId);
+  return saveTournament({ ...tournament, [field]: bracket });
 }
 
 // Same auto-fill-freed-court + rating/achievement hooks savePlayoffMatchResult
@@ -255,12 +297,25 @@ export async function saveResumeMatch(tournament, matchId) {
 // match as far as the rest of the tournament is concerned, just decided by
 // forfeit rather than play.
 export async function saveWalkover(tournament, matchId, winnerId) {
-  const bracket = playoffEngine.recordWalkover(tournament.bracket, matchId, winnerId, { seriesFormat: tournament.matchScoringRules?.matchFormat });
+  const field = resolveBracketField(tournament, matchId);
+  const before = tournament[field];
+  const found = before.rounds.find((r) => r.matches.some((m) => m.id === matchId));
+  const wasChampionshipFirstRound = field === "bracket" && found?.roundNumber === 1;
+  const priorMatch = wasChampionshipFirstRound ? found.matches.find((m) => m.id === matchId) : null;
+
+  const bracket = playoffEngine.recordWalkover(before, matchId, winnerId, { seriesFormat: tournament.matchScoringRules?.matchFormat });
   const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
-  const updated = { ...tournament, bracket };
+  let updated = { ...tournament, [field]: bracket };
+
+  if (wasChampionshipFirstRound && updated.consolationBracket) {
+    const loserTeam = winnerId === priorMatch.teamA.participantId ? priorMatch.teamB : priorMatch.teamA;
+    const consolationBracket = placementService.seatConsolationParticipant(updated.consolationBracket, match.matchNumber, loserTeam, advancementService);
+    updated = { ...updated, consolationBracket };
+  }
+
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
   if (match) await rateMatch(updated, match, "tournament");
-  if (bracket.status === "completed" && bracket.champion) {
+  if (field === "bracket" && bracket.status === "completed" && bracket.champion) {
     const championIds = resolvePlayerIds(updated, bracket.champion);
     for (const playerId of championIds) {
       const player = await fetchPlayer(playerId);
@@ -443,8 +498,8 @@ export async function saveGenerateBracket(tournament) {
         : "Qualification isn't finalized yet — every pool must be complete first."
     );
   }
-  const { ready, ...bracket } = generated;
-  return saveTournament({ ...tournament, bracket: { ...bracket, generatedAt: Date.now() } });
+  const { ready, consolationBracket, ...bracket } = generated;
+  return saveTournament({ ...tournament, bracket: { ...bracket, generatedAt: Date.now() }, consolationBracket: consolationBracket ?? null });
 }
 
 // ---- Manual Qualification Override ----

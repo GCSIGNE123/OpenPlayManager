@@ -57,6 +57,20 @@ export const QUALIFICATION_METHODS = [
 
 export const WILD_CARD_COUNTS = [1, 2, 4];
 
+// Consolation & Placement Brackets — see PlacementBracketService.js. "Bronze
+// Match Only" maps onto the existing, independent bronzeMatchEnabled toggle
+// (this value doesn't change it either way — an organizer using Bronze Match
+// Only already has that switched on separately); "Consolation Bracket" and
+// "Full Placement Bracket" currently build the identical structure (5th-8th)
+// since 9th-16th place isn't implemented yet — documented honestly rather
+// than pretending they differ.
+export const PLACEMENT_MATCHES_METHODS = [
+  { value: "disabled", label: "Disabled (default)" },
+  { value: "bronzeOnly", label: "Bronze Match Only" },
+  { value: "consolationBracket", label: "Consolation Bracket (5th-8th)" },
+  { value: "fullPlacement", label: "Full Placement Bracket (5th-8th, 9th-16th where applicable)" },
+];
+
 export const PLAYOFF_STAGES = [
   { value: "roundOf16", label: "Round of 16" },
   { value: "quarterfinals", label: "Quarterfinals" },
@@ -86,6 +100,7 @@ export function deriveSettingsView(tournament) {
     wildCardCount: tournament.wildCardCount ?? 1,
     bestThirdPlaceCount: tournament.bestThirdPlaceCount ?? 1,
     allowManualQualificationOverride: tournament.allowManualQualificationOverride ?? false,
+    placementMatches: tournament.placementMatches ?? "disabled",
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

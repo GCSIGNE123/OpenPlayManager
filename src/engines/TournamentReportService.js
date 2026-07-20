@@ -14,10 +14,14 @@
 // PlayoffEngine already works with, so this needs no changes for those.
 import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
 import { PoolQualificationService } from "./PoolQualificationService.js";
+import { PlacementBracketService } from "./PlacementBracketService.js";
 import { getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
 
 const standingsService = new RoundRobinStandingsService();
 const qualificationService = new PoolQualificationService();
+const placementService = new PlacementBracketService();
+
+const PLACE_LABELS = { 5: "🥉 Fifth Place", 6: "Sixth Place", 7: "Seventh Place", 8: "8️⃣ Eighth Place" };
 
 // Every real (non-bye) match across every pool, plus the bracket if one
 // exists — the same shape CourtAssignmentService.collectMatches produces,
@@ -45,6 +49,19 @@ function collectAllMatches(tournament) {
     // comment for why), so it needs its own explicit inclusion here.
     if (tournament.bracket.bronzeMatch) {
       matches.push({ match: tournament.bracket.bronzeMatch, source: "bracket", sourceLabel: "Bronze Medal Match" });
+    }
+  }
+  // Consolation & Placement Brackets — same walk, its own source/label so
+  // every report that lists matches (Match Results, Court Utilization)
+  // includes placement-bracket matches too.
+  if (tournament.consolationBracket) {
+    for (const round of tournament.consolationBracket.rounds) {
+      for (const match of round.matches) {
+        if (!match.isBye) matches.push({ match, source: "consolationBracket", sourceLabel: `Consolation — ${round.name}` });
+      }
+    }
+    if (tournament.consolationBracket.bronzeMatch) {
+      matches.push({ match: tournament.consolationBracket.bronzeMatch, source: "consolationBracket", sourceLabel: "7th Place Match" });
     }
   }
   return matches;
@@ -112,6 +129,19 @@ export class TournamentReportService {
       finalRound.matches.forEach((game, i) => {
         rows.push([`Game ${i + 1}`, game.status === "completed" ? `${game.score.teamA}–${game.score.teamB}` : "—"]);
       });
+    }
+
+    // Consolation & Placement Brackets — see PlacementBracketService.js.
+    // Listed whenever a consolation bracket exists and has produced at
+    // least one decided placement (5th-8th) — 1st-4th are already covered
+    // by the podium rows above, so this only ever adds the tiers a
+    // placement bracket newly makes possible.
+    if (tournament.consolationBracket) {
+      const placings = placementService.determineFinalPlacings(tournament).filter((p) => p.place >= 5);
+      if (placings.length > 0) {
+        rows.push(["Placement Bracket Results", ""]);
+        placings.forEach((p) => rows.push([PLACE_LABELS[p.place] ?? `${p.label}`, p.team.label]));
+      }
     }
 
     // Manual Qualification Override — see PROJECT.md. Listed whenever any
@@ -332,6 +362,19 @@ export class TournamentReportService {
     // rather than mixed into the rounds.flatMap above so it doesn't need a
     // synthetic round object.
     if (tournament.bracket.bronzeMatch) rows.push(matchRow(tournament.bracket.bronzeMatch, "Bronze Medal Match"));
+
+    // Consolation & Placement Brackets — appended after the championship
+    // bracket's own rows, same "sibling field, own section" treatment
+    // Bronze Medal Match already established.
+    if (tournament.consolationBracket) {
+      rows.push(
+        ...tournament.consolationBracket.rounds.flatMap((round) =>
+          round.matches.filter((m) => !m.isBye).map((m) => matchRow(m, `Consolation — ${round.name}`))
+        )
+      );
+      if (tournament.consolationBracket.bronzeMatch) rows.push(matchRow(tournament.consolationBracket.bronzeMatch, "7th Place Match"));
+    }
+
     return { title: "Playoff Results", columns: ["Match #", "Round", "Participants", "Score", "Winner", "Court", "Date & Time"], rows };
   }
 

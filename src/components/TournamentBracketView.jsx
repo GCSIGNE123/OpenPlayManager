@@ -367,6 +367,79 @@ function BracketRoundColumn({ round, bracketCompleted, collapsed, onToggleCollap
   );
 }
 
+// Consolation & Placement Brackets — see PROJECT.md. Renders
+// tournament.consolationBracket as its own labeled section below the
+// championship bracket, reusing BracketRoundColumn/BracketMatchCard
+// unchanged — it's the exact same Bracket shape, just fed by first-round
+// losers instead of pool qualifiers (see PlacementBracketService.js).
+function ConsolationBracketSection({ consolationBracket, selectedMatchId, collapsedRounds, toggleCollapse, availableCourts, handlers, roundRefs }) {
+  const bracketCompleted = consolationBracket.status === "completed";
+  const viewModel = buildBracketViewModel(consolationBracket, selectedMatchId);
+  return (
+    <div style={{ marginTop: 24 }}>
+      <SectionLabel>Consolation Bracket (5th–8th Place)</SectionLabel>
+      {bracketCompleted && (
+        <div style={styles.sessionInfoCard}>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Fifth Place</span>
+            <span style={styles.sessionInfoValue}>{consolationBracket.champion?.label ?? "—"}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Sixth Place</span>
+            <span style={styles.sessionInfoValue}>{consolationBracket.runnerUp?.label ?? "—"}</span>
+          </div>
+          {consolationBracket.bronzeMatch && (
+            <>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Seventh Place</span>
+                <span style={styles.sessionInfoValue}>{consolationBracket.thirdPlace?.label ?? "—"}</span>
+              </div>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Eighth Place</span>
+                <span style={styles.sessionInfoValue}>{consolationBracket.fourthPlace?.label ?? "—"}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <div style={styles.bracketScroll}>
+        {viewModel.rounds.flatMap((round, i) => {
+          const column = (
+            <BracketRoundColumn
+              key={`consolation-${round.roundNumber}`}
+              round={round}
+              bracketCompleted={bracketCompleted}
+              collapsed={collapsedRounds.has(`consolation-${round.roundNumber}`)}
+              onToggleCollapse={() => toggleCollapse(`consolation-${round.roundNumber}`)}
+              selectedMatchId={selectedMatchId}
+              availableCourts={availableCourts}
+              roundRef={(el) => (roundRefs.current[`consolation-${round.roundNumber}`] = el)}
+              handlers={handlers}
+            />
+          );
+          if (viewModel.bronzeMatch && i === viewModel.rounds.length - 2) {
+            return [
+              column,
+              <div key="consolation-bronze-match" style={styles.bracketRoundColumn}>
+                <p style={{ ...styles.poolHeading, margin: 0 }}>7th Place Match</p>
+                <BracketMatchCard
+                  match={viewModel.bronzeMatch}
+                  bracketCompleted={bracketCompleted}
+                  selected={viewModel.bronzeMatch.id === selectedMatchId}
+                  onAdvancementPath={false}
+                  availableCourts={availableCourts}
+                  {...handlers}
+                />
+              </div>,
+            ];
+          }
+          return [column];
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Bracket tab — see PROJECT.md's Live Playoff Bracket & Match Operations
 // section (and the earlier Playoff Bracket Generation / Winner Advancement
 // Engine sections it builds on). Once tournament.bracket exists, this
@@ -529,6 +602,17 @@ export default function TournamentBracketView({
             return [column];
           })}
         </div>
+        {tournament.consolationBracket && (
+          <ConsolationBracketSection
+            consolationBracket={tournament.consolationBracket}
+            selectedMatchId={selectedMatchId}
+            collapsedRounds={collapsedRounds}
+            toggleCollapse={toggleCollapse}
+            availableCourts={availableCourts}
+            handlers={handlers}
+            roundRefs={roundRefs}
+          />
+        )}
       </div>
     );
   }

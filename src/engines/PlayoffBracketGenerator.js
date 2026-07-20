@@ -21,10 +21,12 @@ import { PoolQualificationService } from "./PoolQualificationService.js";
 import { assignSeeds as assignSeedsForBracket } from "./BracketSeeding.js";
 import { stageNameForCount } from "./playoffStages.js";
 import { ChampionshipSeriesService } from "./ChampionshipSeriesService.js";
+import { PlacementBracketService } from "./PlacementBracketService.js";
 import { uid } from "../lib/random.js";
 
 const qualificationService = new PoolQualificationService();
 const seriesService = new ChampionshipSeriesService();
+const placementService = new PlacementBracketService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, seeds: [], rounds: [] };
 
@@ -226,7 +228,14 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
       rounds[0].matches = seriesService.startSeries(rounds[0].matches);
     }
 
-    return bracket;
+    // Consolation & Placement Brackets — see PlacementBracketService.js.
+    // Built once, right alongside the championship bracket, from the SAME
+    // first-round match count — attached as a separate return field
+    // (never nested inside `bracket`) so callers persist it onto
+    // tournament.consolationBracket, a sibling of tournament.bracket.
+    const consolationBracket = placementService.generatePlacementBracket(tournament, bracket, this);
+
+    return { ...bracket, consolationBracket };
   }
 
   // One match, seeded from nothing (both semifinal losers fill it in later

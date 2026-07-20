@@ -278,6 +278,7 @@ export function makeTournament({
   wildCardCount = 1, // only meaningful when qualificationMethod === "wildCard" — 1 | 2 | 4, per Tournament Settings
   bestThirdPlaceCount = 1, // only meaningful when qualificationMethod === "bestThirdPlace" — capped at poolCount (one 3rd-place candidate per pool)
   allowManualQualificationOverride = false, // Manual Qualification Override — real behavior: gates both the promote/eliminate/replace/reset actions AND (like non-standard seeding) whether the bracket auto-generates on pool completion. Editable via the Settings tab only, locked once playoffs start.
+  placementMatches = "disabled", // Consolation & Placement Brackets — "disabled" | "bronzeOnly" | "consolationBracket" | "fullPlacement". Only "consolationBracket"/"fullPlacement" build tournament.consolationBracket (identical for now — 9th-16th place isn't implemented this milestone); completely independent of bronzeMatchEnabled, which keeps its own pre-existing meaning unchanged.
 }) {
   const now = Date.now();
   const tournament = {
@@ -336,6 +337,20 @@ export function makeTournament({
     // on, independent of tournament.status (which keeps meaning "pool play
     // done," unchanged).
     bracket: null,
+    // Consolation & Placement Brackets — see PROJECT.md. A sibling of
+    // `bracket`, not nested inside it — the exact same Bracket shape
+    // ({ rounds, bronzeMatch, champion, runnerUp, thirdPlace, fourthPlace }),
+    // fed by tournament.bracket's own first-round LOSERS instead of pool
+    // qualifiers. That shape reuse is what lets PlayoffEngine's existing
+    // startMatch/updateBracket/bronze-match logic operate on it completely
+    // unchanged — champion/runnerUp/thirdPlace/fourthPlace here just mean
+    // 5th/6th/7th/8th place instead of 1st-4th. null until
+    // PlayoffBracketGenerator attaches one (only when tournament.
+    // placementMatches is "consolationBracket"/"fullPlacement" AND the
+    // championship bracket has a real round before the semifinal to draw
+    // losers from).
+    placementMatches,
+    consolationBracket: null,
     createdAt: now,
     updatedAt: now,
     // Tournament Reports & History — additive, default false. See

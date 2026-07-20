@@ -49,6 +49,19 @@ export function collectMatches(tournament) {
       matches.push({ match: tournament.bracket.bronzeMatch, source: "bracket", sourceLabel: "Bronze Medal Match" });
     }
   }
+  // Consolation & Placement Brackets — a sibling of tournament.bracket, same
+  // rounds/bronzeMatch shape, so it walks identically — just its own
+  // sourceLabel so the Court Board/queue can tell the two apart.
+  if (tournament.consolationBracket) {
+    for (const round of tournament.consolationBracket.rounds) {
+      for (const match of round.matches) {
+        matches.push({ match, source: "consolationBracket", sourceLabel: round.name });
+      }
+    }
+    if (tournament.consolationBracket.bronzeMatch) {
+      matches.push({ match: tournament.consolationBracket.bronzeMatch, source: "consolationBracket", sourceLabel: "7th Place Match" });
+    }
+  }
   return matches;
 }
 
@@ -82,20 +95,20 @@ function updateMatchIn(tournament, matchId, updater) {
       matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
     })),
   }));
-  const bracket = tournament.bracket
-    ? {
-        ...tournament.bracket,
-        rounds: tournament.bracket.rounds.map((round) => ({
-          ...round,
-          matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
-        })),
-        bronzeMatch:
-          tournament.bracket.bronzeMatch && tournament.bracket.bronzeMatch.id === matchId
-            ? updater(tournament.bracket.bronzeMatch)
-            : tournament.bracket.bronzeMatch,
-      }
-    : tournament.bracket;
-  return { ...tournament, pools, bracket };
+  const updateBracketRecord = (bracket) =>
+    bracket
+      ? {
+          ...bracket,
+          rounds: bracket.rounds.map((round) => ({
+            ...round,
+            matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
+          })),
+          bronzeMatch: bracket.bronzeMatch && bracket.bronzeMatch.id === matchId ? updater(bracket.bronzeMatch) : bracket.bronzeMatch,
+        }
+      : bracket;
+  const bracket = updateBracketRecord(tournament.bracket);
+  const consolationBracket = updateBracketRecord(tournament.consolationBracket);
+  return { ...tournament, pools, bracket, consolationBracket };
 }
 
 export class CourtAssignmentService {

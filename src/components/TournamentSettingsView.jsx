@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Lock, Pencil, Save, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
-import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS } from "../engines/TournamentSettings.js";
+import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS, PLACEMENT_MATCHES_METHODS } from "../engines/TournamentSettings.js";
 import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -124,6 +124,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.manualPlayoffStage = draft.manualPlayoffStage;
     if (!locked.has("bronzeMatchEnabled") && draft.bronzeMatchEnabled !== (tournament.bronzeMatchEnabled ?? false))
       changes.bronzeMatchEnabled = draft.bronzeMatchEnabled;
+    if (!locked.has("placementMatches") && draft.placementMatches !== (tournament.placementMatches ?? "disabled"))
+      changes.placementMatches = draft.placementMatches;
     if (!locked.has("seedingMethod") && draft.seedingMethod !== (tournament.seedingMethod ?? "standardCrossPool"))
       changes.seedingMethod = draft.seedingMethod;
     if (!locked.has("qualificationMethod") && draft.qualificationMethod !== (tournament.qualificationMethod ?? "standard"))
@@ -343,6 +345,20 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
               Disabled
             </button>
           </div>
+        </SettingRow>
+        <SettingRow
+          label="Placement Matches"
+          fieldKey="placementMatches"
+          locked={locked}
+          hint="When set to Consolation Bracket or Full Placement Bracket, first-round playoff losers play on for 5th-8th place, generated alongside the championship bracket."
+        >
+          <select style={styles.rotationSelect} disabled={locked.has("placementMatches")} value={draft.placementMatches} onChange={(e) => set("placementMatches", e.target.value)}>
+            {PLACEMENT_MATCHES_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </SettingRow>
         <SettingRow label="Auto-detect playoff stage" fieldKey="autoDetectPlayoffStage" locked={locked}>
           <div style={styles.skillToggle}>

@@ -74,7 +74,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Winner Advancement Engine
 - [x] Automatic Tournament Completion
 - [x] Bronze Medal Match
-- [ ] Placement Matches
+- [x] Placement Matches
 - [x] Best-of-3 Finals
 - [ ] Best-of-5 Finals
 - [x] Live Playoff Bracket
@@ -102,7 +102,7 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Court Optimization
 - [ ] Referee Assignment
 - [ ] Bronze Match
-- [ ] Consolation Bracket
+- [x] Consolation Bracket
 - [ ] Double Elimination Tournament
 - [ ] Single Elimination Tournament
 - [ ] Pool Assignment Methods
