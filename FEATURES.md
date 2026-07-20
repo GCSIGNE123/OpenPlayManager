@@ -79,6 +79,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Court Assignment
 - [x] Match Operations
 - [ ] Referee Assignment
+- [ ] Live TV Display
 - [ ] Live Streaming
 - [ ] Push Notifications
 - [x] Tournament Court Assignment
