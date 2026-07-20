@@ -6,6 +6,7 @@ import {
   saveMatchResult,
   savePlayoffMatchStart,
   savePlayoffMatchResult,
+  saveReopenBracket,
   saveCourtAssignment,
   saveCourtRelease,
   saveCourtReassignment,
@@ -334,6 +335,19 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Round Robin Playoff Engine — see PROJECT.md. Same shape as every other
+  // handler here; PlayoffEngine.reopenBracket does the actual unlocking.
+  const handleReopenBracket = async () => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      const updated = await saveReopenBracket(tournament);
+      setTournament(updated);
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
   // Tournament Court Assignment & Match Queue — same "call the lib
   // function, setTournament(updated)" shape as every other handler above,
   // now routed through CourtAssignmentService (via lib/tournament.js's
@@ -501,6 +515,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           matchError={matchError}
           onStartMatch={handlePlayoffStartMatch}
           onSaveResult={handlePlayoffSaveResult}
+          onReopenBracket={handleReopenBracket}
         />
       )}
 

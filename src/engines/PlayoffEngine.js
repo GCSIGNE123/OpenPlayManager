@@ -145,4 +145,24 @@ export class PlayoffEngine {
     }
     return next;
   }
+
+  // Round Robin Playoff Engine — see PROJECT.md. Unlocks a completed
+  // bracket for correction: clears the "completed" lock plus the
+  // champion/runnerUp/completedAt stamp updateBracket sets, and rolls
+  // status back to whatever the matches themselves currently imply
+  // ("running", since the championship match still shows completed until
+  // its result is re-saved). Deliberately narrow: this makes every match's
+  // result editable again (updateBracket/startMatch only ever gate on
+  // bracket.status, never on an individual match's own status), but does
+  // NOT retroactively re-cascade an earlier round's corrected winner
+  // through already-recorded later-round results — advanceWinner only
+  // ever fills a next match's slot once, so if that next round already has
+  // its own recorded result, editing the earlier feeder match won't rerun
+  // it. Correcting an early round after later rounds were already played
+  // is a real limitation, surfaced in the UI rather than silently
+  // papered over with cascade-repair logic this task doesn't ask for.
+  reopenBracket(bracket) {
+    if (bracket.status !== "completed") return bracket;
+    return { ...bracket, status: "running", completedAt: null, champion: null, runnerUp: null };
+  }
 }

@@ -59,6 +59,10 @@ Do not implement multiple unrelated features in a single task.
 - [x] Bracket Generation
 - [x] Playoff Match Management
 - [x] Winner Advancement
+- [x] Round Robin Playoff Engine
+- [x] Automatic Qualification
+- [x] Automatic Bracket Generation
+- [x] Automatic Winner Advancement
 - [x] Tournament Court Assignment
 - [x] Match Queue
 - [x] Tournament Display Mode

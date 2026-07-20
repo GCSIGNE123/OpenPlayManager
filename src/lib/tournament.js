@@ -120,6 +120,14 @@ export async function savePlayoffMatchResult(tournament, matchId, result) {
   return saveTournament({ ...tournament, bracket });
 }
 
+// Round Robin Playoff Engine — see PROJECT.md. Same "call the engine,
+// persist what it returns" shape as every other save* function in this
+// file; PlayoffEngine.reopenBracket does the actual unlocking.
+export async function saveReopenBracket(tournament) {
+  const bracket = playoffEngine.reopenBracket(tournament.bracket);
+  return saveTournament({ ...tournament, bracket });
+}
+
 // ---- Tournament Court Assignment & Match Queue ----
 // assignCourt/releaseCourt go through CourtAssignmentService (validation +
 // the actual match.court write); addCourt/removeCourt/setCourtStatus/

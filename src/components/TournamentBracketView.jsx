@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Play, Pencil, X } from "lucide-react";
+import { Check, Play, Pencil, X, LockOpen } from "lucide-react";
 import { styles } from "../styles.js";
 import { getTournamentEngine } from "../lib/tournament.js";
 import { SingleEliminationBracketGenerator } from "../engines/SingleEliminationBracketGenerator.js";
@@ -195,7 +195,7 @@ function BracketRoundColumn({ round, bracketCompleted, onStartMatch, onSaveResul
 // it falls back to SingleEliminationBracketGenerator as a live preview —
 // the same "not ready yet" / "needs a power-of-two count" messaging the
 // prior milestone already had, just no longer the only thing this view does.
-export default function TournamentBracketView({ tournament, loading, matchError, onStartMatch, onSaveResult }) {
+export default function TournamentBracketView({ tournament, loading, matchError, onStartMatch, onSaveResult, onReopenBracket }) {
   if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
   if (!tournament) {
     return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see the bracket here.</div>;
@@ -211,16 +211,29 @@ export default function TournamentBracketView({ tournament, loading, matchError,
       <div>
         <SectionLabel>Bracket</SectionLabel>
         {bracketCompleted ? (
-          <div style={styles.sessionInfoCard}>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>🥇 Champion</span>
-              <span style={styles.sessionInfoValue}>{bracket.champion?.label ?? "—"}</span>
+          <>
+            <div style={styles.sessionInfoCard}>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>🥇 Champion</span>
+                <span style={styles.sessionInfoValue}>{bracket.champion?.label ?? "—"}</span>
+              </div>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
+                <span style={styles.sessionInfoValue}>{bracket.runnerUp?.label ?? "—"}</span>
+              </div>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
-              <span style={styles.sessionInfoValue}>{bracket.runnerUp?.label ?? "—"}</span>
+            <p style={styles.editHint}>
+              The tournament is locked — no further score editing until reopened by an administrator. Reopening
+              makes every match's result editable again, but correcting an earlier round after later rounds have
+              already been played won't automatically re-run those later results.
+            </p>
+            <div style={styles.editActions}>
+              <button type="button" style={styles.secondaryBtn} onClick={onReopenBracket}>
+                <LockOpen size={13} strokeWidth={2.5} />
+                Reopen tournament
+              </button>
             </div>
-          </div>
+          </>
         ) : (
           <p style={styles.editHint}>{bracket.size}-team elimination bracket, seeded by Standard Cross-Pool Seeding.</p>
         )}
