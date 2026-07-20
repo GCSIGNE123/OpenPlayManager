@@ -42,7 +42,7 @@ export class PlayoffEngine {
   getMatchState(match) {
     if (!match.teamA || !match.teamB) return "locked";
     if (match.status === "pending") return "ready";
-    return match.status; // "inProgress" | "completed"
+    return match.status; // "inProgress" | "paused" | "completed"
   }
 
   // round: BracketRound (see SingleEliminationBracketGenerator)
@@ -58,6 +58,20 @@ export class PlayoffEngine {
   // null/undefined.
   getCurrentRound(bracket) {
     return bracket.rounds.find((r) => r.matches.some((m) => m.status !== "completed")) ?? bracket.rounds[bracket.rounds.length - 1];
+  }
+
+  // Live Playoff Bracket & Match Operations — see PROJECT.md. Every match
+  // across every round currently "inProgress" or "paused" — what the Live
+  // Tournament Dashboard's "Active Matches" count and list come from.
+  getActiveMatches(bracket) {
+    return bracket.rounds.flatMap((r) => r.matches.filter((m) => m.status === "inProgress" || m.status === "paused"));
+  }
+
+  // Every match in getCurrentRound()'s round — "Current Round" matches for
+  // the same dashboard, without a caller needing to call getCurrentRound()
+  // and then re-walk its .matches itself.
+  getCurrentRoundMatches(bracket) {
+    return this.getCurrentRound(bracket).matches;
   }
 
   // bracket: Bracket
@@ -118,10 +132,72 @@ export class PlayoffEngine {
     }
     const rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now() } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now(), lastUpdatedAt: Date.now() } : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...bracket, rounds };
+  }
+
+  // Live Playoff Bracket & Match Operations — see PROJECT.md. Pause/Resume
+  // only ever move a match between "inProgress" and "paused" — a genuinely
+  // new status this task adds (additive; pool matches never carry it, see
+  // tournamentModel.js's computeRoundStatus comment). Both reject a
+  // completed bracket for the same reason startMatch/updateBracket already
+  // do, and are no-ops (return the bracket unchanged) if the match isn't
+  // currently in the state they expect — pausing an already-paused match,
+  // or resuming one that was never paused, shouldn't be an error, just
+  // nothing to do.
+  pauseMatch(bracket, matchId) {
+    if (bracket.status === "completed") {
+      throw new Error("This bracket is already completed — matches can't be changed.");
+    }
+    const found = findBracketMatch(bracket, matchId);
+    if (!found || found.match.status !== "inProgress") return bracket;
+    const rounds = bracket.rounds.map((r, i) => {
+      if (i !== found.roundIndex) return r;
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "paused", lastUpdatedAt: Date.now() } : m));
+      return { ...r, matches, status: computeRoundStatus(matches) };
+    });
+    return { ...bracket, rounds };
+  }
+
+  resumeMatch(bracket, matchId) {
+    if (bracket.status === "completed") {
+      throw new Error("This bracket is already completed — matches can't be changed.");
+    }
+    const found = findBracketMatch(bracket, matchId);
+    if (!found || found.match.status !== "paused") return bracket;
+    const rounds = bracket.rounds.map((r, i) => {
+      if (i !== found.roundIndex) return r;
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", lastUpdatedAt: Date.now() } : m));
+      return { ...r, matches, status: computeRoundStatus(matches) };
+    });
+    return { ...bracket, rounds };
+  }
+
+  // "Mark a walkover (WO)" — completes a match without a real score: the
+  // named winner advances exactly like a normal completed match (same
+  // advanceWinner/tournament-completion path below, via updateBracket),
+  // but score stays { teamA: null, teamB: null } and `walkover: true`
+  // marks it as decided by forfeit rather than play, so the UI/history can
+  // show that distinctly instead of implying an 0-0 or fabricated score.
+  // Reuses updateBracket entirely rather than duplicating its winner-
+  // advancement/tournament-completion logic — the only difference is what
+  // "result" it's called with.
+  recordWalkover(bracket, matchId, winnerId) {
+    const found = findBracketMatch(bracket, matchId);
+    if (!found) throw new Error("Match not found.");
+    if (winnerId !== found.match.teamA?.participantId && winnerId !== found.match.teamB?.participantId) {
+      throw new Error("Walkover winner must be one of this match's two participants.");
+    }
+    const updated = this.updateBracket(bracket, matchId, { scoreA: 0, scoreB: 0, winnerId });
+    return {
+      ...updated,
+      rounds: updated.rounds.map((r) => ({
+        ...r,
+        matches: r.matches.map((m) => (m.id === matchId ? { ...m, score: { teamA: null, teamB: null }, walkover: true, lastUpdatedAt: Date.now() } : m)),
+      })),
+    };
   }
 
   // result: { scoreA, scoreB, winnerId }
@@ -165,6 +241,7 @@ export class PlayoffEngine {
       winner: winnerId,
       status: "completed",
       completedAt: Date.now(),
+      lastUpdatedAt: Date.now(),
     };
     let rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;

@@ -7,6 +7,9 @@ import {
   savePlayoffMatchStart,
   savePlayoffMatchResult,
   saveReopenBracket,
+  savePauseMatch,
+  saveResumeMatch,
+  saveWalkover,
   saveCourtAssignment,
   saveCourtRelease,
   saveCourtReassignment,
@@ -379,6 +382,38 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Live Playoff Bracket & Match Operations — see PROJECT.md. Same shape
+  // as every other playoff handler here.
+  const handlePauseMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await savePauseMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleResumeMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveResumeMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleWalkover = async (matchId, winnerId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveWalkover(tournament, matchId, winnerId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
   // Round Robin Playoff Engine — see PROJECT.md. Same shape as every other
   // handler here; PlayoffEngine.reopenBracket does the actual unlocking.
   const handleReopenBracket = async () => {
@@ -613,6 +648,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onStartMatch={handlePlayoffStartMatch}
           onSaveResult={handlePlayoffSaveResult}
           onReopenBracket={handleReopenBracket}
+          onPauseMatch={handlePauseMatch}
+          onResumeMatch={handleResumeMatch}
+          onWalkover={handleWalkover}
+          onAssignMatch={handleAssignMatch}
+          onReassignMatch={handleReassignMatch}
         />
       )}
 

@@ -75,6 +75,12 @@ Do not implement multiple unrelated features in a single task.
 - [x] Automatic Tournament Completion
 - [ ] Bronze Medal Match
 - [ ] Best-of-3 Finals
+- [x] Live Playoff Bracket
+- [x] Court Assignment
+- [x] Match Operations
+- [ ] Referee Assignment
+- [ ] Live Streaming
+- [ ] Push Notifications
 - [x] Tournament Court Assignment
 - [x] Match Queue
 - [x] Court Assignment Engine

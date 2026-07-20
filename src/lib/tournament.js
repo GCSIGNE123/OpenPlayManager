@@ -220,6 +220,45 @@ export async function saveReopenBracket(tournament) {
   return saveTournament({ ...tournament, bracket });
 }
 
+// ---- Live Playoff Bracket & Match Operations ----
+// Same "call the engine, persist what it returns" shape as every other
+// save* function in this file. "Move a match to a different court" is
+// already fully covered by saveCourtReassignment below (CourtAssignmentService
+// is generic over pool AND bracket matches already), so there's no separate
+// "change court" wrapper here — PlayoffMatchService.changeCourt exists for
+// a caller that wants it as one method, but the UI reuses saveCourtReassignment
+// directly, same as the Courts tab already does.
+
+export async function savePauseMatch(tournament, matchId) {
+  const bracket = playoffEngine.pauseMatch(tournament.bracket, matchId);
+  return saveTournament({ ...tournament, bracket });
+}
+
+export async function saveResumeMatch(tournament, matchId) {
+  const bracket = playoffEngine.resumeMatch(tournament.bracket, matchId);
+  return saveTournament({ ...tournament, bracket });
+}
+
+// Same auto-fill-freed-court + rating/achievement hooks savePlayoffMatchResult
+// already applies to a normal result — a walkover is still a real completed
+// match as far as the rest of the tournament is concerned, just decided by
+// forfeit rather than play.
+export async function saveWalkover(tournament, matchId, winnerId) {
+  const bracket = playoffEngine.recordWalkover(tournament.bracket, matchId, winnerId);
+  const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const updated = { ...tournament, bracket };
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(updated, match, "tournament");
+  if (bracket.status === "completed" && bracket.champion) {
+    const championIds = resolvePlayerIds(updated, bracket.champion);
+    for (const playerId of championIds) {
+      const player = await fetchPlayer(playerId);
+      if (player) await achievementService.awardTournamentChampion(playerId, tournament.id);
+    }
+  }
+  return saveTournament(withAutoFill);
+}
+
 // ---- Tournament Court Assignment & Match Queue ----
 // assignCourt/releaseCourt go through CourtAssignmentService (validation +
 // the actual match.court write); addCourt/removeCourt/setCourtStatus/

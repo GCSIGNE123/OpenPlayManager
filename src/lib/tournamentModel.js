@@ -54,6 +54,12 @@ export const makeEntrant = makeParticipant;
 //   engines/CourtAssignmentEngine.js. Absent/undefined on every match by
 //   default (read as { pinnedCourt: null, delayed: false } wherever it
 //   matters) — nothing here until an organizer explicitly pins or delays.
+//   -- Playoff-bracket-match-only additions (Live Playoff Bracket & Match
+//   Operations, see engines/PlayoffEngine.js — never set on a pool match):
+//   status can also be 'paused'; lastUpdatedAt (ms epoch | undefined) is
+//   stamped by every PlayoffEngine mutation (start/pause/resume/complete/
+//   walkover), what the Match Detail view's "Last Updated" reads; walkover
+//   (true | undefined) marks a match decided by forfeit rather than play.
 // }
 export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
   return {
@@ -159,11 +165,18 @@ export function findMatch(tournament, matchId) {
 // A bye "match" is always effectively done — it never blocks a round from
 // completing. A round with only byes (shouldn't happen with 2+ real
 // participants, but guarded anyway) is considered completed.
+// "paused" (Live Playoff Bracket & Match Operations — playoff matches only,
+// see engines/PlayoffEngine.js's pauseMatch/resumeMatch) counts as
+// "underway" for round rollup purposes here, same as "inProgress" — a
+// paused match hasn't finished, it's just not actively being played right
+// now, so a round containing one still isn't merely "pending". Pool
+// matches never carry this status, so this is inert for every existing
+// caller.
 export function computeRoundStatus(matches) {
   const real = matches.filter((m) => !m.isBye);
   if (real.length === 0) return "completed";
   if (real.every((m) => m.status === "completed")) return "completed";
-  if (real.some((m) => m.status === "inProgress" || m.status === "completed")) return "inProgress";
+  if (real.some((m) => m.status === "inProgress" || m.status === "paused" || m.status === "completed")) return "inProgress";
   return "pending";
 }
 

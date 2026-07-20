@@ -1286,12 +1286,12 @@ export const styles = {
     color: "var(--ink)",
   },
   // status: 'pending' | 'inProgress' | 'completed' everywhere this was
-  // already used (pool matches, League matches), plus two bracket-only
-  // additions from the Winner Advancement Engine — 'locked' (waiting on a
-  // previous round, distinct from 'pending'/"ready to play") and 'ready'
-  // (both participants known, not yet started) — see
+  // already used (pool matches, League matches), plus bracket-only
+  // additions — 'locked' (waiting on a previous round, distinct from
+  // 'pending'/"ready to play"), 'ready' (both participants known, not yet
+  // started), and 'paused' (Live Playoff Bracket & Match Operations) — see
   // PlayoffEngine.getMatchState. Every existing call site keeps working
-  // unchanged since it never passes those two new values.
+  // unchanged since it never passes those new values.
   matchStatusBadge: (status) => ({
     fontFamily: "'Space Mono', monospace",
     fontSize: 10,
@@ -1304,9 +1304,11 @@ export const styles = {
         ? "var(--court)"
         : status === "inProgress"
           ? "var(--ball)"
-          : status === "ready"
-            ? "rgba(0,150,80,0.1)"
-            : "var(--color-bg)",
+          : status === "paused"
+            ? "var(--coral)"
+            : status === "ready"
+              ? "rgba(0,150,80,0.1)"
+              : "var(--color-bg)",
     border: status === "pending" || status === "ready" ? "1.5px solid var(--line)" : status === "locked" ? "1.5px dashed var(--line)" : "none",
     borderRadius: 5,
     padding: "3px 7px",
