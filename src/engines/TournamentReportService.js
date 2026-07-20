@@ -246,7 +246,7 @@ export class TournamentReportService {
   }
 
   // Bracket matches only, grouped by round (Quarterfinals/Semifinals/Final —
-  // whatever SingleEliminationBracketGenerator named the rounds), broken out
+  // whatever PlayoffBracketGenerator named the rounds), broken out
   // from the generic Match Results report so a spectator can read straight
   // down "playoffs only" without pool-play matches mixed in.
   generatePlayoffReport(tournament) {

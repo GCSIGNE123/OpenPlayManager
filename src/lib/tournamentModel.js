@@ -291,7 +291,7 @@ export function makeTournament({
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come
     // pre-assigned a court at generation time (see RoundRobinScheduler /
-    // SingleEliminationBracketGenerator) — CourtAssignmentService is the
+    // PlayoffBracketGenerator) — CourtAssignmentService is the
     // only thing that sets match.court now.
     courts: Array.from({ length: courtsCount }, (_, i) => makeCourt(i + 1, courtNames?.[i])),
     // Playoff Qualification config — how many of each pool's top finishers
@@ -304,7 +304,7 @@ export function makeTournament({
     advancesPerPool,
     // Playoff Bracket — null until pool play finishes AND the qualified
     // count is a power of two (see RoundRobinEngine.updateMatchResult,
-    // which attaches it via SingleEliminationBracketGenerator the moment
+    // which attaches it via PlayoffBracketGenerator the moment
     // both are true). Structurally the same { id, status, completedAt,
     // champion, runnerUp, rounds } shape a TournamentPool already has —
     // its lifecycle is owned entirely by PlayoffEngine.js from that point
@@ -317,7 +317,7 @@ export function makeTournament({
     // saveTournament's header comment for how this locks the record once
     // set; qualificationFinalizedAt (stamped by RoundRobinEngine the moment
     // every pool first completes) and bracket.generatedAt (stamped when
-    // SingleEliminationBracketGenerator's result is attached) are the other
+    // PlayoffBracketGenerator's result is attached) are the other
     // two additive fields this task adds, both absent until their event
     // actually happens — used by TournamentReportService.generateTournamentTimeline.
     archived: false,

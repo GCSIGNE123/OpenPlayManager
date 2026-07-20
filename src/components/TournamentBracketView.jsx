@@ -2,13 +2,13 @@ import { useRef, useState } from "react";
 import { Check, Play, Pencil, X, LockOpen, Pause, PlayCircle, Flag, ChevronDown, ChevronRight, Crosshair, ArrowLeftRight } from "lucide-react";
 import { styles } from "../styles.js";
 import { getTournamentEngine } from "../lib/tournament.js";
-import { SingleEliminationBracketGenerator } from "../engines/SingleEliminationBracketGenerator.js";
+import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { buildBracketViewModel } from "../engines/BracketViewModel.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import SectionLabel from "./SectionLabel.jsx";
 
-const previewGenerator = new SingleEliminationBracketGenerator();
+const previewGenerator = new PlayoffBracketGenerator();
 const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
 

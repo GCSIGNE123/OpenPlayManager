@@ -8,7 +8,7 @@
 // could reuse the bracket-building half without the pool-qualification half.
 //
 // Every method throws by default; a subclass overrides what it actually
-// implements. See SingleEliminationBracketGenerator.js for the one real
+// implements. See PlayoffBracketGenerator.js for the one real
 // implementation so far.
 export class BracketGeneratorService {
   // tournament: Tournament (see lib/tournamentModel.js)
@@ -17,7 +17,7 @@ export class BracketGeneratorService {
   // circular import with lib/tournament.js, which owns the format->engine
   // registry
   // returns: { ready: boolean, reason?: string, size, seeds, rounds }
-  // — see SingleEliminationBracketGenerator for the full shape
+  // — see PlayoffBracketGenerator for the full shape
   generateBracket(tournament, engine) {
     throw new Error("generateBracket() must be implemented by a BracketGeneratorService subclass");
   }

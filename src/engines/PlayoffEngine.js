@@ -7,7 +7,7 @@
 // format — that format's bracket, whatever produces it, only needs to have
 // this same rounds/matches shape for PlayoffEngine to work unchanged.
 //
-// SingleEliminationBracketGenerator builds the bracket once, up front, with
+// PlayoffBracketGenerator builds the bracket once, up front, with
 // round 1 fully seeded and every later round's matches holding empty
 // (null) teamA/teamB slots. This file owns everything that happens to it
 // after that. A next-round match's slots stay null until
@@ -45,7 +45,7 @@ export class PlayoffEngine {
     return match.status; // "inProgress" | "paused" | "completed"
   }
 
-  // round: BracketRound (see SingleEliminationBracketGenerator)
+  // round: BracketRound (see PlayoffBracketGenerator)
   // returns: boolean — every match in the round has a recorded result
   isRoundComplete(round) {
     return round.matches.length > 0 && round.matches.every((m) => m.status === "completed");
@@ -102,7 +102,7 @@ export class PlayoffEngine {
   // generic bracket-tree mapping (odd matchNumber -> teamA, even ->
   // teamB) — not a seed-optimal placement (Advanced Seeding is out of
   // scope), just structurally consistent adjacency that preserves the
-  // bracket shape SingleEliminationBracketGenerator already built.
+  // bracket shape PlayoffBracketGenerator already built.
   // bracket: Bracket; matchId: the just-completed match's id
   // winnerTeam: SeededTeam (the winning side's full team object, not just
   // an id — so the next round's slot has a real label/seed to display)
@@ -265,7 +265,7 @@ export class PlayoffEngine {
   // Winner Advancement Engine — see PROJECT.md. Every rule the spec's
   // "Validation" section names, as one real, callable, testable method
   // returning every failing check at once — the same `{valid, errors[]}`
-  // shape validateBracket() (SingleEliminationBracketGenerator) already
+  // shape validateBracket() (PlayoffBracketGenerator) already
   // established for the equivalent ask on bracket generation.
   // Deliberately NOT wired into updateBracket()'s own internals for the
   // same reason validateBracket() wasn't wired into generateBracket():

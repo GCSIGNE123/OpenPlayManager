@@ -2,7 +2,7 @@
 // Deliberately NOT a data-migration: every field below already lives on
 // the top-level Tournament record exactly where RoundRobinEngine,
 // PoolQualificationService, CourtAssignmentService,
-// SingleEliminationBracketGenerator, and TournamentScheduleView already
+// PlayoffBracketGenerator, and TournamentScheduleView already
 // read/write it. This module is a consolidated VIEW over those existing
 // fields (deriveSettingsView) plus the shared defaults new tournaments and
 // templates both draw from — the "one maintainable module" the task asks

@@ -1,11 +1,13 @@
 // The one real BracketGeneratorService implementation this milestone — see
 // BracketGeneratorService.js for the shared interface this conforms to.
-// Despite the name, this is generic over any power-of-two qualifier count
-// (not hardcoded to just 2/4/8/16 — "future bracket sizes should be easy
-// to add" falls out for free) and reuses PoolQualificationService rather
-// than re-deriving "who qualified" itself, the same "delegate to a
-// dedicated module" precedent RoundRobinEngine's getStandings/
-// updateMatchResult already set.
+// Despite the name (single elimination is the only strategy implemented so
+// far), this is generic over any power-of-two qualifier count (not
+// hardcoded to just 2/4/8/16 — "future bracket sizes should be easy to
+// add" falls out for free) and reuses PoolQualificationService rather than
+// re-deriving "who qualified" itself, the same "delegate to a dedicated
+// module" precedent RoundRobinEngine's getStandings/updateMatchResult
+// already set. A future Double Elimination format would be a sibling
+// BracketGeneratorService subclass, not a change to this file.
 //
 // As of Playoff Match Management & Winner Advancement, a `ready: true`
 // result from generateBracket() is the actual persistable Bracket record
@@ -44,7 +46,7 @@ function makeBracketMatch({ round, matchNumber, teamA = null, teamB = null }) {
   };
 }
 
-export class SingleEliminationBracketGenerator extends BracketGeneratorService {
+export class PlayoffBracketGenerator extends BracketGeneratorService {
   // Automatic Playoff Bracket Generator — see PROJECT.md. Every rule the
   // spec's "Bracket Validation" section names, as one real, callable,
   // testable method rather than scattered implicit side effects of other
@@ -93,7 +95,7 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
   // itself. Pure derivation, nothing persisted; returns null for "no
   // bracket yet" rather than throwing, since "not generated" is an
   // expected, normal state this whole milestone is built around.
-  getBracketStructure(bracket) {
+  getBracket(bracket) {
     if (!bracket) return null;
     return {
       id: bracket.id,
@@ -117,7 +119,12 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
     };
   }
 
-  assignSeeds(qualifiedTeams, method) {
+  // Cross-pool seeding (Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2 for
+  // the two-pool case, etc.) — the actual seeding order lives in
+  // BracketSeeding.js so a future custom seeding template only has to add a
+  // new `method` there, never touch this file. `method` is passed straight
+  // through, undefined by default (BracketSeeding's own default template).
+  seedParticipants(qualifiedTeams, method) {
     return assignSeedsForBracket(qualifiedTeams, method);
   }
 
@@ -125,9 +132,9 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
   // team out or an arbitrary count without inventing bye logic this
   // milestone doesn't cover. Round 1 is the only round built from real
   // teams; every later round is pre-built with the right match count but
-  // empty teamA/teamB slots — those only fill in once PlayoffEngine
-  // advances a winner into them.
-  buildRounds(seededTeams) {
+  // empty teamA/teamB slots (placeholder winner slots) — those only fill in
+  // once PlayoffEngine advances a winner into them, in a later sprint.
+  createRounds(seededTeams) {
     const total = seededTeams.length;
     if (total < 2 || (total & (total - 1)) !== 0) {
       throw new Error(`Bracket generation requires a power-of-two qualifier count (2, 4, 8, 16, ...) — got ${total}.`);
@@ -183,8 +190,8 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
       return { ready: false, reason: "unsupported_size", size, seeds: [], rounds: [] };
     }
 
-    const seeds = this.assignSeeds(qualification.qualifiedTeams);
-    const rounds = this.buildRounds(seeds);
+    const seeds = this.seedParticipants(qualification.qualifiedTeams);
+    const rounds = this.createRounds(seeds);
     return { ready: true, id: uid(), size, seeds, rounds, status: "ready", completedAt: null, champion: null, runnerUp: null };
   }
 }

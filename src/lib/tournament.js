@@ -35,7 +35,7 @@ const historyService = new TournamentHistoryService();
 // A pool match's teamA/teamB are full Participant objects (id, playerIds).
 // A bracket match's teamA/teamB are SeededTeam objects (participantId,
 // label — playerIds isn't carried through bracket seeding, see
-// BracketSeeding.js/SingleEliminationBracketGenerator.js), so their
+// BracketSeeding.js/PlayoffBracketGenerator.js), so their
 // underlying playerIds have to be looked back up from the original pool
 // entrant they came from, matched by participantId.
 function resolvePlayerIds(tournament, team) {

@@ -41,7 +41,7 @@
 // updateMatchResult() also auto-generates the Playoff Bracket as of Playoff
 // Match Management & Winner Advancement: once the tournament-wide status
 // rollup below lands on "completed" (every pool done) and tournament.bracket
-// is still null, it asks SingleEliminationBracketGenerator for one; if the
+// is still null, it asks PlayoffBracketGenerator for one; if the
 // qualified count is a power of two, the returned record is attached as-is
 // to tournament.bracket. If it isn't (or pools aren't all done yet), bracket
 // stays null — the Bracket tab already knows how to explain both cases.
@@ -52,12 +52,12 @@ import { TournamentEngine } from "./TournamentEngine.js";
 import { generateRoundRobinSchedule } from "./RoundRobinScheduler.js";
 import { RoundRobinStandingsService } from "./RoundRobinStandingsService.js";
 import { RoundRobinCompletionService } from "./RoundRobinCompletionService.js";
-import { SingleEliminationBracketGenerator } from "./SingleEliminationBracketGenerator.js";
+import { PlayoffBracketGenerator } from "./PlayoffBracketGenerator.js";
 import { findMatch, computeRoundStatus, computePoolStatus, computeTournamentStatus } from "../lib/tournamentModel.js";
 
 const standingsService = new RoundRobinStandingsService();
 const completionService = new RoundRobinCompletionService();
-const bracketGenerator = new SingleEliminationBracketGenerator();
+const bracketGenerator = new PlayoffBracketGenerator();
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Not implemented yet — architecture only (Tournament Engine Foundation)." };
 

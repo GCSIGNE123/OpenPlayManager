@@ -15,7 +15,7 @@
 // consumes) still requires every pool done — a cross-pool bracket seed
 // list isn't meaningful until every pool's numbers are final — so `ready`
 // keeps its pre-existing meaning/contract for that one consumer
-// (SingleEliminationBracketGenerator.generateBracket), unchanged.
+// (PlayoffBracketGenerator.generateBracket), unchanged.
 import { QualificationService } from "./QualificationService.js";
 import { exactStageName } from "./playoffStages.js";
 
@@ -72,7 +72,7 @@ export class PoolQualificationService extends QualificationService {
   // aggregate cross-pool qualifiedTeams list (only populated once every
   // pool is complete — see file header). `ready` is that same "all pools
   // done" flag, kept under its pre-existing name for
-  // SingleEliminationBracketGenerator's existing `!qualification.ready`
+  // PlayoffBracketGenerator's existing `!qualification.ready`
   // check.
   determineQualifiers(tournament, engine) {
     const qualifiersPerPool = tournament.advancesPerPool ?? 1;
