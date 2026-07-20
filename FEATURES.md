@@ -59,7 +59,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Pool Qualification Engine
 - [x] Wild Card Qualification
 - [x] Best Third Place
-- [ ] Manual Qualification Override
+- [x] Manual Qualification Override
 - [x] Bracket Generation
 - [x] Playoff Match Management
 - [x] Winner Advancement

@@ -35,6 +35,7 @@ const PLAYOFFS_LOCK = [
   "qualificationMethod",
   "wildCardCount",
   "bestThirdPlaceCount",
+  "allowManualQualificationOverride",
 ];
 
 export class TournamentRulesService {
@@ -148,6 +149,7 @@ export class TournamentRulesService {
     if ("qualificationMethod" in changes) next.qualificationMethod = changes.qualificationMethod;
     if ("wildCardCount" in changes) next.wildCardCount = changes.wildCardCount;
     if ("bestThirdPlaceCount" in changes) next.bestThirdPlaceCount = changes.bestThirdPlaceCount;
+    if ("allowManualQualificationOverride" in changes) next.allowManualQualificationOverride = changes.allowManualQualificationOverride;
     if ("matchScoringRules" in changes) next.matchScoringRules = { ...tournament.matchScoringRules, ...changes.matchScoringRules };
     if ("eligibilityRequirements" in changes) next.eligibilityRequirements = { ...tournament.eligibilityRequirements, ...changes.eligibilityRequirements }; // Membership Management — never locked, same as name/court names: doesn't affect schedule generation
     // courtsCount is deliberately NOT handled here — pre-tournament-start

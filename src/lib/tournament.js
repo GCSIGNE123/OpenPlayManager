@@ -23,6 +23,7 @@ import { AchievementService } from "../engines/AchievementService.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
 import { getSeedingStrategy } from "../engines/BracketSeeding.js";
+import { QualificationAuditService } from "../engines/QualificationAuditService.js";
 import { fetchPlayerRating } from "./ratingModel.js";
 import { fetchPlayer } from "./playerDatabase.js";
 
@@ -35,6 +36,7 @@ const ratingEngine = new RatingEngine();
 const achievementService = new AchievementService();
 const qualificationService = new PoolQualificationService();
 const historyService = new TournamentHistoryService();
+const qualificationAuditService = new QualificationAuditService();
 
 // A pool match's teamA/teamB are full Participant objects (id, playerIds).
 // A bracket match's teamA/teamB are SeededTeam objects (participantId,
@@ -415,6 +417,17 @@ export async function saveGenerateBracket(tournament) {
   const method = tournament.seedingMethod ?? "standardCrossPool";
   const strategy = getSeedingStrategy(method);
   const qualification = qualificationService.determineQualifiers(tournament, engine);
+
+  // Manual Qualification Override — see PROJECT.md. "Prevent generating the
+  // playoff bracket while the qualification list is invalid" — checked
+  // here (and, for the auto-generating default seeding path, inside
+  // RoundRobinEngine.updateMatchResult) rather than inside
+  // PlayoffBracketGenerator itself, which stays untouched and keeps
+  // consuming qualification.qualifiedTeams exactly as it always has.
+  if (tournament.allowManualQualificationOverride && !qualification.qualificationListValidation.valid) {
+    throw new Error(qualification.qualificationListValidation.errors.join(" "));
+  }
+
   const context = await buildSeedingContext(tournament, method, qualification.qualifiedTeams);
 
   const validation = strategy.validateSeeds(qualification.qualifiedTeams, context);
@@ -432,6 +445,142 @@ export async function saveGenerateBracket(tournament) {
   }
   const { ready, ...bracket } = generated;
   return saveTournament({ ...tournament, bracket: { ...bracket, generatedAt: Date.now() } });
+}
+
+// ---- Manual Qualification Override ----
+// Every write here funnels through one guard: enabled, no bracket
+// generated yet, qualification list not locked. "Manual edits after
+// tournament completion" (spec's Validation section) is covered by the
+// bracket-exists check — qualification only means anything before a
+// bracket exists; once one is generated the tournament's playoff phase has
+// already begun.
+function assertQualificationEditable(tournament) {
+  if (!tournament.allowManualQualificationOverride) {
+    throw new Error("Manual Qualification Override is not enabled for this tournament.");
+  }
+  if (tournament.bracket) {
+    throw new Error("The playoff bracket has already been generated — qualification can no longer be edited.");
+  }
+  if (tournament.qualificationLocked) {
+    throw new Error("The qualification list is locked — no further changes are allowed.");
+  }
+}
+
+// Looks up a participant's CURRENT qualification row (before this action)
+// across every pool — what makes the audit trail's previousState accurate
+// regardless of whether they were previously eliminated, an automatic
+// qualifier, a Wild Card, Best Third Place, or a prior manual override.
+function findQualificationRow(tournament, participantId) {
+  const engine = getTournamentEngine(tournament.format);
+  const qualification = qualificationService.determineQualifiers(tournament, engine);
+  const row = qualification.pools.flatMap((p) => p.rows).find((r) => r.participantId === participantId);
+  return { qualification, row };
+}
+
+// director/reason: required — see PROJECT.md's Audit Trail section
+// ("Reason for the override (required)"). Persists the new overrides map
+// AND records one audit entry, in that order — if the save throws
+// (locked/bracket exists/disabled), nothing gets logged for a change that
+// never actually happened.
+export async function saveQualificationPromote(tournament, participantId, { director, reason }) {
+  assertQualificationEditable(tournament);
+  if (!director?.trim() || !reason?.trim()) throw new Error("Director name and reason are required.");
+  const { row } = findQualificationRow(tournament, participantId);
+  if (!row) throw new Error("Participant not found.");
+  const nextOverrides = qualificationService.promoteParticipant(tournament.manualOverrides, participantId);
+  const updated = await saveTournament({ ...tournament, manualOverrides: nextOverrides });
+  await qualificationAuditService.recordOverride(tournament.id, {
+    director: director.trim(),
+    action: "promote",
+    reason: reason.trim(),
+    previousState: row.qualificationStatus,
+    newState: "manualOverride",
+    participantId,
+    participantLabel: row.label,
+  });
+  return updated;
+}
+
+export async function saveQualificationEliminate(tournament, participantId, { director, reason }) {
+  assertQualificationEditable(tournament);
+  if (!director?.trim() || !reason?.trim()) throw new Error("Director name and reason are required.");
+  const { row } = findQualificationRow(tournament, participantId);
+  if (!row) throw new Error("Participant not found.");
+  const nextOverrides = qualificationService.eliminateParticipant(tournament.manualOverrides, participantId);
+  const updated = await saveTournament({ ...tournament, manualOverrides: nextOverrides });
+  await qualificationAuditService.recordOverride(tournament.id, {
+    director: director.trim(),
+    action: "eliminate",
+    reason: reason.trim(),
+    previousState: row.qualificationStatus,
+    newState: "eliminated",
+    participantId,
+    participantLabel: row.label,
+  });
+  return updated;
+}
+
+// "Swap two participants" / "replace a participant who withdraws" — one
+// atomic map update via PoolQualificationService.replaceQualifiedParticipant,
+// and one audit entry naming both participants (matching the spec's own
+// "Removed: Player A / Added: Player B" example).
+export async function saveQualificationReplace(tournament, outgoingParticipantId, incomingParticipantId, { director, reason }) {
+  assertQualificationEditable(tournament);
+  if (!director?.trim() || !reason?.trim()) throw new Error("Director name and reason are required.");
+  const { row: outgoingRow } = findQualificationRow(tournament, outgoingParticipantId);
+  const { row: incomingRow } = findQualificationRow(tournament, incomingParticipantId);
+  if (!outgoingRow || !incomingRow) throw new Error("Participant not found.");
+  const nextOverrides = qualificationService.replaceQualifiedParticipant(tournament.manualOverrides, outgoingParticipantId, incomingParticipantId);
+  const updated = await saveTournament({ ...tournament, manualOverrides: nextOverrides });
+  await qualificationAuditService.recordOverride(tournament.id, {
+    director: director.trim(),
+    action: "replace",
+    reason: reason.trim(),
+    previousState: `Qualified: ${outgoingRow.label}`,
+    newState: `Qualified: ${incomingRow.label}`,
+    participantId: outgoingParticipantId,
+    participantLabel: `${outgoingRow.label} → ${incomingRow.label}`,
+  });
+  return updated;
+}
+
+// Undoes a single participant's override — no reason required (this is an
+// undo, not a new decision needing its own justification), but still
+// logged for a complete audit trail.
+export async function saveQualificationReset(tournament, participantId, { director }) {
+  assertQualificationEditable(tournament);
+  const { row } = findQualificationRow(tournament, participantId);
+  if (!row) throw new Error("Participant not found.");
+  const nextOverrides = qualificationService.resetQualification(tournament.manualOverrides, participantId);
+  const updated = await saveTournament({ ...tournament, manualOverrides: nextOverrides });
+  await qualificationAuditService.recordOverride(tournament.id, {
+    director: director?.trim() || "—",
+    action: "reset",
+    reason: "Reverted to automatic qualification.",
+    previousState: row.qualificationStatus,
+    newState: "automatic",
+    participantId,
+    participantLabel: row.label,
+  });
+  return updated;
+}
+
+// "Lock the qualification list before generating the bracket" — a
+// deliberate, separate organizer action from generation itself. Re-runs
+// validateQualificationList first so a director can't lock an invalid
+// list (duplicate/over-capacity) and get stuck.
+export async function saveLockQualification(tournament) {
+  assertQualificationEditable(tournament);
+  const engine = getTournamentEngine(tournament.format);
+  const qualification = qualificationService.determineQualifiers(tournament, engine);
+  if (!qualification.qualificationListValidation.valid) {
+    throw new Error(qualification.qualificationListValidation.errors.join(" "));
+  }
+  return saveTournament({ ...tournament, qualificationLocked: true });
+}
+
+export async function fetchQualificationAuditHistory(tournamentId) {
+  return qualificationAuditService.getAuditHistory(tournamentId);
 }
 
 // ---- Tournament Reports & History ----

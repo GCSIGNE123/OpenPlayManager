@@ -1497,7 +1497,7 @@ export const styles = {
     // family as "qualified" (not the faint/grey "eliminated" look), so an
     // organizer scanning a pool table can tell "still in it" from "out" at
     // a glance regardless of which method got them there.
-    const isQualified = s === "qualified" || s === "wildCard" || s === "bestThirdPlace";
+    const isQualified = s === "qualified" || s === "wildCard" || s === "bestThirdPlace" || s === "manualOverride";
     const color = isQualified ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--color-text-faint)";
     return {
       fontFamily: "'Space Mono', monospace",

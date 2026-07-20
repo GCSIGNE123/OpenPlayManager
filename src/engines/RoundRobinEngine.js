@@ -137,7 +137,13 @@ export class RoundRobinEngine extends TournamentEngine {
     // default via ?? below), so every tournament created before this field
     // existed keeps auto-generating exactly as before too.
     const usesAutoGeneratingSeeding = (next.seedingMethod ?? "standardCrossPool") === "standardCrossPool";
-    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false && usesAutoGeneratingSeeding) {
+    // Manual Qualification Override — see PROJECT.md. Same reasoning as
+    // non-standard seeding above: when enabled, a director needs a chance
+    // to review/promote/eliminate/lock before the bracket exists at all,
+    // so auto-generation is skipped here too — the organizer generates
+    // explicitly via lib/tournament.js's saveGenerateBracket once they're
+    // done (or immediately, if they don't touch qualification at all).
+    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false && usesAutoGeneratingSeeding && !next.allowManualQualificationOverride) {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
         const { ready, ...bracket } = generated;

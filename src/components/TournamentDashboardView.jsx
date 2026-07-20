@@ -25,6 +25,11 @@ import {
   saveTournamentSettings,
   saveManualSeeds,
   saveGenerateBracket,
+  saveQualificationPromote,
+  saveQualificationEliminate,
+  saveQualificationReplace,
+  saveQualificationReset,
+  saveLockQualification,
   getTournamentEngine,
 } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
@@ -402,6 +407,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   const [courtError, setCourtError] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [seedError, setSeedError] = useState("");
+  const [qualificationError, setQualificationError] = useState("");
   const [selectedPool, setSelectedPool] = useState("all");
 
   useEffect(() => {
@@ -703,6 +709,64 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Manual Qualification Override — same "call the lib function,
+  // setTournament(updated)" shape every other tab's handlers already use.
+  // qualificationError is cleared on every attempt so a stale message
+  // doesn't linger after a successful retry.
+  const handleQualificationPromote = async (participantId, args) => {
+    if (!tournament) return;
+    setQualificationError("");
+    try {
+      setTournament(await saveQualificationPromote(tournament, participantId, args));
+    } catch (e) {
+      setQualificationError(e.message);
+      throw e;
+    }
+  };
+
+  const handleQualificationEliminate = async (participantId, args) => {
+    if (!tournament) return;
+    setQualificationError("");
+    try {
+      setTournament(await saveQualificationEliminate(tournament, participantId, args));
+    } catch (e) {
+      setQualificationError(e.message);
+      throw e;
+    }
+  };
+
+  const handleQualificationReplace = async (outgoingId, incomingId, args) => {
+    if (!tournament) return;
+    setQualificationError("");
+    try {
+      setTournament(await saveQualificationReplace(tournament, outgoingId, incomingId, args));
+    } catch (e) {
+      setQualificationError(e.message);
+      throw e;
+    }
+  };
+
+  const handleQualificationReset = async (participantId, args) => {
+    if (!tournament) return;
+    setQualificationError("");
+    try {
+      setTournament(await saveQualificationReset(tournament, participantId, args));
+    } catch (e) {
+      setQualificationError(e.message);
+      throw e;
+    }
+  };
+
+  const handleLockQualification = async () => {
+    if (!tournament) return;
+    setQualificationError("");
+    try {
+      setTournament(await saveLockQualification(tournament));
+    } catch (e) {
+      setQualificationError(e.message);
+    }
+  };
+
   const pools = tournament?.pools ?? [];
 
   return (
@@ -764,7 +828,18 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
         <TournamentStandingsView tournament={tournament} loading={loading} selectedPool={selectedPool} />
       )}
 
-      {tab === "qualification" && <TournamentQualificationView tournament={tournament} loading={loading} />}
+      {tab === "qualification" && (
+        <TournamentQualificationView
+          tournament={tournament}
+          loading={loading}
+          qualificationError={qualificationError}
+          onPromote={handleQualificationPromote}
+          onEliminate={handleQualificationEliminate}
+          onReplace={handleQualificationReplace}
+          onReset={handleQualificationReset}
+          onLock={handleLockQualification}
+        />
+      )}
 
       {tab === "seeding" && (
         <TournamentSeedingView

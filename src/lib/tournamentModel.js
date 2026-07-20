@@ -277,6 +277,7 @@ export function makeTournament({
   qualificationMethod = "standard", // Advanced Qualification — real behavior: selects PoolQualificationService's extra-qualifier logic ("standard" | "wildCard" | "bestThirdPlace"). Editable via the Settings tab only, locked once playoffs start.
   wildCardCount = 1, // only meaningful when qualificationMethod === "wildCard" — 1 | 2 | 4, per Tournament Settings
   bestThirdPlaceCount = 1, // only meaningful when qualificationMethod === "bestThirdPlace" — capped at poolCount (one 3rd-place candidate per pool)
+  allowManualQualificationOverride = false, // Manual Qualification Override — real behavior: gates both the promote/eliminate/replace/reset actions AND (like non-standard seeding) whether the bracket auto-generates on pool completion. Editable via the Settings tab only, locked once playoffs start.
 }) {
   const now = Date.now();
   const tournament = {
@@ -299,6 +300,18 @@ export function makeTournament({
     qualificationMethod,
     wildCardCount,
     bestThirdPlaceCount,
+    allowManualQualificationOverride,
+    // manualOverrides: { [participantId]: "promoted" | "eliminated" } — the
+    // live delta PoolQualificationService.applyManualOverrides layers on
+    // top of the automatic/Wild Card/Best Third Place result. null (not {})
+    // until the first override, so "no overrides yet" is distinguishable
+    // from "overrides exist but happen to be empty."
+    manualOverrides: null,
+    // qualificationLocked: an explicit organizer action ("Lock Qualification
+    // List"), separate from bracket generation itself — set once, never
+    // unset in this milestone. Blocks promote/eliminate/replace/reset the
+    // same way tournament.bracket existing already does.
+    qualificationLocked: false,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come

@@ -141,6 +141,79 @@ export class PoolQualificationService extends QualificationService {
     }));
   }
 
+  // Manual Qualification Override — see PROJECT.md. These four methods
+  // never touch pools/standings at all — they only edit the small
+  // { [participantId]: "promoted" | "eliminated" } delta map persisted at
+  // tournament.manualOverrides, a reducer-style pattern deliberately kept
+  // separate from applyManualOverrides (below), which is the only method
+  // that actually reaches into pool rows. That split is what makes these
+  // four safe to call from a UI action handler without needing pools in
+  // scope, and what makes a future "Medical Withdrawal"/"Director
+  // Invitation" reason just another value in the same map shape.
+  promoteParticipant(overrides, participantId) {
+    return { ...(overrides || {}), [participantId]: "promoted" };
+  }
+
+  eliminateParticipant(overrides, participantId) {
+    return { ...(overrides || {}), [participantId]: "eliminated" };
+  }
+
+  // "Swap two participants" / "replace a participant who withdraws" are the
+  // same operation either way: one participant's slot opens up, another
+  // fills it. One call, one atomic map update — never two separate
+  // promote+eliminate calls that could be applied out of order.
+  replaceQualifiedParticipant(overrides, outgoingParticipantId, incomingParticipantId) {
+    return { ...(overrides || {}), [outgoingParticipantId]: "eliminated", [incomingParticipantId]: "promoted" };
+  }
+
+  // Undoes a single participant's override, reverting them to whatever
+  // their automatic/Wild Card/Best Third Place status naturally computes
+  // to — not a special "reset" tag, just the absence of an entry.
+  resetQualification(overrides, participantId) {
+    const next = { ...(overrides || {}) };
+    delete next[participantId];
+    return next;
+  }
+
+  // The actual overlay step — parallel to mergeQualifiedParticipants above,
+  // but this one runs LAST (after automatic + Wild Card/Best Third Place
+  // are already merged), so a manual override always wins regardless of
+  // how a participant was previously classified. "promoted" only ever
+  // matters for a row that isn't already qualified; "eliminated" works on
+  // ANY row, including a pool's own automatic winner — a director can
+  // override anything. A no-op when there's nothing to apply.
+  applyManualOverrides(pools, overrides) {
+    if (!overrides || Object.keys(overrides).length === 0) return pools;
+    return pools.map((p) => ({
+      ...p,
+      rows: p.rows.map((r) => {
+        const action = overrides[r.participantId];
+        if (action === "promoted") return { ...r, qualificationStatus: "manualOverride", qualified: true };
+        if (action === "eliminated") return { ...r, qualificationStatus: "eliminated", qualified: false };
+        return r;
+      }),
+    }));
+  }
+
+  // "More qualifiers than the configured bracket size" — bracketSize is
+  // the PRE-OVERRIDE qualified count (automatic + Wild Card/Best Third
+  // Place, before any manual promote/eliminate/replace), so overrides can
+  // rearrange WHO qualifies without silently growing the bracket. Also
+  // covers the plain duplicate-qualification case (defensively — see
+  // validateQualificationResult below for why it shouldn't be reachable).
+  validateQualificationList(qualifiedTeams, bracketSize) {
+    const errors = [];
+    const ids = qualifiedTeams.map((t) => t.participantId);
+    const duplicates = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate qualified participant(s): ${duplicates.join(", ")}.`);
+    }
+    if (bracketSize != null && qualifiedTeams.length > bracketSize) {
+      errors.push(`Qualified count (${qualifiedTeams.length}) exceeds the configured bracket size (${bracketSize}).`);
+    }
+    return { valid: errors.length === 0, errors };
+  }
+
   // Defensive invariant check — by construction (determineWildCards/
   // determineBestThirdPlace only ever draw from rows already tagged
   // "eliminated") no participant can ever qualify by more than one method,
@@ -173,6 +246,7 @@ export class PoolQualificationService extends QualificationService {
     // genuinely done (same "ready" gate the standard slicing above
     // already respects) — a provisional cross-pool ranking while a
     // sibling pool is still mid-match wouldn't be meaningful.
+    let bracketSize = null;
     if (ready) {
       const method = this.getQualificationMethod(tournament);
       const extra =
@@ -182,6 +256,17 @@ export class PoolQualificationService extends QualificationService {
             ? this.determineBestThirdPlace(pools, tournament.bestThirdPlaceCount ?? 0)
             : [];
       pools = this.mergeQualifiedParticipants(pools, extra);
+
+      // Manual Qualification Override — see PROJECT.md. bracketSize is
+      // snapshotted HERE, before manual overrides are applied, so
+      // validateQualificationList can catch a director accidentally
+      // growing the bracket beyond what auto-generation would have
+      // produced. Applied last so a manual override always wins over
+      // automatic/Wild Card/Best Third Place classification.
+      bracketSize = pools.flatMap((p) => p.rows).filter((r) => r.qualified).length;
+      if (tournament.allowManualQualificationOverride && tournament.manualOverrides) {
+        pools = this.applyManualOverrides(pools, tournament.manualOverrides);
+      }
     }
 
     const qualifiedTeams = ready
@@ -194,12 +279,22 @@ export class PoolQualificationService extends QualificationService {
               rank: r.rank,
               participantId: r.participantId,
               label: r.label,
-              qualificationType: r.qualificationStatus, // "qualified" | "wildCard" | "bestThirdPlace"
+              qualificationType: r.qualificationStatus, // "qualified" | "wildCard" | "bestThirdPlace" | "manualOverride"
             }))
         )
       : [];
 
-    return { ready, pools, qualifiedTeams, playoffSize: ready ? this.calculatePlayoffSize(qualifiedTeams.length) : null };
+    const qualificationListValidation =
+      ready && tournament.allowManualQualificationOverride ? this.validateQualificationList(qualifiedTeams, bracketSize) : { valid: true, errors: [] };
+
+    return {
+      ready,
+      pools,
+      qualifiedTeams,
+      playoffSize: ready ? this.calculatePlayoffSize(qualifiedTeams.length) : null,
+      bracketSize,
+      qualificationListValidation,
+    };
   }
 
   // Maps a qualifier count onto the bracket size it implies. Counts that

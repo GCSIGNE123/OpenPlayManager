@@ -131,6 +131,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
     if (!locked.has("wildCardCount") && draft.wildCardCount !== (tournament.wildCardCount ?? 1)) changes.wildCardCount = draft.wildCardCount;
     if (!locked.has("bestThirdPlaceCount") && draft.bestThirdPlaceCount !== (tournament.bestThirdPlaceCount ?? 1))
       changes.bestThirdPlaceCount = draft.bestThirdPlaceCount;
+    if (!locked.has("allowManualQualificationOverride") && draft.allowManualQualificationOverride !== (tournament.allowManualQualificationOverride ?? false))
+      changes.allowManualQualificationOverride = draft.allowManualQualificationOverride;
     if (!locked.has("matchScoringRules") && JSON.stringify(draft.matchScoringRules) !== JSON.stringify(tournament.matchScoringRules)) {
       changes.matchScoringRules = draft.matchScoringRules;
     }
@@ -268,6 +270,31 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             />
           </SettingRow>
         )}
+        <SettingRow
+          label="Allow manual qualification override"
+          fieldKey="allowManualQualificationOverride"
+          locked={locked}
+          hint="When enabled, directors can promote/eliminate/replace qualifiers on the Qualification tab before generating the bracket — every change is logged with a required reason."
+        >
+          <div style={styles.skillToggle}>
+            <button
+              type="button"
+              disabled={locked.has("allowManualQualificationOverride")}
+              style={styles.skillToggleBtn(draft.allowManualQualificationOverride)}
+              onClick={() => set("allowManualQualificationOverride", true)}
+            >
+              Enabled
+            </button>
+            <button
+              type="button"
+              disabled={locked.has("allowManualQualificationOverride")}
+              style={styles.skillToggleBtn(!draft.allowManualQualificationOverride)}
+              onClick={() => set("allowManualQualificationOverride", false)}
+            >
+              Disabled
+            </button>
+          </div>
+        </SettingRow>
       </div>
 
       <h3 style={styles.poolHeading}>Playoff Settings</h3>

@@ -85,6 +85,7 @@ export function deriveSettingsView(tournament) {
     qualificationMethod: tournament.qualificationMethod ?? "standard",
     wildCardCount: tournament.wildCardCount ?? 1,
     bestThirdPlaceCount: tournament.bestThirdPlaceCount ?? 1,
+    allowManualQualificationOverride: tournament.allowManualQualificationOverride ?? false,
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

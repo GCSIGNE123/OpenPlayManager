@@ -114,6 +114,19 @@ export class TournamentReportService {
       });
     }
 
+    // Manual Qualification Override — see PROJECT.md. Listed whenever any
+    // override exists, regardless of whether the bracket has been
+    // generated yet, so a director has a printable record of who
+    // qualified through manual intervention rather than automatically.
+    if (tournament.allowManualQualificationOverride && tournament.manualOverrides && Object.keys(tournament.manualOverrides).length > 0) {
+      const qualification = qualificationService.determineQualifiers(tournament, {
+        getStandings: (t, poolId) => standingsService.updateAfterMatch(t.pools.find((p) => p.id === poolId)),
+      });
+      const overridden = qualification.qualifiedTeams.filter((q) => q.qualificationType === "manualOverride");
+      rows.push(["Manual Qualification Overrides", String(overridden.length)]);
+      overridden.forEach((q) => rows.push([`⭐ ${q.label}`, `Manual Override (${q.poolLabel})`]));
+    }
+
     return { title: "Tournament Summary", columns: ["Field", "Value"], rows };
   }
 
@@ -193,7 +206,7 @@ export class TournamentReportService {
     const qualification = qualificationService.determineQualifiers(tournament, {
       getStandings: (t, poolId) => standingsService.updateAfterMatch(t.pools.find((p) => p.id === poolId)),
     });
-    const QUALIFIED_LABELS = { qualified: "Yes", wildCard: "Wild Card", bestThirdPlace: "Best 3rd" };
+    const QUALIFIED_LABELS = { qualified: "Yes", wildCard: "Wild Card", bestThirdPlace: "Best 3rd", manualOverride: "Manual Override" };
     return tournament.pools.map((pool) => {
       const standings = standingsService.updateAfterMatch(pool);
       const qualificationTypeById = new Map(
