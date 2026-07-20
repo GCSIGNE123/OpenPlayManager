@@ -66,6 +66,10 @@ Do not implement multiple unrelated features in a single task.
 - [x] Round Robin Playoff Engine
 - [x] Automatic Qualification
 - [x] Automatic Bracket Generation
+- [x] Automatic Playoff Bracket Generator
+- [ ] Bronze Medal Match
+- [ ] Manual Seeding
+- [ ] Double Elimination Brackets
 - [x] Automatic Winner Advancement
 - [x] Tournament Court Assignment
 - [x] Match Queue

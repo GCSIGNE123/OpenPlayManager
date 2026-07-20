@@ -104,6 +104,20 @@ function CompletedOverviewPanel({ tournament }) {
             {qualification.playoffSize.stage} ({qualification.playoffSize.count})
           </span>
         </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Total Qualified Participants</span>
+          <span style={styles.sessionInfoValue}>{qualification.playoffSize.count}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Total Playoff Matches</span>
+          <span style={styles.sessionInfoValue}>
+            {tournament.bracket ? tournament.bracket.rounds.reduce((sum, r) => sum + r.matches.length, 0) : qualification.playoffSize.count - 1}
+          </span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Bracket Status</span>
+          <span style={styles.sessionInfoValue}>{tournament.bracket ? tournament.bracket.status : "Not generated"}</span>
+        </div>
         {tournament.bracket?.status === "completed" && (
           <>
             <div style={styles.sessionInfoItem}>

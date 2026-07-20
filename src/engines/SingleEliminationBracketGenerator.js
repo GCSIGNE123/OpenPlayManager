@@ -45,6 +45,78 @@ function makeBracketMatch({ round, matchNumber, teamA = null, teamB = null }) {
 }
 
 export class SingleEliminationBracketGenerator extends BracketGeneratorService {
+  // Automatic Playoff Bracket Generator — see PROJECT.md. Every rule the
+  // spec's "Bracket Validation" section names, as one real, callable,
+  // testable method rather than scattered implicit side effects of other
+  // checks. Called by generateBracket() below before it builds anything;
+  // also safe to call standalone (e.g. from a future "why can't I generate
+  // yet" UI hint) since it never mutates the tournament.
+  // returns: { valid: boolean, errors: string[] } — every failing rule
+  // listed, not just the first one, so a caller can show them all at once.
+  validateBracket(tournament, engine) {
+    const errors = [];
+
+    if (tournament.bracket) {
+      errors.push("A playoff bracket has already been generated for this tournament.");
+      return { valid: false, errors }; // nothing else is worth checking once this is true
+    }
+
+    const qualification = qualificationService.determineQualifiers(tournament, engine);
+    const incompletePools = qualification.pools.filter((p) => !p.complete);
+    if (incompletePools.length > 0) {
+      errors.push(`All pools must be complete — still in progress: ${incompletePools.map((p) => p.poolLabel).join(", ")}.`);
+    }
+    if (!qualification.ready) {
+      errors.push("Qualification has not been finalized yet.");
+    }
+
+    // Only meaningful once qualification actually finished — an in-progress
+    // qualification's team count is provisional and would just double-report
+    // the "not finalized" error above.
+    if (qualification.ready) {
+      const size = qualification.qualifiedTeams.length;
+      if (size < 2 || (size & (size - 1)) !== 0) {
+        errors.push(`Qualified team count (${size}) must be a power of two (2, 4, 8, 16, ...) to generate a bracket.`);
+      }
+      const participantIds = qualification.qualifiedTeams.map((t) => t.participantId);
+      const duplicates = participantIds.filter((id, i) => participantIds.indexOf(id) !== i);
+      if (duplicates.length > 0) {
+        errors.push("Duplicate participants found among qualified teams — a participant can only qualify once.");
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  // A clean, flattened read-shape over a generated Bracket record — what a
+  // future summary/debug view would want without re-walking rounds/matches
+  // itself. Pure derivation, nothing persisted; returns null for "no
+  // bracket yet" rather than throwing, since "not generated" is an
+  // expected, normal state this whole milestone is built around.
+  getBracketStructure(bracket) {
+    if (!bracket) return null;
+    return {
+      id: bracket.id,
+      status: bracket.status,
+      size: bracket.size,
+      roundCount: bracket.rounds.length,
+      totalMatches: bracket.rounds.reduce((sum, r) => sum + r.matches.length, 0),
+      rounds: bracket.rounds.map((r) => ({
+        roundNumber: r.roundNumber,
+        name: r.name,
+        matchCount: r.matches.length,
+        matches: r.matches.map((m) => ({
+          matchNumber: m.matchNumber,
+          teamA: m.teamA?.label ?? "TBD",
+          teamB: m.teamB?.label ?? "TBD",
+          status: m.status,
+        })),
+      })),
+      champion: bracket.champion?.label ?? null,
+      runnerUp: bracket.runnerUp?.label ?? null,
+    };
+  }
+
   assignSeeds(qualifiedTeams, method) {
     return assignSeedsForBracket(qualifiedTeams, method);
   }
@@ -90,7 +162,18 @@ export class SingleEliminationBracketGenerator extends BracketGeneratorService {
   // "ready", completedAt: null, champion: null, runnerUp: null, size,
   // seeds, rounds) when ready — `reason` is set only when `ready` is
   // false: "not_ready" (pools still in progress) or "unsupported_size"
-  // (qualified count isn't a power of two)
+  // (qualified count isn't a power of two).
+  //
+  // Deliberately keeps its own inline not-ready/power-of-two checks rather
+  // than calling validateBracket() above — this is the hot path
+  // RoundRobinEngine.updateMatchResult calls after every single match
+  // result, so its `{ready, reason, size}` return shape is a stable,
+  // already-tested contract TournamentBracketView's preview messaging
+  // depends on; validateBracket() covers the same two rules plus the
+  // "already generated"/"duplicate participants" ones the spec adds this
+  // task, as a separate, richer `{valid, errors[]}` result for callers
+  // that want the full picture (e.g. a future "why can't I generate"
+  // summary), without risking this function's existing return shape.
   generateBracket(tournament, engine) {
     const qualification = qualificationService.determineQualifiers(tournament, engine);
     if (!qualification.ready) return NOT_READY;
