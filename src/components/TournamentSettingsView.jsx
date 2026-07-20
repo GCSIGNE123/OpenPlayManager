@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Lock, Pencil, Save, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
-import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS } from "../engines/TournamentSettings.js";
+import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS } from "../engines/TournamentSettings.js";
 import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -126,6 +126,11 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.bronzeMatchEnabled = draft.bronzeMatchEnabled;
     if (!locked.has("seedingMethod") && draft.seedingMethod !== (tournament.seedingMethod ?? "standardCrossPool"))
       changes.seedingMethod = draft.seedingMethod;
+    if (!locked.has("qualificationMethod") && draft.qualificationMethod !== (tournament.qualificationMethod ?? "standard"))
+      changes.qualificationMethod = draft.qualificationMethod;
+    if (!locked.has("wildCardCount") && draft.wildCardCount !== (tournament.wildCardCount ?? 1)) changes.wildCardCount = draft.wildCardCount;
+    if (!locked.has("bestThirdPlaceCount") && draft.bestThirdPlaceCount !== (tournament.bestThirdPlaceCount ?? 1))
+      changes.bestThirdPlaceCount = draft.bestThirdPlaceCount;
     if (!locked.has("matchScoringRules") && JSON.stringify(draft.matchScoringRules) !== JSON.stringify(tournament.matchScoringRules)) {
       changes.matchScoringRules = draft.matchScoringRules;
     }
@@ -210,6 +215,59 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             onChange={(e) => set("advancesPerPool", Number(e.target.value) || 1)}
           />
         </SettingRow>
+        <SettingRow
+          label="Qualification method"
+          fieldKey="qualificationMethod"
+          locked={locked}
+          hint="Wild Cards/Best Third Place add extra qualifiers beyond Teams Advancing Per Pool, ranked using the same standings and tie-breakers."
+        >
+          <select
+            style={styles.rotationSelect}
+            disabled={locked.has("qualificationMethod")}
+            value={draft.qualificationMethod}
+            onChange={(e) => set("qualificationMethod", e.target.value)}
+          >
+            {QUALIFICATION_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+        {draft.qualificationMethod === "wildCard" && (
+          <SettingRow label="Wild card count" fieldKey="wildCardCount" locked={locked}>
+            <select
+              style={styles.rotationSelect}
+              disabled={locked.has("wildCardCount")}
+              value={draft.wildCardCount}
+              onChange={(e) => set("wildCardCount", Number(e.target.value))}
+            >
+              {WILD_CARD_COUNTS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
+        )}
+        {draft.qualificationMethod === "bestThirdPlace" && (
+          <SettingRow
+            label="Best third place count"
+            fieldKey="bestThirdPlaceCount"
+            locked={locked}
+            hint={`Can't exceed the number of pools (${draft.poolCount}) — only one 3rd-place finisher per pool.`}
+          >
+            <input
+              type="number"
+              min={1}
+              max={draft.poolCount}
+              disabled={locked.has("bestThirdPlaceCount")}
+              style={styles.expectedGamesInput}
+              value={draft.bestThirdPlaceCount}
+              onChange={(e) => set("bestThirdPlaceCount", Number(e.target.value) || 1)}
+            />
+          </SettingRow>
+        )}
       </div>
 
       <h3 style={styles.poolHeading}>Playoff Settings</h3>

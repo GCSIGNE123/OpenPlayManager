@@ -47,6 +47,16 @@ export const SEEDING_METHODS = [
   { value: "manual", label: "Manual" },
 ];
 
+// Advanced Qualification — see PoolQualificationService.js for the actual
+// determineWildCards()/determineBestThirdPlace() logic these values select.
+export const QUALIFICATION_METHODS = [
+  { value: "standard", label: "Standard" },
+  { value: "wildCard", label: "Standard + Wild Cards" },
+  { value: "bestThirdPlace", label: "Standard + Best Third Place" },
+];
+
+export const WILD_CARD_COUNTS = [1, 2, 4];
+
 export const PLAYOFF_STAGES = [
   { value: "roundOf16", label: "Round of 16" },
   { value: "quarterfinals", label: "Quarterfinals" },
@@ -72,6 +82,9 @@ export function deriveSettingsView(tournament) {
     manualPlayoffStage: tournament.manualPlayoffStage ?? null,
     bronzeMatchEnabled: tournament.bronzeMatchEnabled ?? false,
     seedingMethod: tournament.seedingMethod ?? "standardCrossPool",
+    qualificationMethod: tournament.qualificationMethod ?? "standard",
+    wildCardCount: tournament.wildCardCount ?? 1,
+    bestThirdPlaceCount: tournament.bestThirdPlaceCount ?? 1,
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

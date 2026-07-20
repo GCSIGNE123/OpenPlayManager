@@ -116,6 +116,30 @@ function CompletedOverviewPanel({ tournament }) {
           <span style={styles.sessionInfoLabel}>Total Qualified Participants</span>
           <span style={styles.sessionInfoValue}>{qualification.playoffSize.count}</span>
         </div>
+        {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
+          <>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Automatic Qualifiers</span>
+              <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
+            </div>
+            {tournament.qualificationMethod === "wildCard" && (
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Wild Cards</span>
+                <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
+              </div>
+            )}
+            {tournament.qualificationMethod === "bestThirdPlace" && (
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Best Third Place</span>
+                <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
+              </div>
+            )}
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Remaining Eliminated</span>
+              <span style={styles.sessionInfoValue}>{qualification.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
+            </div>
+          </>
+        )}
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Total Playoff Matches</span>
           <span style={styles.sessionInfoValue}>
@@ -236,8 +260,16 @@ function OverviewPanel({ tournament, loading }) {
   // while sibling pools are still "pending" (see PoolQualificationService).
   const poolsCompleted = tournament.pools.filter((p) => p.status === "completed").length;
   const qualification = engine ? qualificationService.determineQualifiers(tournament, engine) : null;
-  const qualifiedCount = qualification ? qualification.pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "qualified")).length : 0;
-  const eliminatedCount = qualification ? qualification.pools.flatMap((p) => p.rows.filter((r) => r.qualificationStatus === "eliminated")).length : 0;
+  const allRows = qualification ? qualification.pools.flatMap((p) => p.rows) : [];
+  // Advanced Qualification — see PROJECT.md. `.qualified` (boolean) counts
+  // every method at once; qualificationStatus's exact string distinguishes
+  // which (only ever "wildCard"/"bestThirdPlace" when that method is
+  // configured — otherwise every qualified row is plain "qualified").
+  const qualifiedCount = allRows.filter((r) => r.qualified).length;
+  const automaticQualifierCount = allRows.filter((r) => r.qualificationStatus === "qualified").length;
+  const wildCardCount = allRows.filter((r) => r.qualificationStatus === "wildCard").length;
+  const bestThirdPlaceCount = allRows.filter((r) => r.qualificationStatus === "bestThirdPlace").length;
+  const eliminatedCount = allRows.filter((r) => r.qualificationStatus === "eliminated").length;
 
   const poolStats = tournament.pools.map((pool) => {
     const poolProgress = getPoolProgress(pool);
@@ -277,11 +309,31 @@ function OverviewPanel({ tournament, loading }) {
           <span style={styles.sessionInfoValue}>{tournament.pools.length - poolsCompleted}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Qualified</span>
+          <span style={styles.sessionInfoLabel}>Total Qualified</span>
           <span style={styles.sessionInfoValue}>{qualifiedCount}</span>
         </div>
+        {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
+          <>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Automatic Qualifiers</span>
+              <span style={styles.sessionInfoValue}>{automaticQualifierCount}</span>
+            </div>
+            {tournament.qualificationMethod === "wildCard" && (
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Wild Cards</span>
+                <span style={styles.sessionInfoValue}>{wildCardCount}</span>
+              </div>
+            )}
+            {tournament.qualificationMethod === "bestThirdPlace" && (
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Best Third Place</span>
+                <span style={styles.sessionInfoValue}>{bestThirdPlaceCount}</span>
+              </div>
+            )}
+          </>
+        )}
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Eliminated</span>
+          <span style={styles.sessionInfoLabel}>Remaining Eliminated</span>
           <span style={styles.sessionInfoValue}>{eliminatedCount}</span>
         </div>
       </div>

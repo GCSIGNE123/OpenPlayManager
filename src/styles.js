@@ -1492,7 +1492,13 @@ export const styles = {
   // older call site that hasn't been touched keeps rendering correctly.
   qualificationTag: (status) => {
     const s = status === true ? "qualified" : status === false ? "eliminated" : status;
-    const color = s === "qualified" ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--color-text-faint)";
+    // Advanced Qualification — see PROJECT.md. "wildCard"/"bestThirdPlace"
+    // are qualified-by-a-different-method, not eliminated — same green
+    // family as "qualified" (not the faint/grey "eliminated" look), so an
+    // organizer scanning a pool table can tell "still in it" from "out" at
+    // a glance regardless of which method got them there.
+    const isQualified = s === "qualified" || s === "wildCard" || s === "bestThirdPlace";
+    const color = isQualified ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--color-text-faint)";
     return {
       fontFamily: "'Space Mono', monospace",
       fontSize: 10,
@@ -1500,8 +1506,8 @@ export const styles = {
       letterSpacing: "0.04em",
       textTransform: "uppercase",
       color: s === "pending" ? "var(--ink)" : color,
-      background: s === "qualified" ? "rgba(0,150,80,0.1)" : s === "pending" ? "rgba(230,178,0,0.12)" : "var(--color-bg)",
-      border: `1px solid ${s === "qualified" ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--line)"}`,
+      background: isQualified ? "rgba(0,150,80,0.1)" : s === "pending" ? "rgba(230,178,0,0.12)" : "var(--color-bg)",
+      border: `1px solid ${isQualified ? "var(--color-success)" : s === "pending" ? "var(--ball)" : "var(--line)"}`,
       borderRadius: 5,
       padding: "3px 7px",
       display: "inline-block",

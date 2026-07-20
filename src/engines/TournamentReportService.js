@@ -184,16 +184,22 @@ export class TournamentReportService {
   // PoolQualificationService, which itself only returns real data once
   // every pool has finished (see NOT_READY there); before that, "Qualified"
   // reads "—" for every row rather than a misleading provisional pick.
+  // Advanced Qualification — see PROJECT.md. The "Qualified" column shows
+  // the actual TYPE (Yes / Wild Card / Best 3rd), not just a binary Yes/—,
+  // so a printed report distinguishes an automatic qualifier from an extra
+  // one — qualificationTypeById comes straight from PoolQualificationService,
+  // never re-derived here.
   generatePoolReport(tournament) {
     const qualification = qualificationService.determineQualifiers(tournament, {
       getStandings: (t, poolId) => standingsService.updateAfterMatch(t.pools.find((p) => p.id === poolId)),
     });
+    const QUALIFIED_LABELS = { qualified: "Yes", wildCard: "Wild Card", bestThirdPlace: "Best 3rd" };
     return tournament.pools.map((pool) => {
       const standings = standingsService.updateAfterMatch(pool);
-      const qualifiedIds = new Set(
+      const qualificationTypeById = new Map(
         (qualification.pools.find((p) => p.poolId === pool.id)?.rows || [])
           .filter((r) => r.qualified)
-          .map((r) => r.participantId)
+          .map((r) => [r.participantId, r.qualificationStatus])
       );
       return {
         title: `Pool Report — ${pool.label}`,
@@ -205,7 +211,7 @@ export class TournamentReportService {
           String(row.wins),
           String(row.losses),
           `${Math.round(row.winPct * 100)}%`,
-          qualifiedIds.has(row.participantId) ? "Yes" : "—",
+          QUALIFIED_LABELS[qualificationTypeById.get(row.participantId)] ?? "—",
         ]),
       };
     });

@@ -5,8 +5,8 @@ import SectionLabel from "./SectionLabel.jsx";
 
 const qualificationService = new PoolQualificationService();
 
-const STATUS_ICONS = { qualified: "🟢", eliminated: "🔴", pending: "⏳" };
-const STATUS_LABELS = { qualified: "Qualified", eliminated: "Eliminated", pending: "Pending" };
+const STATUS_ICONS = { qualified: "🟢", eliminated: "🔴", pending: "⏳", wildCard: "⭐", bestThirdPlace: "⭐" };
+const STATUS_LABELS = { qualified: "Qualified", eliminated: "Eliminated", pending: "Pending", wildCard: "Wild Card", bestThirdPlace: "Best Third Place" };
 
 // Qualification tab — see PROJECT.md's Pool Qualification Engine section.
 // PoolQualificationService is format-agnostic (any tournament with a
@@ -51,6 +51,12 @@ export default function TournamentQualificationView({ tournament, loading }) {
             <span style={styles.sessionInfoLabel}>Playoff Stage</span>
             <span style={styles.sessionInfoValue}>{result.playoffSize.stage}</span>
           </div>
+          {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Qualification Method</span>
+              <span style={styles.sessionInfoValue}>{tournament.qualificationMethod === "wildCard" ? "Standard + Wild Cards" : "Standard + Best Third Place"}</span>
+            </div>
+          )}
         </div>
       ) : (
         <p style={styles.editHint}>
@@ -94,13 +100,36 @@ export default function TournamentQualificationView({ tournament, loading }) {
 
       {result.ready && (
         <>
+          <h3 style={styles.poolHeading}>Qualification Summary</h3>
+          <div style={styles.sessionInfoCard}>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>✓ Automatic</span>
+              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>⭐ Wild Card</span>
+              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>⭐ Best Third Place</span>
+              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>❌ Eliminated</span>
+              <span style={styles.sessionInfoValue}>{result.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
+            </div>
+          </div>
           <h3 style={styles.poolHeading}>Overall Qualifiers</h3>
           <ul style={styles.qualifiersList}>
             {result.qualifiedTeams.map((q) => (
               <li key={q.participantId} style={styles.qualifiersListItem}>
-                <span>{q.label}</span>
+                <span>
+                  {q.qualificationType !== "qualified" && `${STATUS_ICONS[q.qualificationType]} `}
+                  {q.label}
+                </span>
                 <span style={styles.qualifiersListPool}>
                   {q.poolLabel} · Rank {q.rank}
+                  {q.qualificationType !== "qualified" && ` · ${STATUS_LABELS[q.qualificationType]}`}
                 </span>
               </li>
             ))}

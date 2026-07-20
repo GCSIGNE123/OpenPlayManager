@@ -274,6 +274,9 @@ export function makeTournament({
   bronzeMatchEnabled = false, // Bronze Medal Match — real behavior: gates PlayoffBracketGenerator attaching bracket.bronzeMatch. Editable via the Settings tab only (same precedent playoffEnabled already set), locked once playoffs start.
   seedingMethod = "standardCrossPool", // Manual & Advanced Seeding — real behavior: selects a BracketSeeding.js strategy; only "standardCrossPool" auto-generates on pool completion (see RoundRobinEngine.updateMatchResult), every other method waits for an explicit Generate Bracket action.
   manualSeeds = null, // { [participantId]: seedNumber } — only meaningful when seedingMethod === "manual", captured by the Seeding page. null (not {}) when never touched, so "has the organizer started assigning seeds" is distinguishable from "assigned zero seeds."
+  qualificationMethod = "standard", // Advanced Qualification — real behavior: selects PoolQualificationService's extra-qualifier logic ("standard" | "wildCard" | "bestThirdPlace"). Editable via the Settings tab only, locked once playoffs start.
+  wildCardCount = 1, // only meaningful when qualificationMethod === "wildCard" — 1 | 2 | 4, per Tournament Settings
+  bestThirdPlaceCount = 1, // only meaningful when qualificationMethod === "bestThirdPlace" — capped at poolCount (one 3rd-place candidate per pool)
 }) {
   const now = Date.now();
   const tournament = {
@@ -293,6 +296,9 @@ export function makeTournament({
     bronzeMatchEnabled,
     seedingMethod,
     manualSeeds,
+    qualificationMethod,
+    wildCardCount,
+    bestThirdPlaceCount,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come

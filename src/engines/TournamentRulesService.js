@@ -4,6 +4,9 @@
 // tournament.format), so the same lock logic applies unchanged to any
 // future format built on the same pools/bracket shape.
 import { deriveSettingsView } from "./TournamentSettings.js";
+import { PoolQualificationService } from "./PoolQualificationService.js";
+
+const qualificationService = new PoolQualificationService();
 
 // Field keys locked once pool play has started — the three named
 // explicitly in the spec. Everything else (mode, advancesPerPool, playoff
@@ -29,6 +32,9 @@ const PLAYOFFS_LOCK = [
   "matchScoringRules",
   "bronzeMatchEnabled",
   "seedingMethod",
+  "qualificationMethod",
+  "wildCardCount",
+  "bestThirdPlaceCount",
 ];
 
 export class TournamentRulesService {
@@ -94,6 +100,24 @@ export class TournamentRulesService {
     if (changes.matchScoringRules && !(changes.matchScoringRules.winningScore >= 1)) {
       throw new Error("Winning Score must be at least 1.");
     }
+    if ("wildCardCount" in changes && ![1, 2, 4].includes(changes.wildCardCount)) {
+      throw new Error("Wild Card Count must be 1, 2, or 4.");
+    }
+    if ("bestThirdPlaceCount" in changes && !(changes.bestThirdPlaceCount >= 1)) {
+      throw new Error("Best Third Place Count must be at least 1.");
+    }
+    // Advanced Qualification — re-validate the FULL resolved qualification
+    // config (not just the one field being edited) whenever any of these
+    // four change, since "does wildCardCount exceed remaining participants"
+    // depends on advancesPerPool too. Reuses PoolQualificationService's own
+    // validateQualifiers rather than re-deriving these rules here.
+    if ("qualificationMethod" in changes || "wildCardCount" in changes || "bestThirdPlaceCount" in changes || "advancesPerPool" in changes) {
+      qualificationService.validateQualifiers(tournament.pools, changes.advancesPerPool ?? tournament.advancesPerPool ?? 1, tournament.playoffEnabled, {
+        method: changes.qualificationMethod ?? tournament.qualificationMethod ?? "standard",
+        wildCardCount: changes.wildCardCount ?? tournament.wildCardCount ?? 1,
+        bestThirdPlaceCount: changes.bestThirdPlaceCount ?? tournament.bestThirdPlaceCount ?? 1,
+      });
+    }
   }
 
   lockReason(tournament) {
@@ -121,6 +145,9 @@ export class TournamentRulesService {
     if ("manualPlayoffStage" in changes) next.manualPlayoffStage = changes.manualPlayoffStage;
     if ("bronzeMatchEnabled" in changes) next.bronzeMatchEnabled = changes.bronzeMatchEnabled;
     if ("seedingMethod" in changes) next.seedingMethod = changes.seedingMethod;
+    if ("qualificationMethod" in changes) next.qualificationMethod = changes.qualificationMethod;
+    if ("wildCardCount" in changes) next.wildCardCount = changes.wildCardCount;
+    if ("bestThirdPlaceCount" in changes) next.bestThirdPlaceCount = changes.bestThirdPlaceCount;
     if ("matchScoringRules" in changes) next.matchScoringRules = { ...tournament.matchScoringRules, ...changes.matchScoringRules };
     if ("eligibilityRequirements" in changes) next.eligibilityRequirements = { ...tournament.eligibilityRequirements, ...changes.eligibilityRequirements }; // Membership Management — never locked, same as name/court names: doesn't affect schedule generation
     // courtsCount is deliberately NOT handled here — pre-tournament-start
