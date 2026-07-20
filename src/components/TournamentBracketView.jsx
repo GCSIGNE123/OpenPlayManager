@@ -6,6 +6,7 @@ import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { buildBracketViewModel } from "../engines/BracketViewModel.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { SEEDING_METHODS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 const previewGenerator = new PlayoffBracketGenerator();
@@ -13,6 +14,7 @@ const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
 
 const STATUS_LABELS = { locked: "Locked", ready: "Ready", inProgress: "In Progress", paused: "Paused", completed: "Completed" };
+const SEEDING_METHOD_LABELS = Object.fromEntries(SEEDING_METHODS.map((m) => [m.value, m.label]));
 
 // One playoff match card. Five states, per the Winner Advancement Engine +
 // this task's Pause/Resume addition (PlayoffEngine.getMatchState — the
@@ -439,7 +441,9 @@ export default function TournamentBracketView({
           </>
         ) : (
           <>
-            <p style={styles.editHint}>{bracket.size}-team elimination bracket, seeded by Standard Cross-Pool Seeding.</p>
+            <p style={styles.editHint}>
+              {bracket.size}-team elimination bracket, seeded by {SEEDING_METHOD_LABELS[tournament.seedingMethod ?? "standardCrossPool"]}.
+            </p>
             <div style={styles.editActions}>
               <button type="button" style={styles.secondaryBtn} onClick={jumpToCurrentRound}>
                 <Crosshair size={13} strokeWidth={2.5} />
@@ -503,6 +507,23 @@ export default function TournamentBracketView({
         <div style={styles.placeholderCard}>
           Bracket generation needs a power-of-two number of qualified teams (2, 4, 8, 16, …) — currently {preview.size}.
           Adjust Teams Advancing Per Pool on the Schedule tab so the qualifier count lands on one of those sizes.
+        </div>
+      </div>
+    );
+  }
+
+  // Manual & Advanced Seeding — see PROJECT.md. Auto-generation only fires
+  // for Standard Cross-Pool (RoundRobinEngine.updateMatchResult); every
+  // other method needs the organizer to visit the Seeding tab and click
+  // Generate Bracket explicitly, even once qualification is otherwise
+  // ready — this is the one place that distinction needs its own message.
+  if (preview.ready && (tournament.seedingMethod ?? "standardCrossPool") !== "standardCrossPool") {
+    return (
+      <div>
+        <SectionLabel>Bracket</SectionLabel>
+        <div style={styles.placeholderCard}>
+          Qualification is finalized and ready — this tournament uses {tournament.seedingMethod} seeding, which
+          doesn't generate automatically. Visit the Seeding tab to review seeds and click Generate Bracket.
         </div>
       </div>
     );

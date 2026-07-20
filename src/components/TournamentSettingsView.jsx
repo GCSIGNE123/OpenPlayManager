@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Lock, Pencil, Save, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
-import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES } from "../engines/TournamentSettings.js";
+import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS } from "../engines/TournamentSettings.js";
 import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -124,6 +124,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.manualPlayoffStage = draft.manualPlayoffStage;
     if (!locked.has("bronzeMatchEnabled") && draft.bronzeMatchEnabled !== (tournament.bronzeMatchEnabled ?? false))
       changes.bronzeMatchEnabled = draft.bronzeMatchEnabled;
+    if (!locked.has("seedingMethod") && draft.seedingMethod !== (tournament.seedingMethod ?? "standardCrossPool"))
+      changes.seedingMethod = draft.seedingMethod;
     if (!locked.has("matchScoringRules") && JSON.stringify(draft.matchScoringRules) !== JSON.stringify(tournament.matchScoringRules)) {
       changes.matchScoringRules = draft.matchScoringRules;
     }
@@ -222,6 +224,20 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
               No
             </button>
           </div>
+        </SettingRow>
+        <SettingRow
+          label="Seeding method"
+          fieldKey="seedingMethod"
+          locked={locked}
+          hint={draft.seedingMethod !== "standardCrossPool" ? "Non-default methods don't auto-generate the bracket — use the Seeding tab once qualification is ready." : undefined}
+        >
+          <select style={styles.rotationSelect} disabled={locked.has("seedingMethod")} value={draft.seedingMethod} onChange={(e) => set("seedingMethod", e.target.value)}>
+            {SEEDING_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </SettingRow>
         <SettingRow label="Bronze Medal Match" fieldKey="bronzeMatchEnabled" locked={locked} hint="When enabled, semifinal losers play for 3rd/4th place, generated alongside the bracket.">
           <div style={styles.skillToggle}>

@@ -37,6 +37,16 @@ export function defaultEligibilityRequirements() {
   return { requireActiveMembership: false, requiredPlanId: null, allowGuests: true };
 }
 
+// Manual & Advanced Seeding — see BracketSeeding.js for the actual
+// strategy implementations these values select.
+export const SEEDING_METHODS = [
+  { value: "standardCrossPool", label: "Standard Cross-Pool (default)" },
+  { value: "random", label: "Random" },
+  { value: "snake", label: "Snake" },
+  { value: "rating", label: "Rating-Based" },
+  { value: "manual", label: "Manual" },
+];
+
 export const PLAYOFF_STAGES = [
   { value: "roundOf16", label: "Round of 16" },
   { value: "quarterfinals", label: "Quarterfinals" },
@@ -61,6 +71,7 @@ export function deriveSettingsView(tournament) {
     autoDetectPlayoffStage: tournament.autoDetectPlayoffStage ?? true,
     manualPlayoffStage: tournament.manualPlayoffStage ?? null,
     bronzeMatchEnabled: tournament.bronzeMatchEnabled ?? false,
+    seedingMethod: tournament.seedingMethod ?? "standardCrossPool",
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

@@ -68,7 +68,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Automatic Bracket Generation
 - [x] Automatic Playoff Bracket Generator
 - [x] Bronze Medal Match
-- [ ] Manual Seeding
+- [x] Manual Seeding
 - [ ] Double Elimination Brackets
 - [x] Automatic Winner Advancement
 - [x] Winner Advancement Engine
@@ -91,7 +91,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Tournament Display Mode
 - [x] Tournament Templates
 - [x] Tournament Settings
-- [ ] Advanced Seeding
+- [x] Advanced Seeding
 - [ ] Team Events
 - [ ] Template Import/Export
 - [ ] Shared Organization Templates

@@ -21,9 +21,13 @@ import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 import { RatingEngine } from "../engines/RatingEngine.js";
 import { AchievementService } from "../engines/AchievementService.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
+import { PlayoffBracketGenerator } from "../engines/PlayoffBracketGenerator.js";
+import { getSeedingStrategy } from "../engines/BracketSeeding.js";
+import { fetchPlayerRating } from "./ratingModel.js";
 import { fetchPlayer } from "./playerDatabase.js";
 
 const playoffEngine = new PlayoffEngine();
+const bracketGenerator = new PlayoffBracketGenerator();
 const courtAssignmentService = new CourtAssignmentService();
 const courtAssignmentEngine = new CourtAssignmentEngine();
 const rulesService = new TournamentRulesService();
@@ -38,7 +42,7 @@ const historyService = new TournamentHistoryService();
 // BracketSeeding.js/PlayoffBracketGenerator.js), so their
 // underlying playerIds have to be looked back up from the original pool
 // entrant they came from, matched by participantId.
-function resolvePlayerIds(tournament, team) {
+export function resolvePlayerIds(tournament, team) {
   if (team.playerIds) return team.playerIds; // pool match — already a Participant
   const participantId = team.participantId;
   for (const pool of tournament.pools || []) {
@@ -364,6 +368,70 @@ export async function saveUnpinMatch(tournament, matchId) {
 export async function saveTournamentSettings(tournament, changes) {
   const updated = rulesService.updateSettings(tournament, changes);
   return saveTournament(updated);
+}
+
+// ---- Manual & Advanced Seeding ----
+// manualSeeds: { [participantId]: seedNumber } — captured by the Seeding
+// page as the organizer edits seed-number fields, saved independently of
+// actually generating the bracket (so progress isn't lost between visits).
+export async function saveManualSeeds(tournament, manualSeeds) {
+  return saveTournament({ ...tournament, manualSeeds });
+}
+
+// Builds whatever a seeding strategy needs beyond the plain qualified-team
+// list — an async ratings fetch for "rating" (the one thing
+// PlayoffBracketGenerator's synchronous interface can't do itself) or the
+// organizer's own manualSeeds for "manual". Exported so the Seeding page's
+// live bracket preview can build the exact same context saveGenerateBracket
+// below actually generates with, rather than approximating it separately.
+export async function buildSeedingContext(tournament, method, qualifiedTeams) {
+  if (method === "manual") {
+    return { manualSeeds: tournament.manualSeeds || {} };
+  }
+  if (method === "rating") {
+    const ratings = new Map();
+    for (const team of qualifiedTeams) {
+      const playerIds = resolvePlayerIds(tournament, team);
+      const fetched = (await Promise.all(playerIds.map((id) => fetchPlayerRating(id)))).filter(Boolean);
+      if (fetched.length > 0) {
+        ratings.set(team.participantId, fetched.reduce((sum, r) => sum + r.currentRating, 0) / fetched.length);
+      }
+    }
+    return { ratings };
+  }
+  return {};
+}
+
+// The explicit "Generate Bracket" action every non-default seeding method
+// requires — see RoundRobinEngine.updateMatchResult's header comment for
+// why auto-generation only fires for Standard Cross-Pool. Validates the
+// built context via the strategy's own validateSeeds() BEFORE calling
+// PlayoffBracketGenerator at all, and throws with every failing rule
+// joined into one message if invalid — the same "call the service, let it
+// throw, persist what it returns" shape every other save* function here
+// already uses.
+export async function saveGenerateBracket(tournament) {
+  const engine = getTournamentEngine(tournament.format);
+  const method = tournament.seedingMethod ?? "standardCrossPool";
+  const strategy = getSeedingStrategy(method);
+  const qualification = qualificationService.determineQualifiers(tournament, engine);
+  const context = await buildSeedingContext(tournament, method, qualification.qualifiedTeams);
+
+  const validation = strategy.validateSeeds(qualification.qualifiedTeams, context);
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(" "));
+  }
+
+  const generated = bracketGenerator.generateBracket(tournament, engine, context);
+  if (!generated.ready) {
+    throw new Error(
+      generated.reason === "unsupported_size"
+        ? `Qualified team count (${generated.size}) must be a power of two to generate a bracket.`
+        : "Qualification isn't finalized yet — every pool must be complete first."
+    );
+  }
+  const { ready, ...bracket } = generated;
+  return saveTournament({ ...tournament, bracket: { ...bracket, generatedAt: Date.now() } });
 }
 
 // ---- Tournament Reports & History ----

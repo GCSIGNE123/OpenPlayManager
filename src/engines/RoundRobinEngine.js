@@ -124,7 +124,20 @@ export class RoundRobinEngine extends TournamentEngine {
     // is captured for reference only, see TournamentSettings.js). Default
     // true so every tournament created before this field existed keeps
     // auto-generating a bracket exactly as before.
-    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false) {
+    //
+    // Manual & Advanced Seeding — see PROJECT.md. Auto-generation on pool
+    // completion only fires for the DEFAULT seeding method (Standard
+    // Cross-Pool), preserving that exact behavior unchanged. Every other
+    // method (Random/Snake/Rating/Manual) needs either organizer input
+    // that isn't available yet (Manual) or an async data fetch this
+    // synchronous hot path can't do (Rating) — those wait for an explicit
+    // "Generate Bracket" action from the Seeding page instead (see
+    // lib/tournament.js's saveGenerateBracket). tournament.seedingMethod
+    // defaults to "standardCrossPool" (undefined reads the same as the
+    // default via ?? below), so every tournament created before this field
+    // existed keeps auto-generating exactly as before too.
+    const usesAutoGeneratingSeeding = (next.seedingMethod ?? "standardCrossPool") === "standardCrossPool";
+    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false && usesAutoGeneratingSeeding) {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
         const { ready, ...bracket } = generated;

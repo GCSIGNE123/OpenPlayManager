@@ -272,6 +272,8 @@ export function makeTournament({
   autoDetectPlayoffStage = true, // captured for reference only — see TournamentSettings.js header comment
   manualPlayoffStage = null, // only meaningful when autoDetectPlayoffStage is false; captured for reference only
   bronzeMatchEnabled = false, // Bronze Medal Match — real behavior: gates PlayoffBracketGenerator attaching bracket.bronzeMatch. Editable via the Settings tab only (same precedent playoffEnabled already set), locked once playoffs start.
+  seedingMethod = "standardCrossPool", // Manual & Advanced Seeding — real behavior: selects a BracketSeeding.js strategy; only "standardCrossPool" auto-generates on pool completion (see RoundRobinEngine.updateMatchResult), every other method waits for an explicit Generate Bracket action.
+  manualSeeds = null, // { [participantId]: seedNumber } — only meaningful when seedingMethod === "manual", captured by the Seeding page. null (not {}) when never touched, so "has the organizer started assigning seeds" is distinguishable from "assigned zero seeds."
 }) {
   const now = Date.now();
   const tournament = {
@@ -289,6 +291,8 @@ export function makeTournament({
     autoDetectPlayoffStage,
     manualPlayoffStage,
     bronzeMatchEnabled,
+    seedingMethod,
+    manualSeeds,
     // Live court registry — seeded 1..courtsCount, independently editable
     // afterward (rename, add, remove, mark under maintenance) via
     // lib/tournament.js's court-management helpers. Matches no longer come

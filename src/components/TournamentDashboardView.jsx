@@ -23,6 +23,8 @@ import {
   savePinMatch,
   saveUnpinMatch,
   saveTournamentSettings,
+  saveManualSeeds,
+  saveGenerateBracket,
   getTournamentEngine,
 } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
@@ -31,6 +33,7 @@ import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 import TournamentQualificationView from "./TournamentQualificationView.jsx";
+import TournamentSeedingView from "./TournamentSeedingView.jsx";
 import TournamentBracketView from "./TournamentBracketView.jsx";
 import TournamentCourtsView from "./TournamentCourtsView.jsx";
 import TournamentSettingsView from "./TournamentSettingsView.jsx";
@@ -162,6 +165,7 @@ const TABS = [
   { id: "schedule", label: "Schedule" },
   { id: "standings", label: "Standings" },
   { id: "qualification", label: "Qualification" },
+  { id: "seeding", label: "Seeding" },
   { id: "bracket", label: "Bracket" },
   { id: "courts", label: "Courts" },
   { id: "reports", label: "Reports" },
@@ -312,6 +316,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   const [matchError, setMatchError] = useState("");
   const [courtError, setCourtError] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  const [seedError, setSeedError] = useState("");
   const [selectedPool, setSelectedPool] = useState("all");
 
   useEffect(() => {
@@ -591,6 +596,28 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Manual & Advanced Seeding — same "call the lib function, setTournament
+  // (updated)" shape every other tab's handlers already use.
+  const handleSaveManualSeeds = async (manualSeeds) => {
+    if (!tournament) return;
+    setSeedError("");
+    try {
+      setTournament(await saveManualSeeds(tournament, manualSeeds));
+    } catch (e) {
+      setSeedError(e.message);
+    }
+  };
+
+  const handleGenerateBracket = async () => {
+    if (!tournament) return;
+    setSeedError("");
+    try {
+      setTournament(await saveGenerateBracket(tournament));
+    } catch (e) {
+      setSeedError(e.message);
+    }
+  };
+
   const pools = tournament?.pools ?? [];
 
   return (
@@ -653,6 +680,16 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
       )}
 
       {tab === "qualification" && <TournamentQualificationView tournament={tournament} loading={loading} />}
+
+      {tab === "seeding" && (
+        <TournamentSeedingView
+          tournament={tournament}
+          loading={loading}
+          seedError={seedError}
+          onSaveManualSeeds={handleSaveManualSeeds}
+          onGenerateBracket={handleGenerateBracket}
+        />
+      )}
 
       {tab === "bracket" && (
         <TournamentBracketView

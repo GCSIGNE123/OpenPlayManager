@@ -119,13 +119,14 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
     };
   }
 
-  // Cross-pool seeding (Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2 for
-  // the two-pool case, etc.) — the actual seeding order lives in
-  // BracketSeeding.js so a future custom seeding template only has to add a
-  // new `method` there, never touch this file. `method` is passed straight
-  // through, undefined by default (BracketSeeding's own default template).
-  seedParticipants(qualifiedTeams, method) {
-    return assignSeedsForBracket(qualifiedTeams, method);
+  // Manual & Advanced Seeding — see PROJECT.md. The actual seeding order
+  // lives entirely in BracketSeeding.js's Strategy classes, so this file
+  // never needs to know which one is selected — `method` picks the
+  // strategy, `context` carries whatever that one strategy needs
+  // (pre-fetched ratings, organizer manual-seed assignments, a random seed
+  // value for testing) that this synchronous method can't fetch itself.
+  seedParticipants(qualifiedTeams, method, context) {
+    return assignSeedsForBracket(qualifiedTeams, method, context);
   }
 
   // seededTeams.length must be a power of two — a bracket can't pair an odd
@@ -181,7 +182,11 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
   // task, as a separate, richer `{valid, errors[]}` result for callers
   // that want the full picture (e.g. a future "why can't I generate"
   // summary), without risking this function's existing return shape.
-  generateBracket(tournament, engine) {
+  // context: passed straight through to seedParticipants — only meaningful
+  // for whichever seeding strategy tournament.seedingMethod selects (see
+  // BracketSeeding.js). Optional; every strategy other than Rating/Manual
+  // ignores it.
+  generateBracket(tournament, engine, context) {
     const qualification = qualificationService.determineQualifiers(tournament, engine);
     if (!qualification.ready) return NOT_READY;
 
@@ -190,7 +195,7 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
       return { ready: false, reason: "unsupported_size", size, seeds: [], rounds: [] };
     }
 
-    const seeds = this.seedParticipants(qualification.qualifiedTeams);
+    const seeds = this.seedParticipants(qualification.qualifiedTeams, tournament.seedingMethod, context);
     const rounds = this.createRounds(seeds);
     const bracket = { ready: true, id: uid(), size, seeds, rounds, status: "ready", completedAt: null, champion: null, runnerUp: null };
 
