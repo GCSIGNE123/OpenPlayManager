@@ -65,6 +65,9 @@ Do not implement multiple unrelated features in a single task.
 - [x] Automatic Winner Advancement
 - [x] Tournament Court Assignment
 - [x] Match Queue
+- [x] Court Assignment Engine
+- [x] Automatic Court Assignment
+- [ ] AI Court Optimization
 - [x] Tournament Display Mode
 - [x] Tournament Templates
 - [x] Tournament Settings

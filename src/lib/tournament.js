@@ -7,7 +7,7 @@
 // engines/RoundRobinScheduler.js (the scheduling algorithm itself, called
 // once per pool — it has no idea pools exist), which don't need to know
 // anything about session players.
-import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch } from "./tournamentModel.js";
+import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch, findMatch } from "./tournamentModel.js";
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
 import { assignPools, poolLabel } from "../engines/PoolAssignment.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
@@ -15,10 +15,12 @@ import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
 import { DoubleEliminationEngine } from "../engines/DoubleEliminationEngine.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 
 const playoffEngine = new PlayoffEngine();
 const courtAssignmentService = new CourtAssignmentService();
+const courtAssignmentEngine = new CourtAssignmentEngine();
 const rulesService = new TournamentRulesService();
 
 export function buildEntrants(players, mode) {
@@ -98,10 +100,20 @@ export async function saveMatchStart(tournament, matchId) {
   return saveTournament(updated);
 }
 
+// Court Assignment & Match Queue Engine — "when a court becomes available,
+// automatically assign the highest-priority eligible match" — completing a
+// match frees its court (see CourtAssignmentService's "derived occupancy"
+// header comment: a completed match's court reads as free without any
+// explicit release), so this is the actual trigger point. The just-
+// completed match still carries its own `.court` field (only its status
+// changed), so the freed court number is read straight off the result
+// updateMatchResult returns.
 export async function saveMatchResult(tournament, matchId, result) {
   const engine = getTournamentEngine(tournament.format);
   const updated = engine.updateMatchResult(tournament, matchId, result);
-  return saveTournament(updated);
+  const { match } = findMatch(updated, matchId);
+  const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  return saveTournament(withAutoFill);
 }
 
 // ---- Playoff Match Management & Winner Advancement ----
@@ -115,9 +127,15 @@ export async function savePlayoffMatchStart(tournament, matchId) {
   return saveTournament({ ...tournament, bracket });
 }
 
+// Same auto-fill trigger as saveMatchResult above, for the bracket side —
+// see that function's comment for why the freed court is read straight off
+// the just-completed match.
 export async function savePlayoffMatchResult(tournament, matchId, result) {
   const bracket = playoffEngine.updateBracket(tournament.bracket, matchId, result);
-  return saveTournament({ ...tournament, bracket });
+  const match = bracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const updated = { ...tournament, bracket };
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  return saveTournament(withAutoFill);
 }
 
 // Round Robin Playoff Engine — see PROJECT.md. Same "call the engine,
@@ -141,8 +159,12 @@ export async function saveCourtAssignment(tournament, matchId, courtNumber) {
   return saveTournament(updated);
 }
 
+// Court Assignment & Match Queue Engine: release + auto-fill as one action
+// (see CourtAssignmentEngine.releaseAndAutoFill) — a manual "Release" click
+// immediately offers the freed court to the next queued match, same as a
+// match completing naturally does.
 export async function saveCourtRelease(tournament, courtNumber) {
-  const updated = courtAssignmentService.releaseCourt(tournament, courtNumber);
+  const updated = courtAssignmentEngine.releaseAndAutoFill(tournament, courtNumber);
   return saveTournament(updated);
 }
 
@@ -184,6 +206,35 @@ export async function saveSetCourtStatus(tournament, courtId, status) {
 export async function saveRenameCourt(tournament, courtId, name) {
   const courts = tournament.courts.map((c) => (c.id === courtId ? { ...c, name } : c));
   return saveTournament({ ...tournament, courts });
+}
+
+// ---- Court Assignment & Match Queue Engine: manual override ----
+// Same "call the engine, persist what it returns" shape as every other
+// save* function in this file; CourtAssignmentEngine does the actual work.
+
+export async function saveSwapCourts(tournament, courtNumberA, courtNumberB) {
+  const updated = courtAssignmentEngine.swapCourts(tournament, courtNumberA, courtNumberB);
+  return saveTournament(updated);
+}
+
+export async function saveDelayMatch(tournament, matchId) {
+  const updated = courtAssignmentEngine.delayMatch(tournament, matchId);
+  return saveTournament(updated);
+}
+
+export async function saveUndelayMatch(tournament, matchId) {
+  const updated = courtAssignmentEngine.undelayMatch(tournament, matchId);
+  return saveTournament(updated);
+}
+
+export async function savePinMatch(tournament, matchId, courtNumber) {
+  const updated = courtAssignmentEngine.pinMatchToCourt(tournament, matchId, courtNumber);
+  return saveTournament(updated);
+}
+
+export async function saveUnpinMatch(tournament, matchId) {
+  const updated = courtAssignmentEngine.unpinMatch(tournament, matchId);
+  return saveTournament(updated);
 }
 
 // ---- Tournament Settings ----

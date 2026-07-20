@@ -1568,10 +1568,28 @@ export const styles = {
     fontWeight: 700,
     letterSpacing: "0.04em",
     textTransform: "uppercase",
-    color: derivedStatus === "occupied" ? "var(--chalk)" : derivedStatus === "maintenance" ? "var(--ink)" : "var(--color-success)",
+    color:
+      derivedStatus === "occupied"
+        ? "var(--chalk)"
+        : derivedStatus === "maintenance"
+          ? "var(--ink)"
+          : derivedStatus === "disabled"
+            ? "var(--color-text-faint)"
+            : "var(--color-success)",
     background:
-      derivedStatus === "occupied" ? "var(--court)" : derivedStatus === "maintenance" ? "var(--ball)" : "rgba(0,150,80,0.1)",
-    border: derivedStatus === "available" ? "1px solid var(--color-success)" : "none",
+      derivedStatus === "occupied"
+        ? "var(--court)"
+        : derivedStatus === "maintenance"
+          ? "var(--ball)"
+          : derivedStatus === "disabled"
+            ? "var(--color-bg)"
+            : "rgba(0,150,80,0.1)",
+    border:
+      derivedStatus === "available"
+        ? "1px solid var(--color-success)"
+        : derivedStatus === "disabled"
+          ? "1px solid var(--line)"
+          : "none",
     borderRadius: 5,
     padding: "3px 7px",
     flexShrink: 0,

@@ -14,6 +14,11 @@ import {
   saveRemoveCourt,
   saveSetCourtStatus,
   saveRenameCourt,
+  saveSwapCourts,
+  saveDelayMatch,
+  saveUndelayMatch,
+  savePinMatch,
+  saveUnpinMatch,
   saveTournamentSettings,
   getTournamentEngine,
 } from "../lib/tournament.js";
@@ -385,6 +390,59 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Court Assignment & Match Queue Engine — same "call the lib function,
+  // setTournament(updated)" shape as every other court handler here.
+  const handleSwapCourts = async (courtNumberA, courtNumberB) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      const updated = await saveSwapCourts(tournament, courtNumberA, courtNumberB);
+      setTournament(updated);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleDelayMatch = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveDelayMatch(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleUndelayMatch = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveUndelayMatch(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handlePinMatch = async (matchId, courtNumber) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await savePinMatch(tournament, matchId, courtNumber));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleUnpinMatch = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveUnpinMatch(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
   const handleAddCourt = async (name) => {
     if (!tournament) return;
     setCourtError("");
@@ -527,6 +585,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onAssignMatch={handleAssignMatch}
           onReleaseCourt={handleReleaseCourt}
           onReassignMatch={handleReassignMatch}
+          onSwapCourts={handleSwapCourts}
+          onDelayMatch={handleDelayMatch}
+          onUndelayMatch={handleUndelayMatch}
+          onPinMatch={handlePinMatch}
+          onUnpinMatch={handleUnpinMatch}
           onAddCourt={handleAddCourt}
           onRemoveCourt={handleRemoveCourt}
           onSetCourtStatus={handleSetCourtStatus}

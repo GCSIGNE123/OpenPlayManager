@@ -8,10 +8,12 @@ import { makeEntrant, makeTournamentPool, findMatch, startMatch } from "./tourna
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
 import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { makeLeagueSeason, makeLeagueWeek, saveLeagueSeason, computeWeekDate } from "./leagueModel.js";
 
 const roundRobinEngine = new RoundRobinEngine();
 const courtAssignmentService = new CourtAssignmentService();
+const courtAssignmentEngine = new CourtAssignmentEngine();
 
 // division: { name, players, mode } — mode is read from the season overall
 // (Singles/Doubles applies to the whole season, per League Setup's fields,
@@ -71,9 +73,15 @@ export async function saveLeagueMatchStart(season, matchId) {
   return saveLeagueSeason(updated);
 }
 
+// Court Assignment & Match Queue Engine — same auto-fill trigger
+// lib/tournament.js's saveMatchResult uses: completing a match frees its
+// court, so the next queued match in this LeagueSeason (Tournament-shaped,
+// see leagueModel.js) is auto-assigned to it immediately.
 export async function saveLeagueMatchResult(season, matchId, result) {
   const updated = roundRobinEngine.updateMatchResult(season, matchId, result);
-  return saveLeagueSeason(updated);
+  const { match } = findMatch(updated, matchId);
+  const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  return saveLeagueSeason(withAutoFill);
 }
 
 // ---- Manual edits: court assignment reuses CourtAssignmentService
@@ -85,7 +93,7 @@ export async function saveLeagueCourtAssignment(season, matchId, courtNumber) {
 }
 
 export async function saveLeagueCourtRelease(season, courtNumber) {
-  const updated = courtAssignmentService.releaseCourt(season, courtNumber);
+  const updated = courtAssignmentEngine.releaseAndAutoFill(season, courtNumber);
   return saveLeagueSeason(updated);
 }
 

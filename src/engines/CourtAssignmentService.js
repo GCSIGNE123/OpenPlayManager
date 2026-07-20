@@ -20,7 +20,13 @@
 // Board automatically" require zero new code: freeing happens as a side
 // effect of RoundRobinEngine/PlayoffEngine's existing status transitions,
 // and the board is just recomputed fresh from current tournament state.
-function collectMatches(tournament) {
+// Exported for the Court Assignment & Match Queue Engine's other services
+// (CourtPriorityService/CourtQueueService) — reused rather than duplicated a
+// fourth time (TournamentReportService and PlayerPortalService each already
+// keep their own private copy of this exact walk, for reasons specific to
+// those older tasks; this one's a genuine sibling of CourtAssignmentService
+// itself, so it shares this module's copy directly instead).
+export function collectMatches(tournament) {
   const matches = [];
   for (const pool of tournament.pools || []) {
     for (const round of pool.rounds) {
@@ -82,9 +88,11 @@ function updateMatchIn(tournament, matchId, updater) {
 }
 
 export class CourtAssignmentService {
-  // returns: Court[] — not in maintenance, and not currently occupied
+  // returns: Court[] — not in maintenance/disabled, and not currently occupied
   getAvailableCourts(tournament) {
-    return (tournament.courts || []).filter((c) => c.status !== "maintenance" && !isCourtOccupied(tournament, c.number));
+    return (tournament.courts || []).filter(
+      (c) => c.status !== "maintenance" && c.status !== "disabled" && !isCourtOccupied(tournament, c.number)
+    );
   }
 
   // returns: { match, source: "pool"|"bracket", sourceLabel }[] — every
@@ -107,6 +115,7 @@ export class CourtAssignmentService {
     const court = (tournament.courts || []).find((c) => c.number === courtNumber);
     if (!court) throw new Error("Court not found.");
     if (court.status === "maintenance") throw new Error("This court is under maintenance and can't take a match.");
+    if (court.status === "disabled") throw new Error("This court is disabled and can't take a match.");
     if (isCourtOccupied(tournament, courtNumber)) throw new Error("This court already has a match on it.");
 
     const entry = findMatchEntry(tournament, matchId);
@@ -143,7 +152,8 @@ export class CourtAssignmentService {
       return {
         ...court,
         currentMatch,
-        derivedStatus: court.status === "maintenance" ? "maintenance" : currentMatch ? "occupied" : "available",
+        derivedStatus:
+          court.status === "maintenance" || court.status === "disabled" ? court.status : currentMatch ? "occupied" : "available",
       };
     });
     return { courts, queue: this.getPlayableMatches(tournament) };

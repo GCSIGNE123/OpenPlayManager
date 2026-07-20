@@ -42,9 +42,18 @@ export const makeEntrant = makeParticipant;
 //   winner (Participant['id'] | null),
 //   score ({ teamA: number|null, teamB: number|null }) — both null until a
 //   result is saved, see updateMatchResult below,
+//   startedAt (ms epoch | null) — set when the match starts, see startMatch
+//   below (Court Assignment & Match Queue Engine); enables the Live Court
+//   Board's Time Running/Estimated Finish. null for every match started
+//   before this field existed — those simply show no elapsed time,
 //   completedAt (ms epoch | null) — set when a result is saved,
 //   status ('pending' | 'inProgress' | 'completed') — real now, see
-//   startMatch/updateMatchResult below (Tournament Match Management)
+//   startMatch/updateMatchResult below (Tournament Match Management),
+//   queueOverride ({ pinnedCourt: number|null, delayed: boolean } | undefined)
+//   — Court Assignment & Match Queue Engine's manual-override state, see
+//   engines/CourtAssignmentEngine.js. Absent/undefined on every match by
+//   default (read as { pinnedCourt: null, delayed: false } wherever it
+//   matters) — nothing here until an organizer explicitly pins or delays.
 // }
 export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
   return {
@@ -56,6 +65,7 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
     isBye,
     winner: null,
     score: { teamA: null, teamB: null },
+    startedAt: null,
     completedAt: null,
     status: "pending",
   };
@@ -204,7 +214,7 @@ export function startMatch(tournament, matchId) {
     if (p.id !== found.pool.id) return p;
     const rounds = p.rounds.map((r) => {
       if (r.roundNumber !== found.round.roundNumber) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress" } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now() } : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...p, rounds, status: computePoolStatus({ rounds }) };
@@ -223,8 +233,14 @@ export function startMatch(tournament, matchId) {
 // match finishes automatic and bug-free — it happens as a side effect of
 // RoundRobinEngine/PlayoffEngine's existing status transitions, with no new
 // code needed to keep a second "current match" field in sync.
+// status: 'available' | 'maintenance' | 'disabled' — 'disabled' added by the
+// Court Assignment & Match Queue Engine (see PROJECT.md), for a court taken
+// permanently out of rotation rather than temporarily under maintenance;
+// CourtAssignmentService treats both the same way for occupancy/availability
+// purposes (never assignable), the UI is what distinguishes them for the
+// organizer.
 export function makeCourt(number, name) {
-  return { id: uid(), number, name: name || `Court ${number}`, status: "available" }; // 'available' | 'maintenance'
+  return { id: uid(), number, name: name || `Court ${number}`, status: "available" };
 }
 
 export function makeTournament({

@@ -79,7 +79,7 @@ export class PlayoffEngine {
     }
     const rounds = bracket.rounds.map((r, i) => {
       if (i !== found.roundIndex) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress" } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now() } : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...bracket, rounds };

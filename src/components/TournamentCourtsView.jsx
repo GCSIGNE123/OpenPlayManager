@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Play, Plus, X } from "lucide-react";
+import { Play, Plus, X, ArrowLeftRight, Pause, PlayCircle, Pin, PinOff } from "lucide-react";
 import { styles } from "../styles.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { CourtQueueService } from "../engines/CourtQueueService.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 const courtAssignmentService = new CourtAssignmentService();
+const courtQueueService = new CourtQueueService();
 
 const STATUS_LABELS = { pending: "Pending", inProgress: "In Progress", completed: "Completed" };
 
@@ -12,16 +14,27 @@ function matchupLabel(match) {
   return `${match.teamA.label} vs ${match.teamB.label}`;
 }
 
-// One court's card on the Court Board — Court Name / Current Match / Match
-// Status / (if free) the next queued match as "up next." No estimated
-// time — just which match would go next, per spec ("Estimated Next Match"
-// isn't a duration estimate, Estimated Match Duration is explicitly out of
-// scope).
-function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReassign, onStartMatch, onSetStatus, onRemove }) {
+function formatElapsed(startedAt) {
+  if (!startedAt) return "—";
+  const minutes = Math.max(0, Math.round((Date.now() - startedAt) / 60000));
+  return `${minutes}m`;
+}
+
+// One court's card on the Court Board — Court / Current Match / Next Match /
+// Status / Time Running / Estimated Finish, per the Court Assignment &
+// Match Queue Engine spec. Time Running/Estimated Finish read off
+// match.startedAt (new this task, see lib/tournamentModel.js) — "—" for a
+// match started before that field existed, or not yet started at all.
+function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReassign, onSwap, onStartMatch, onSetStatus, onRemove, assumedDurationMinutes }) {
   const [reassignTo, setReassignTo] = useState("");
+  const [swapWith, setSwapWith] = useState("");
 
   const nextUp = queue[0];
   const otherAvailable = availableCourts.filter((c) => c.number !== court.number);
+  const current = court.currentMatch;
+  const estimatedFinishLabel = current?.startedAt
+    ? new Date(current.startedAt + assumedDurationMinutes * 60000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : "—";
 
   return (
     <div style={styles.courtCard(court.derivedStatus)}>
@@ -30,15 +43,21 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
         <span style={styles.courtStatusBadge(court.derivedStatus)}>{court.derivedStatus}</span>
       </div>
 
-      {court.currentMatch ? (
+      {current ? (
         <>
           <div style={styles.historyTeamLine}>
-            <span>{matchupLabel(court.currentMatch)}</span>
-            <span style={styles.matchStatusBadge(court.currentMatch.status)}>{STATUS_LABELS[court.currentMatch.status]}</span>
+            <span>{matchupLabel(current)}</span>
+            <span style={styles.matchStatusBadge(current.status)}>{STATUS_LABELS[current.status]}</span>
           </div>
+          {current.status === "inProgress" && (
+            <p style={styles.editHint}>
+              Running: {formatElapsed(current.startedAt)} · Est. finish: {estimatedFinishLabel}
+            </p>
+          )}
+          <p style={styles.bracketTbdLabel}>{nextUp ? `Next: ${matchupLabel(nextUp.match)}` : "No match waiting next"}</p>
           <div style={styles.editActions}>
-            {court.currentMatch.status === "pending" && (
-              <button type="button" style={styles.secondaryBtn} onClick={() => onStartMatch(court.currentMatch)}>
+            {current.status === "pending" && (
+              <button type="button" style={styles.secondaryBtn} onClick={() => onStartMatch(current)}>
                 <Play size={13} strokeWidth={2.5} />
                 Start match
               </button>
@@ -63,7 +82,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 style={styles.secondaryBtn}
                 disabled={!reassignTo}
                 onClick={() => {
-                  onReassign(court.currentMatch.id, court.number, Number(reassignTo));
+                  onReassign(current.id, court.number, Number(reassignTo));
                   setReassignTo("");
                 }}
               >
@@ -71,26 +90,56 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
               </button>
             </div>
           )}
+          <div style={styles.editActions}>
+            <select style={styles.courtSelect} value={swapWith} onChange={(e) => setSwapWith(e.target.value)}>
+              <option value="">Swap with…</option>
+              {queue.allOccupiedCourts
+                ?.filter((c) => c.number !== court.number)
+                .map((c) => (
+                  <option key={c.id} value={c.number}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              disabled={!swapWith}
+              onClick={() => {
+                onSwap(court.number, Number(swapWith));
+                setSwapWith("");
+              }}
+            >
+              <ArrowLeftRight size={13} strokeWidth={2.5} />
+              Swap
+            </button>
+          </div>
         </>
       ) : court.status === "maintenance" ? (
         <p style={styles.bracketTbdLabel}>Under maintenance</p>
+      ) : court.status === "disabled" ? (
+        <p style={styles.bracketTbdLabel}>Disabled — out of rotation</p>
       ) : (
         <p style={styles.bracketTbdLabel}>{nextUp ? `Up next: ${matchupLabel(nextUp.match)}` : "No matches waiting"}</p>
       )}
 
       <div style={styles.editActions}>
-        {court.status === "maintenance" ? (
-          <button type="button" style={styles.secondaryBtn} onClick={() => onSetStatus(court.id, "available")}>
-            Mark available
-          </button>
-        ) : (
-          !court.currentMatch && (
+        {court.status === "available" && !current && (
+          <>
             <button type="button" style={styles.secondaryBtn} onClick={() => onSetStatus(court.id, "maintenance")}>
               Mark maintenance
             </button>
-          )
+            <button type="button" style={styles.secondaryBtn} onClick={() => onSetStatus(court.id, "disabled")}>
+              Disable
+            </button>
+          </>
         )}
-        {!court.currentMatch && (
+        {(court.status === "maintenance" || court.status === "disabled") && (
+          <button type="button" style={styles.secondaryBtn} onClick={() => onSetStatus(court.id, "available")}>
+            Mark available
+          </button>
+        )}
+        {!current && (
           <button type="button" style={styles.secondaryBtn} onClick={() => onRemove(court.id)}>
             Remove court
           </button>
@@ -100,15 +149,25 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
   );
 }
 
-function QueueRow({ entry, availableCourts, onAssign }) {
+// One Match Queue row — enriched with Queue Position/Match Type/Priority/
+// Estimated Wait (see CourtQueueService.getQueue), plus manual-override
+// Delay/Pin actions.
+function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin, onUnpin }) {
   const [courtNumber, setCourtNumber] = useState("");
+  const delayed = entry.match.queueOverride?.delayed;
+  const pinnedCourt = entry.match.queueOverride?.pinnedCourt;
+
   return (
     <li style={styles.queueListItem}>
       <span>
+        <span style={styles.queueNum}>#{entry.queuePosition}</span>{" "}
         <span style={styles.queueMatchup}>{matchupLabel(entry.match)}</span>
-        <span style={styles.queueSourceTag}>{entry.sourceLabel}</span>
+        <span style={styles.queueSourceTag}>{entry.matchType}</span>
+        <span style={styles.queueSourceTag}>~{entry.estimatedWaitMinutes}m wait</span>
+        {delayed && <span style={styles.queueSourceTag}>DELAYED</span>}
+        {pinnedCourt != null && <span style={styles.queueSourceTag}>PINNED: Court {pinnedCourt}</span>}
       </span>
-      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <select style={styles.courtSelect} value={courtNumber} onChange={(e) => setCourtNumber(e.target.value)}>
           <option value="">Assign to…</option>
           {availableCourts.map((c) => (
@@ -128,17 +187,43 @@ function QueueRow({ entry, availableCourts, onAssign }) {
         >
           Assign
         </button>
+        <button type="button" style={styles.secondaryBtn} onClick={() => (delayed ? onUndelay(entry.match.id) : onDelay(entry.match.id))}>
+          {delayed ? <PlayCircle size={13} strokeWidth={2.5} /> : <Pause size={13} strokeWidth={2.5} />}
+          {delayed ? "Undelay" : "Delay"}
+        </button>
+        {pinnedCourt != null ? (
+          <button type="button" style={styles.secondaryBtn} onClick={() => onUnpin(entry.match.id)}>
+            <PinOff size={13} strokeWidth={2.5} />
+            Unpin
+          </button>
+        ) : (
+          <select
+            style={styles.courtSelect}
+            value=""
+            onChange={(e) => e.target.value && onPin(entry.match.id, Number(e.target.value))}
+          >
+            <option value="">Pin to…</option>
+            {availableCourts.map((c) => (
+              <option key={c.id} value={c.number}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </span>
     </li>
   );
 }
 
-// Courts tab — see PROJECT.md's Tournament Court Assignment & Match Queue
-// section. Everything here is either persisted court metadata
-// (tournament.courts) or pure derived data recomputed from it +
-// tournament.pools/tournament.bracket on every render via
-// CourtAssignmentService.refreshQueue — the Court Board "refreshes
+// Courts tab — see PROJECT.md's Court Assignment & Match Queue Engine
+// section. Courts (tournament.courts) and the Match Queue are both pure
+// derived data, recomputed fresh from tournament.pools/tournament.bracket
+// on every render via CourtAssignmentService.refreshQueue +
+// CourtQueueService.getQueue — the Court Board and Queue "refresh
 // automatically" for free, same as every other live view in this app.
+// Auto-assignment itself (filling a freed court automatically) happens
+// server-side in lib/tournament.js's saveMatchResult/saveCourtRelease —
+// this view just reflects whatever CourtAssignmentEngine already decided.
 export default function TournamentCourtsView({
   tournament,
   loading,
@@ -146,6 +231,11 @@ export default function TournamentCourtsView({
   onAssignMatch,
   onReleaseCourt,
   onReassignMatch,
+  onSwapCourts,
+  onDelayMatch,
+  onUndelayMatch,
+  onPinMatch,
+  onUnpinMatch,
   onAddCourt,
   onRemoveCourt,
   onSetCourtStatus,
@@ -159,8 +249,11 @@ export default function TournamentCourtsView({
     return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to manage courts here.</div>;
   }
 
-  const { courts, queue } = courtAssignmentService.refreshQueue(tournament);
+  const { courts } = courtAssignmentService.refreshQueue(tournament);
   const availableCourts = courtAssignmentService.getAvailableCourts(tournament);
+  const queue = courtQueueService.getQueue(tournament);
+  const occupiedCourts = courts.filter((c) => c.currentMatch);
+  const queueWithOccupied = Object.assign(queue, { allOccupiedCourts: occupiedCourts });
 
   const handleStartMatch = (entryOrMatch) => {
     // court.currentMatch doesn't carry its own `source`, so match id
@@ -203,13 +296,15 @@ export default function TournamentCourtsView({
             key={court.id}
             court={court}
             availableCourts={availableCourts}
-            queue={queue}
+            queue={queueWithOccupied}
             onAssign={onAssignMatch}
             onRelease={onReleaseCourt}
             onReassign={onReassignMatch}
+            onSwap={onSwapCourts}
             onStartMatch={handleStartMatch}
             onSetStatus={onSetCourtStatus}
             onRemove={onRemoveCourt}
+            assumedDurationMinutes={20}
           />
         ))}
       </div>
@@ -220,7 +315,16 @@ export default function TournamentCourtsView({
       ) : (
         <ul style={styles.qualifiersList}>
           {queue.map((entry) => (
-            <QueueRow key={entry.match.id} entry={entry} availableCourts={availableCourts} onAssign={onAssignMatch} />
+            <QueueRow
+              key={entry.match.id}
+              entry={entry}
+              availableCourts={availableCourts}
+              onAssign={onAssignMatch}
+              onDelay={onDelayMatch}
+              onUndelay={onUndelayMatch}
+              onPin={onPinMatch}
+              onUnpin={onUnpinMatch}
+            />
           ))}
         </ul>
       )}
