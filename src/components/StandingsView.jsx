@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Flame } from "lucide-react";
 import { styles } from "../styles.js";
-import { calculatePerformanceRating } from "../lib/performanceRating.js";
+import { buildStandingsRows } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -14,17 +14,6 @@ const SORT_COLUMNS = [
   { key: "diff", label: "+/-", getValue: (p) => p.diff },
   { key: "rating", label: "RTG", getValue: (p) => p.performance.rating ?? 0 },
 ];
-
-// default order (no active sort): highest rating, then highest wins, then
-// highest point differential, then alphabetical name as the final tie-break
-function defaultCompare(a, b) {
-  return (
-    (b.performance.rating ?? 0) - (a.performance.rating ?? 0) ||
-    b.wins - a.wins ||
-    b.diff - a.diff ||
-    a.name.localeCompare(b.name)
-  );
-}
 
 export default function StandingsView({ players }) {
   const [sortKey, setSortKey] = useState(null);
@@ -42,24 +31,15 @@ export default function StandingsView({ players }) {
     }
   };
 
-  const rows = Object.values(players)
-    .filter((p) => (p.games || 0) > 0)
-    .map((p) => ({
-      ...p,
-      wins: p.wins || 0,
-      losses: p.losses || 0,
-      streak: p.streak || 0,
-      gp: (p.wins || 0) + (p.losses || 0),
-      diff: (p.pointsFor || 0) - (p.pointsAgainst || 0),
-      performance: calculatePerformanceRating(p),
-    }));
+  // buildStandingsRows already returns rows in the default order (rating,
+  // then wins, then point differential, then name) — an active column sort
+  // just re-orders that same row set.
+  const rows = buildStandingsRows(players);
 
   const activeColumn = SORT_COLUMNS.find((c) => c.key === sortKey);
   if (activeColumn) {
     const dirMultiplier = sortDir === "asc" ? 1 : -1;
     rows.sort((a, b) => dirMultiplier * (activeColumn.getValue(a) - activeColumn.getValue(b)) || a.name.localeCompare(b.name));
-  } else {
-    rows.sort(defaultCompare);
   }
 
   const notPlayed = Object.values(players).filter((p) => !(p.games > 0));

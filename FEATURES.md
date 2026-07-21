@@ -18,6 +18,14 @@ Do not implement multiple unrelated features in a single task.
 
 ## 🔥 High Priority
 
+- [x] Open Play TV Mode
+  - Live Court Display
+  - Live Standings
+  - Queue Display
+  - Next Match Display
+  - Smart TV Optimized
+  - Full Screen Mode
+  - Real-time Updates
 - [ ] Progressive Skill Rotation
 - [ ] Winner Pool Rotation
 - [ ] Game History

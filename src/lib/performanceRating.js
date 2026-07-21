@@ -29,3 +29,30 @@ export function calculatePerformanceRating(player) {
 
   return { games, wins, losses, streak, pointDiff, winPct, rating };
 }
+
+// Shared standings-row builder — the exact same "who's played, what's their
+// W/L/GP/+/- and Performance Rating, ranked highest-rating-first" computation
+// StandingsView's own table already did inline; extracted here so a second
+// consumer (Open Play TV Mode's live standings panel) can reuse it verbatim
+// instead of re-deriving the same rows a second time. Only includes players
+// with at least one recorded game — a 0-game player has nothing to rank.
+// Sort precedence: rating, then wins, then point differential, then name —
+// unchanged from StandingsView's own pre-extraction default order.
+export function buildStandingsRows(players) {
+  const rows = Object.values(players)
+    .filter((p) => (p.games || 0) > 0)
+    .map((p) => ({
+      ...p,
+      wins: p.wins || 0,
+      losses: p.losses || 0,
+      streak: p.streak || 0,
+      gp: (p.wins || 0) + (p.losses || 0),
+      diff: (p.pointsFor || 0) - (p.pointsAgainst || 0),
+      performance: calculatePerformanceRating(p),
+    }));
+  rows.sort(
+    (a, b) =>
+      (b.performance.rating ?? 0) - (a.performance.rating ?? 0) || b.wins - a.wins || b.diff - a.diff || a.name.localeCompare(b.name)
+  );
+  return rows;
+}

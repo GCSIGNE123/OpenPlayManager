@@ -33,6 +33,7 @@ import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
+import OpenPlayTVModePage from "./components/OpenPlayTVModePage.jsx";
 import TournamentTemplatesScreen from "./components/TournamentTemplatesScreen.jsx";
 import DeveloperView from "./components/DeveloperView.jsx";
 import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
@@ -84,6 +85,27 @@ export default function PickleballOpenPlay() {
     if (code) {
       setDisplayCode(code.trim().toUpperCase());
       setScreen("display");
+    }
+  }, []);
+
+  // Open Play TV Mode — see PROJECT.md. Same "read the URL once on mount"
+  // precedent as `?display=CODE` above, extended two ways: a matching
+  // `?openPlayDisplay=CODE` query param, and a real path route
+  // (`/openplay/:sessionCode/tv`) so a Smart TV/projector/mini PC can be
+  // pointed at a direct, bookmarkable URL without going through query
+  // params at all. This app has no client-side router (no react-router
+  // dependency) — the path is parsed by hand here with a plain regex, the
+  // same lightweight approach `URLSearchParams` already uses for query
+  // params; see vercel.json for the SPA-fallback rewrite that makes a cold
+  // (non-SPA-navigated) hit to this path actually reach this code instead
+  // of 404ing.
+  useEffect(() => {
+    const queryCode = new URLSearchParams(window.location.search).get("openPlayDisplay");
+    const pathMatch = window.location.pathname.match(/^\/openplay\/([^/]+)\/tv\/?$/i);
+    const code = queryCode || (pathMatch ? pathMatch[1] : null);
+    if (code) {
+      setDisplayCode(code.trim().toUpperCase());
+      setScreen("openPlayDisplay");
     }
   }, []);
 
@@ -1144,6 +1166,10 @@ export default function PickleballOpenPlay() {
         <TournamentDisplayView sessionCode={displayCode} onExit={() => setScreen(sessionCode ? "app" : "landing")} />
       )}
 
+      {screen === "openPlayDisplay" && displayCode && (
+        <OpenPlayTVModePage sessionCode={displayCode} onExit={() => setScreen(sessionCode ? "app" : "landing")} />
+      )}
+
       {screen === "app" && (() => {
         const waitingPlayers = state.queueIds.map((id) => state.players[id]).filter(Boolean);
         const registeredNotHere = Object.values(state.players).filter((p) => !p.checkedIn);
@@ -1179,6 +1205,24 @@ export default function PickleballOpenPlay() {
                       }}
                       aria-label="TV display mode"
                       title="Open TV Display Mode"
+                    >
+                      <Tv size={14} strokeWidth={2.5} />
+                    </button>
+                  )}
+                  {/* Open Play TV Mode — see PROJECT.md. Mirror-image gating
+                      of the tournament button above (openPlay vs.
+                      tournament are mutually exclusive sessionType values),
+                      so a session only ever shows the one TV button that
+                      actually applies to it. */}
+                  {state.sessionType !== "tournament" && (
+                    <button
+                      style={styles.leaveBtn}
+                      onClick={() => {
+                        setDisplayCode(sessionCode);
+                        setScreen("openPlayDisplay");
+                      }}
+                      aria-label="Open TV Mode"
+                      title="📺 Open TV Mode"
                     >
                       <Tv size={14} strokeWidth={2.5} />
                     </button>
