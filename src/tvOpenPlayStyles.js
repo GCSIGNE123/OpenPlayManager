@@ -79,11 +79,15 @@ export function courtGridDimensions(count) {
 // the same font size a crowded 8-court grid would use. Four tiers, keyed
 // off columns rather than raw count (2 courts and 4 courts both want
 // "spacious" sizing relative to how many columns they actually occupy).
-function courtSizeTier(columns) {
-  if (columns <= 1) return { court: "clamp(22px, 2.6vw, 34px)", score: "clamp(72px, 9vw, 140px)", team: "clamp(26px, 3vw, 44px)", badge: "clamp(14px, 1.4vw, 20px)" };
-  if (columns === 2) return { court: "clamp(18px, 2.1vw, 27px)", score: "clamp(54px, 6.8vw, 100px)", team: "clamp(21px, 2.3vw, 32px)", badge: "clamp(12px, 1.2vw, 17px)" };
-  if (columns === 3) return { court: "clamp(15px, 1.7vw, 22px)", score: "clamp(38px, 5vw, 70px)", team: "clamp(17px, 1.8vw, 24px)", badge: "clamp(11px, 1vw, 14px)" };
-  return { court: "clamp(13px, 1.4vw, 18px)", score: "clamp(28px, 3.6vw, 50px)", team: "clamp(14px, 1.4vw, 19px)", badge: "clamp(10px, 0.85vw, 12px)" };
+// `photo` is the pixel diameter passed straight to Avatar's own `size`
+// prop (see Player Photos & Broadcast Experience in PROJECT.md) — no
+// existing Avatar usage anywhere in the app goes above 26px, so these are
+// a genuinely new "TV-large" tier, not an extension of an existing one.
+export function courtSizeTier(columns) {
+  if (columns <= 1) return { court: "clamp(22px, 2.6vw, 34px)", score: "clamp(72px, 9vw, 140px)", team: "clamp(26px, 3vw, 44px)", badge: "clamp(14px, 1.4vw, 20px)", photo: 110 };
+  if (columns === 2) return { court: "clamp(18px, 2.1vw, 27px)", score: "clamp(54px, 6.8vw, 100px)", team: "clamp(21px, 2.3vw, 32px)", badge: "clamp(12px, 1.2vw, 17px)", photo: 84 };
+  if (columns === 3) return { court: "clamp(15px, 1.7vw, 22px)", score: "clamp(38px, 5vw, 70px)", team: "clamp(17px, 1.8vw, 24px)", badge: "clamp(11px, 1vw, 14px)", photo: 62 };
+  return { court: "clamp(13px, 1.4vw, 18px)", score: "clamp(28px, 3.6vw, 50px)", team: "clamp(14px, 1.4vw, 19px)", badge: "clamp(10px, 0.85vw, 12px)", photo: 46 };
 }
 
 export const tvStyles = {
@@ -224,36 +228,66 @@ export const tvStyles = {
     background: STATUS_COLOR[status] ?? CARD_BORDER,
     transition: "background 500ms ease",
   }),
+  // Photo-first layout — see Player Photos & Broadcast Experience in
+  // PROJECT.md. "Player identity first, score second": each team renders
+  // as a row of large circular photos (playerPhotoRow/playerCard), with
+  // the score reduced to a single centered line BETWEEN the two team
+  // rows, rather than the old side-by-side name+score-on-the-right layout.
   matchupBlock: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: 2,
+    gap: "clamp(6px, 0.8vw, 14px)",
     flex: 1,
     justifyContent: "center",
-  },
-  teamRow: (columns) => ({
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
     width: "100%",
-    gap: 12,
+  },
+  playerPhotoRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: "clamp(8px, 1.2vw, 22px)",
+    flexWrap: "wrap",
+  },
+  playerCard: (leading) => ({
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+    opacity: leading === false ? 0.55 : 1,
+    transition: "opacity 400ms ease",
   }),
-  teamName: (columns, leading) => ({
-    fontSize: courtSizeTier(columns).team,
+  playerPhotoRing: (leading) => ({
+    borderRadius: "50%",
+    padding: 3,
+    background: leading ? ACCENT : "transparent",
+    transition: "background 400ms ease",
+  }),
+  // fontSize/maxWidth passed explicitly rather than derived from `columns`
+  // — TeamPhotoRow (OpenPlayTVModePage.jsx) is reused across several
+  // panels (court cards, Next Match, winner celebration) that each want a
+  // different name size independent of the court grid's column count.
+  playerName: (fontSize, photoSize, leading) => ({
+    fontSize,
     fontWeight: leading ? 800 : 600,
     color: leading ? TEXT : TEXT_FAINT,
+    textAlign: "center",
+    maxWidth: photoSize * 1.7,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   }),
+  scoreRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "clamp(8px, 1vw, 18px)",
+  },
   scoreValue: (columns) => ({
     fontFamily: "'Anton', sans-serif",
     fontWeight: 400,
     fontSize: courtSizeTier(columns).score,
     lineHeight: 1,
-    minWidth: "1.4em",
-    textAlign: "right",
     fontVariantNumeric: "tabular-nums",
   }),
   vsLabel: (columns) => ({
@@ -261,7 +295,6 @@ export const tvStyles = {
     fontSize: courtSizeTier(columns).badge,
     color: TEXT_FAINT,
     letterSpacing: "0.15em",
-    margin: "2px 0",
   }),
   emptyCourtText: (columns) => ({
     fontSize: courtSizeTier(columns).team,
@@ -272,10 +305,12 @@ export const tvStyles = {
   winnerOverlay: {
     position: "absolute",
     inset: 0,
-    background: "rgba(17, 24, 39, 0.94)",
+    background: "rgba(17, 24, 39, 0.96)",
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: "clamp(10px, 1.4vw, 22px)",
     borderRadius: 13,
     zIndex: 2,
   },
@@ -283,9 +318,20 @@ export const tvStyles = {
     fontFamily: "'Anton', sans-serif",
     fontWeight: 400,
     textTransform: "uppercase",
-    fontSize: "clamp(28px, 4vw, 64px)",
+    fontSize: "clamp(22px, 3vw, 44px)",
     color: GOLD,
-    letterSpacing: "0.05em",
+    letterSpacing: "0.08em",
+  },
+  winnerPhotoRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "clamp(10px, 1.4vw, 24px)",
+  },
+  winnerPhotoRing: {
+    borderRadius: "50%",
+    padding: 4,
+    background: `linear-gradient(135deg, ${GOLD}, ${ACCENT})`,
   },
   // Right panel — Standings on top, Next Match + Queue stacked below,
   // scrollable as a unit if content overflows a shorter TV viewport.
@@ -311,11 +357,15 @@ export const tvStyles = {
     color: TEXT_FAINT,
     letterSpacing: "0.04em",
   },
+  // A "professional leaderboard rather than a spreadsheet" — see Player
+  // Photos & Broadcast Experience in PROJECT.md. Photo column added
+  // between rank and name; medal-colored ring reuses the same rank<=3
+  // gold/silver/bronze the row's own left border already established.
   standingsRow: (rank) => ({
     display: "grid",
-    gridTemplateColumns: "auto 1fr auto auto auto",
+    gridTemplateColumns: "auto auto 1fr auto auto auto",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     padding: "8px 6px",
     borderRadius: 8,
     borderLeft: `4px solid ${rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : "transparent"}`,
@@ -328,6 +378,12 @@ export const tvStyles = {
     fontSize: "clamp(13px, 1vw, 16px)",
     width: "1.6em",
   },
+  standingsPhotoRing: (rank) => ({
+    borderRadius: "50%",
+    padding: 2,
+    background: rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : "transparent",
+    display: "flex",
+  }),
   standingsName: {
     fontSize: "clamp(13px, 1.05vw, 17px)",
     fontWeight: 700,
@@ -344,8 +400,8 @@ export const tvStyles = {
   },
   standingsHeadRow: {
     display: "grid",
-    gridTemplateColumns: "auto 1fr auto auto auto",
-    gap: 8,
+    gridTemplateColumns: "auto auto 1fr auto auto auto",
+    gap: 10,
     padding: "0 6px 6px 6px",
     fontFamily: "'Space Mono', monospace",
     fontSize: "clamp(9px, 0.75vw, 11px)",
@@ -369,17 +425,12 @@ export const tvStyles = {
     textTransform: "uppercase",
     marginBottom: 6,
   },
-  nextMatchTeam: {
-    fontSize: "clamp(14px, 1.15vw, 18px)",
-    fontWeight: 700,
-    textAlign: "center",
-  },
   nextMatchVs: {
     fontFamily: "'Space Mono', monospace",
     fontSize: "clamp(10px, 0.85vw, 13px)",
     color: TEXT_FAINT,
     textAlign: "center",
-    margin: "4px 0",
+    margin: "2px 0",
   },
   queueRow: {
     display: "flex",

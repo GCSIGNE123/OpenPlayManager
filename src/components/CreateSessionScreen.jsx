@@ -139,6 +139,18 @@ export default function CreateSessionScreen({
   const createAndAddPlayer = async () => {
     const trimmedFirst = firstName.trim();
     if (!trimmedFirst) return;
+    // Player Photos & Broadcast Experience — see PROJECT.md. A profile
+    // photo is required for every NEWLY created player going forward
+    // (Open Play TV Mode is built around visual recognition) — but this
+    // only gates the "create a brand-new record" path. Selecting an
+    // already-existing player (addExistingPlayer, above) is deliberately
+    // never gated on this, so a photo-less player already in the Player
+    // Database or an older session roster is never locked out; Avatar's
+    // existing initials fallback covers them until a photo is added.
+    if (!photoDataUrl) {
+      setSaveError("A profile photo is required to add a new player.");
+      return;
+    }
     setSaveError("");
     const record = emptyPlayerRecord({
       firstName: trimmedFirst,
@@ -445,7 +457,7 @@ export default function CreateSessionScreen({
                 style={{ display: "none" }}
                 onChange={(e) => handlePhotoSelect(e.target.files?.[0])}
               />
-              {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (optional)"}
+              {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (required)"}
             </label>
           </div>
 
@@ -505,9 +517,9 @@ export default function CreateSessionScreen({
           <div style={styles.editActions}>
             <button
               type="button"
-              style={{ ...styles.primaryBtn, ...(!firstName.trim() ? styles.btnDisabled : {}) }}
+              style={{ ...styles.primaryBtn, ...(!firstName.trim() || !photoDataUrl ? styles.btnDisabled : {}) }}
               onClick={createAndAddPlayer}
-              disabled={!firstName.trim()}
+              disabled={!firstName.trim() || !photoDataUrl}
             >
               <Plus size={16} strokeWidth={2.5} />
               Add to session &amp; save to database

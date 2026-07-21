@@ -26,6 +26,7 @@ Do not implement multiple unrelated features in a single task.
   - Smart TV Optimized
   - Full Screen Mode
   - Real-time Updates
+  - Player Photos & Broadcast Experience
 - [ ] Progressive Skill Rotation
 - [ ] Winner Pool Rotation
 - [ ] Game History

@@ -3,7 +3,8 @@ import { Maximize, LogOut } from "lucide-react";
 import { STORAGE_PREFIX } from "../lib/constants.js";
 import { reservedMatchupIds, sortByGames } from "../lib/utils.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
-import { tvStyles as ts, tvKeyframes, courtGridDimensions } from "../tvOpenPlayStyles.js";
+import { tvStyles as ts, tvKeyframes, courtGridDimensions, courtSizeTier } from "../tvOpenPlayStyles.js";
+import Avatar from "./Avatar.jsx";
 
 // Open Play TV Mode ("Live Court Display") — see PROJECT.md's Open Play TV
 // Mode section. A strictly read-only spectator screen for casting to a
@@ -25,8 +26,30 @@ function deriveCourtStatus(court) {
   return "waiting"; // open (no match assigned) or awaitingPair — both genuinely "waiting for play"
 }
 
-function teamLabel(ids, players) {
-  return ids.map((id) => players[id]?.name).filter(Boolean).join(" / ") || "TBD";
+// Player Photos & Broadcast Experience — see PROJECT.md. The one shared
+// "team of large circular photos + names" building block every panel on
+// this page renders through (court cards, Next Match, the winner
+// celebration) — reuses Avatar.jsx unchanged for the actual photo-or-
+// initials rendering (never duplicated here), just at a much larger
+// `size` than anywhere else in the app. `leading`: true/false dims the
+// losing side once a score actually separates the two teams;
+// `undefined` (no score yet) renders every player at full opacity.
+function TeamPhotoRow({ ids, players, size, nameFontSize, leading }) {
+  return (
+    <div style={ts.playerPhotoRow}>
+      {ids.map((id) => {
+        const player = players[id];
+        return (
+          <div key={id} style={ts.playerCard(leading)}>
+            <div style={ts.playerPhotoRing(leading)}>
+              <Avatar player={player} size={size} />
+            </div>
+            <span style={ts.playerName(nameFontSize, size, leading)}>{player?.name ?? "TBD"}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function TVHeader({ session, playerCount, activeCourtCount, totalCourtCount, now, onEnterFullscreen, onExit }) {
@@ -100,15 +123,18 @@ function CourtCard({ court, players, columns }) {
   }, [status]);
 
   const hasMatch = court.teamA.length > 0 || court.teamB.length > 0;
-  const leadingA = court.scoreA > court.scoreB;
-  const leadingB = court.scoreB > court.scoreA;
-  const winnerLabel = leadingA ? teamLabel(court.teamA, players) : leadingB ? teamLabel(court.teamB, players) : null;
+  const scoreKnown = court.scoreA !== court.scoreB;
+  const leadingA = scoreKnown ? court.scoreA > court.scoreB : undefined;
+  const leadingB = scoreKnown ? court.scoreB > court.scoreA : undefined;
+  const winningIds = leadingA ? court.teamA : leadingB ? court.teamB : [];
+  const tier = courtSizeTier(columns);
 
   return (
     <div style={ts.courtCard(status, columns)}>
-      {showWinner && winnerLabel && (
+      {showWinner && winningIds.length > 0 && (
         <div style={ts.winnerOverlay} className="tv-winner-pop">
-          <span style={ts.winnerText}>🏆 WINNER — {winnerLabel}</span>
+          <span style={ts.winnerText}>🏆 WINNERS</span>
+          <TeamPhotoRow ids={winningIds} players={players} size={tier.photo * 0.85} nameFontSize={tier.team} />
         </div>
       )}
       <div style={ts.courtHead}>
@@ -117,19 +143,17 @@ function CourtCard({ court, players, columns }) {
       </div>
       {hasMatch ? (
         <div style={ts.matchupBlock}>
-          <div style={ts.teamRow(columns)}>
-            <span style={ts.teamName(columns, leadingA)}>{teamLabel(court.teamA, players)}</span>
+          <TeamPhotoRow ids={court.teamA} players={players} size={tier.photo} nameFontSize={tier.team} leading={leadingA} />
+          <div style={ts.scoreRow}>
             <span style={ts.scoreValue(columns)} className={pulseSide === "A" ? "tv-score-pulse tv-score-highlight" : ""}>
               {court.scoreA}
             </span>
-          </div>
-          <span style={ts.vsLabel(columns)}>VS</span>
-          <div style={ts.teamRow(columns)}>
-            <span style={ts.teamName(columns, leadingB)}>{teamLabel(court.teamB, players)}</span>
+            <span style={ts.vsLabel(columns)}>–</span>
             <span style={ts.scoreValue(columns)} className={pulseSide === "B" ? "tv-score-pulse tv-score-highlight" : ""}>
               {court.scoreB}
             </span>
           </div>
+          <TeamPhotoRow ids={court.teamB} players={players} size={tier.photo} nameFontSize={tier.team} leading={leadingB} />
         </div>
       ) : (
         <div style={ts.matchupBlock}>
@@ -170,6 +194,7 @@ function StandingsPanel({ players }) {
         <div>
           <div style={ts.standingsHeadRow}>
             <span>#</span>
+            <span />
             <span>Player</span>
             <span>W</span>
             <span>GP</span>
@@ -180,6 +205,9 @@ function StandingsPanel({ players }) {
             return (
               <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
                 <span style={ts.standingsRank}>{MEDALS[rank] ?? rank}</span>
+                <div style={ts.standingsPhotoRing(rank)}>
+                  <Avatar player={row} size={40} />
+                </div>
                 <span style={ts.standingsName}>{row.name}</span>
                 <span style={ts.standingsStat}>{row.wins}</span>
                 <span style={ts.standingsStat}>{row.gp}</span>
@@ -202,9 +230,9 @@ function NextMatchCard({ match, players }) {
       ) : (
         <div>
           <div style={ts.nextMatchCourt}>Court TBD</div>
-          <div style={ts.nextMatchTeam}>{teamLabel(match.teamA, players)}</div>
+          <TeamPhotoRow ids={match.teamA} players={players} size={56} nameFontSize="clamp(11px, 0.95vw, 15px)" />
           <div style={ts.nextMatchVs}>VS</div>
-          <div style={ts.nextMatchTeam}>{teamLabel(match.teamB, players)}</div>
+          <TeamPhotoRow ids={match.teamB} players={players} size={56} nameFontSize="clamp(11px, 0.95vw, 15px)" />
         </div>
       )}
     </div>
@@ -229,6 +257,7 @@ function QueuePanel({ queueIds, players, nextMatchups }) {
         waitingIds.map((id, i) => (
           <div key={id} style={ts.queueRow}>
             <span style={ts.queuePosition}>{i + 1}.</span>
+            <Avatar player={players[id]} size={32} />
             <span>{players[id]?.name}</span>
           </div>
         ))

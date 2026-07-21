@@ -531,6 +531,13 @@ export default function PickleballOpenPlay() {
   const quickAddCheckIn = () => {
     const name = nameInput.trim();
     if (!name) return;
+    // Player Photos & Broadcast Experience — see PROJECT.md. Required for
+    // every newly checked-in walk-in going forward, same rule
+    // CreateSessionScreen's new-player form now enforces — this button's
+    // own `disabled` covers the mouse click, but the Enter-key shortcut
+    // (CheckinView's onKeyDown) calls this function directly, so the guard
+    // needs to live here too.
+    if (!photoDataUrl) return;
     const id = uid();
     const players = {
       ...state.players,

@@ -72,7 +72,7 @@ export default function CheckinView({
             style={{ display: "none" }}
             onChange={(e) => handlePhotoSelect(e.target.files?.[0])}
           />
-          {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (optional)"}
+          {photoBusy ? "Adding photo…" : photoDataUrl ? "Change photo" : "Add a photo (required)"}
         </label>
       </div>
       <div style={styles.checkinRow}>
@@ -83,7 +83,11 @@ export default function CheckinView({
           onChange={(e) => setNameInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && quickAddCheckIn()}
         />
-        <button style={styles.primaryBtn} onClick={quickAddCheckIn}>
+        <button
+          style={{ ...styles.primaryBtn, ...(!nameInput.trim() || !photoDataUrl ? styles.btnDisabled : {}) }}
+          onClick={quickAddCheckIn}
+          disabled={!nameInput.trim() || !photoDataUrl}
+        >
           <LogIn size={16} strokeWidth={2.5} />
           Check in
         </button>
