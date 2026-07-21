@@ -33,6 +33,7 @@ Do not implement multiple unrelated features in a single task.
   - Read-only, auto-computed estimate — never manually editable
   - Live-updates on courts/duration/registered players/match duration changes
 - [ ] Progressive Skill Rotation
+- [x] Progressive Skill Rotation automatically falls back to a randomized first round when all registered players belong to the same skill level. Normal Progressive Skill Rotation resumes from Round 2 onward.
 - [ ] Winner Pool Rotation
 - [ ] Game History
 - [ ] Manual Court Assignment

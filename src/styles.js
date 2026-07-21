@@ -1091,6 +1091,24 @@ export const styles = {
     fontWeight: 600,
     marginTop: 10,
   },
+  // Progressive Skill Rotation Fallback — see PROJECT.md. A non-blocking
+  // informational banner (not a warning/error — no --coral/warning color),
+  // distinct from confirmMsg (a transient one-line confirmation) since this
+  // needs to persist and read comfortably as a small paragraph.
+  infoBanner: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--court)",
+    borderLeft: "4px solid var(--court)",
+    borderRadius: 8,
+    padding: "10px 12px",
+    marginBottom: 14,
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "var(--ink)",
+  },
   queueList: { listStyle: "none", padding: 0, margin: 0, maxWidth: 480 },
   queueItem: {
     display: "flex",
