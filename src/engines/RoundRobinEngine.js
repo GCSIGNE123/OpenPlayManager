@@ -137,13 +137,29 @@ export class RoundRobinEngine extends TournamentEngine {
     // default via ?? below), so every tournament created before this field
     // existed keeps auto-generating exactly as before too.
     const usesAutoGeneratingSeeding = (next.seedingMethod ?? "standardCrossPool") === "standardCrossPool";
+    // Double Elimination Foundation — see PROJECT.md. This auto-generation
+    // path only ever builds the SINGLE-elimination bracket
+    // (PlayoffBracketGenerator); a doubleElimination bracketFormat always
+    // needs the organizer's explicit "Generate Double Elimination Bracket"
+    // action instead (see lib/tournament.js's
+    // saveGenerateDoubleEliminationBracket) — there's no auto-generating
+    // path for it this milestone (structure only, nothing to auto-advance
+    // into yet).
+    const usesSingleEliminationBracket = (next.bracketFormat ?? "singleElimination") === "singleElimination";
     // Manual Qualification Override — see PROJECT.md. Same reasoning as
     // non-standard seeding above: when enabled, a director needs a chance
     // to review/promote/eliminate/lock before the bracket exists at all,
     // so auto-generation is skipped here too — the organizer generates
     // explicitly via lib/tournament.js's saveGenerateBracket once they're
     // done (or immediately, if they don't touch qualification at all).
-    if (next.status === "completed" && !next.bracket && next.playoffEnabled !== false && usesAutoGeneratingSeeding && !next.allowManualQualificationOverride) {
+    if (
+      next.status === "completed" &&
+      !next.bracket &&
+      next.playoffEnabled !== false &&
+      usesAutoGeneratingSeeding &&
+      usesSingleEliminationBracket &&
+      !next.allowManualQualificationOverride
+    ) {
       const generated = bracketGenerator.generateBracket(next, this);
       if (generated.ready) {
         const { ready, consolationBracket, ...bracket } = generated;

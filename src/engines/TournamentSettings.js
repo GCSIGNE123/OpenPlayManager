@@ -71,6 +71,26 @@ export const PLACEMENT_MATCHES_METHODS = [
   { value: "fullPlacement", label: "Full Placement Bracket (5th-8th, 9th-16th where applicable)" },
 ];
 
+// Double Elimination Foundation — see DoubleEliminationEngine.js. Every
+// value match.matchType can hold across this app — descriptive only, not
+// read by any engine yet (a later progression sprint is what would branch
+// on it).
+export const MATCH_TYPES = [
+  { value: "roundRobin", label: "Round Robin" },
+  { value: "playoff", label: "Playoff" },
+  { value: "winnersBracket", label: "Winners Bracket" },
+  { value: "losersBracket", label: "Losers Bracket" },
+  { value: "grandFinal", label: "Grand Final" },
+];
+
+// Double Elimination Foundation — see DoubleEliminationEngine.js. Picks
+// which engine builds the PLAYOFF bracket once pool qualification finishes;
+// pool play itself (tournament.format) is untouched either way.
+export const BRACKET_FORMATS = [
+  { value: "singleElimination", label: "Single Elimination (default)" },
+  { value: "doubleElimination", label: "Double Elimination" },
+];
+
 export const PLAYOFF_STAGES = [
   { value: "roundOf16", label: "Round of 16" },
   { value: "quarterfinals", label: "Quarterfinals" },
@@ -101,6 +121,7 @@ export function deriveSettingsView(tournament) {
     bestThirdPlaceCount: tournament.bestThirdPlaceCount ?? 1,
     allowManualQualificationOverride: tournament.allowManualQualificationOverride ?? false,
     placementMatches: tournament.placementMatches ?? "disabled",
+    bracketFormat: tournament.bracketFormat ?? "singleElimination",
     matchScoringRules: tournament.matchScoringRules ?? defaultMatchScoringRules(),
     eligibilityRequirements: tournament.eligibilityRequirements ?? defaultEligibilityRequirements(),
   };

@@ -30,11 +30,18 @@ const placementService = new PlacementBracketService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, seeds: [], rounds: [] };
 
-function makeBracketMatch({ round, matchNumber, teamA = null, teamB = null }) {
+// matchType: Double Elimination Foundation — see DoubleEliminationEngine.js.
+// A purely descriptive tag, not read by anything yet; defaults to "playoff"
+// so every existing caller (single-elimination bracket, bronze/consolation
+// matches — all genuinely playoff matches) is unaffected. DoubleElimination
+// Engine passes "winnersBracket"/"losersBracket"/"grandFinal" explicitly
+// when it reuses this same helper for its own matches.
+export function makeBracketMatch({ round, matchNumber, teamA = null, teamB = null, matchType = "playoff" }) {
   return {
     id: uid(),
     round,
     matchNumber,
+    matchType,
     // As of Tournament Court Assignment & Match Queue, no round (including
     // round 1) comes pre-assigned a court anymore — court is always null
     // until CourtAssignmentService.assignMatchToCourt sets it, the same
@@ -139,7 +146,15 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
   // teams; every later round is pre-built with the right match count but
   // empty teamA/teamB slots (placeholder winner slots) — those only fill in
   // once PlayoffEngine advances a winner into them, in a later sprint.
-  createRounds(seededTeams) {
+  // matchType/roundNamePrefix: Double Elimination Foundation — see
+  // DoubleEliminationEngine.js. Optional, both default to preserve this
+  // method's exact prior behavior/output for every existing caller
+  // (single-elimination bracket, PlacementBracketService's consolation
+  // skeleton) — DoubleEliminationEngine passes matchType: "winnersBracket"
+  // and roundNamePrefix: "Winners " when reusing this for its own Winners
+  // Bracket, so round names come out "Winners Quarterfinals" etc. without
+  // any new round-building logic.
+  createRounds(seededTeams, { matchType = "playoff", roundNamePrefix = "" } = {}) {
     const total = seededTeams.length;
     if (total < 2 || (total & (total - 1)) !== 0) {
       throw new Error(`Bracket generation requires a power-of-two qualifier count (2, 4, 8, 16, ...) — got ${total}.`);
@@ -149,19 +164,19 @@ export class PlayoffBracketGenerator extends BracketGeneratorService {
     const firstRoundMatches = [];
     for (let i = 0; i < total / 2; i++) {
       firstRoundMatches.push(
-        makeBracketMatch({ round: 1, matchNumber: i + 1, teamA: seededTeams[i], teamB: seededTeams[total - 1 - i] })
+        makeBracketMatch({ round: 1, matchNumber: i + 1, teamA: seededTeams[i], teamB: seededTeams[total - 1 - i], matchType })
       );
     }
-    rounds.push({ roundNumber: 1, name: stageNameForCount(total), status: "pending", matches: firstRoundMatches });
+    rounds.push({ roundNumber: 1, name: `${roundNamePrefix}${stageNameForCount(total)}`, status: "pending", matches: firstRoundMatches });
 
     let teamsInRound = firstRoundMatches.length; // winners advancing = number of round-1 matches
     let roundNumber = 2;
     while (teamsInRound >= 2) {
       const matches = [];
       for (let i = 0; i < teamsInRound / 2; i++) {
-        matches.push(makeBracketMatch({ round: roundNumber, matchNumber: i + 1 }));
+        matches.push(makeBracketMatch({ round: roundNumber, matchNumber: i + 1, matchType }));
       }
-      rounds.push({ roundNumber, name: stageNameForCount(teamsInRound), status: "pending", matches });
+      rounds.push({ roundNumber, name: `${roundNamePrefix}${stageNameForCount(teamsInRound)}`, status: "pending", matches });
       teamsInRound = matches.length;
       roundNumber += 1;
     }

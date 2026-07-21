@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Lock, Pencil, Save, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
-import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS, PLACEMENT_MATCHES_METHODS } from "../engines/TournamentSettings.js";
+import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS, PLACEMENT_MATCHES_METHODS, BRACKET_FORMATS } from "../engines/TournamentSettings.js";
 import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -126,6 +126,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
       changes.bronzeMatchEnabled = draft.bronzeMatchEnabled;
     if (!locked.has("placementMatches") && draft.placementMatches !== (tournament.placementMatches ?? "disabled"))
       changes.placementMatches = draft.placementMatches;
+    if (!locked.has("bracketFormat") && draft.bracketFormat !== (tournament.bracketFormat ?? "singleElimination"))
+      changes.bracketFormat = draft.bracketFormat;
     if (!locked.has("seedingMethod") && draft.seedingMethod !== (tournament.seedingMethod ?? "standardCrossPool"))
       changes.seedingMethod = draft.seedingMethod;
     if (!locked.has("qualificationMethod") && draft.qualificationMethod !== (tournament.qualificationMethod ?? "standard"))
@@ -311,6 +313,20 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
               No
             </button>
           </div>
+        </SettingRow>
+        <SettingRow
+          label="Bracket format"
+          fieldKey="bracketFormat"
+          locked={locked}
+          hint={draft.bracketFormat === "doubleElimination" ? "Double Elimination is a foundation-only preview this milestone — the Winners/Losers Bracket and Grand Final structure generates, but there's no progression yet (a Winners Bracket loser doesn't advance into the Losers Bracket)." : undefined}
+        >
+          <select style={styles.rotationSelect} disabled={locked.has("bracketFormat")} value={draft.bracketFormat} onChange={(e) => set("bracketFormat", e.target.value)}>
+            {BRACKET_FORMATS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </SettingRow>
         <SettingRow
           label="Seeding method"

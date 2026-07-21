@@ -61,6 +61,9 @@ export const makeEntrant = makeParticipant;
 //   walkover), what the Match Detail view's "Last Updated" reads; walkover
 //   (true | undefined) marks a match decided by forfeit rather than play.
 // }
+// matchType: Double Elimination Foundation — see DoubleEliminationEngine.js.
+// Purely descriptive, not read by anything yet; every pool match is
+// "roundRobin" (the only kind this function ever builds).
 export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
   return {
     id: uid(),
@@ -69,6 +72,7 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
     teamA,
     teamB: isBye ? null : teamB,
     isBye,
+    matchType: "roundRobin",
     winner: null,
     score: { teamA: null, teamB: null },
     startedAt: null,
@@ -279,6 +283,7 @@ export function makeTournament({
   bestThirdPlaceCount = 1, // only meaningful when qualificationMethod === "bestThirdPlace" — capped at poolCount (one 3rd-place candidate per pool)
   allowManualQualificationOverride = false, // Manual Qualification Override — real behavior: gates both the promote/eliminate/replace/reset actions AND (like non-standard seeding) whether the bracket auto-generates on pool completion. Editable via the Settings tab only, locked once playoffs start.
   placementMatches = "disabled", // Consolation & Placement Brackets — "disabled" | "bronzeOnly" | "consolationBracket" | "fullPlacement". Only "consolationBracket"/"fullPlacement" build tournament.consolationBracket (identical for now — 9th-16th place isn't implemented this milestone); completely independent of bronzeMatchEnabled, which keeps its own pre-existing meaning unchanged.
+  bracketFormat = "singleElimination", // Double Elimination Foundation — "singleElimination" (default, existing PlayoffBracketGenerator) | "doubleElimination" (new DoubleEliminationEngine, builds tournament.doubleEliminationBracket instead of tournament.bracket). Picks which engine builds the PLAYOFF bracket after pool qualification — pool play/scheduling (tournament.format) is completely untouched by this setting.
 }) {
   const now = Date.now();
   const tournament = {
@@ -351,6 +356,16 @@ export function makeTournament({
     // losers from).
     placementMatches,
     consolationBracket: null,
+    bracketFormat,
+    // Double Elimination Foundation — see PROJECT.md / DoubleEliminationEngine.js.
+    // A sibling of `bracket`, never populated at the same time as it (a
+    // tournament's playoff bracket is either single- or double-elimination,
+    // never both) — kept as its own field rather than overloading `bracket`
+    // so `bracket`'s existing shape/consumers (PlayoffEngine et al.) stay
+    // completely untouched. null until DoubleEliminationEngine.generateBracket
+    // attaches one (only when bracketFormat === "doubleElimination", via an
+    // explicit organizer action — no auto-generation this milestone).
+    doubleEliminationBracket: null,
     createdAt: now,
     updatedAt: now,
     // Tournament Reports & History — additive, default false. See

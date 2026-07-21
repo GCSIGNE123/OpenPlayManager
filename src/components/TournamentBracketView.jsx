@@ -367,6 +367,108 @@ function BracketRoundColumn({ round, bracketCompleted, collapsed, onToggleCollap
   );
 }
 
+// Double Elimination Foundation — see PROJECT.md / DoubleEliminationEngine.js.
+// Structure-only display: every match renders with state forced to
+// "locked" regardless of whether it already has real teamA/teamB (Winners
+// Round 1 does) — no action buttons, ever, on this screen — since no
+// progression engine exists yet to actually start/score/advance a Double
+// Elimination match. BracketRoundColumn/BracketMatchCard render completely
+// unchanged; only the state each match carries is overridden here, which
+// is what makes "no advancement required this sprint" safe (nothing
+// clickable can call an unwired handler).
+const NOOP_HANDLERS = {
+  onSelect: () => {},
+  onStartMatch: () => {},
+  onSaveResult: async () => {},
+  onPauseMatch: () => {},
+  onResumeMatch: () => {},
+  onWalkover: () => {},
+  onAssignMatch: () => {},
+  onReassignMatch: () => {},
+};
+
+function lockedRounds(rounds) {
+  return rounds.map((round) => ({ ...round, matches: round.matches.map((m) => ({ ...m, state: "locked" })) }));
+}
+
+function DoubleEliminationBracketSection({ tournament, seedError, onGenerateDoubleEliminationBracket }) {
+  const deBracket = tournament.doubleEliminationBracket;
+
+  if (!deBracket) {
+    return (
+      <div>
+        <SectionLabel>Bracket</SectionLabel>
+        <div style={styles.placeholderCard}>
+          Double Elimination bracket format is selected — generate the Winners Bracket, Losers Bracket, and Grand
+          Final structure once pool qualification is ready. This is a structure-only preview: matches aren't
+          startable or scoreable yet (Winners/Losers Bracket progression is a later milestone).
+        </div>
+        {seedError && <p style={styles.editWarning}>{seedError}</p>}
+        <div style={styles.editActions}>
+          <button type="button" style={styles.primaryBtn} onClick={onGenerateDoubleEliminationBracket}>
+            Generate Double Elimination Bracket
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const winnersRounds = lockedRounds(deBracket.winnersBracket.rounds);
+  const losersRounds = lockedRounds(deBracket.losersBracket.rounds);
+  const grandFinal = { ...deBracket.grandFinal, state: "locked" };
+
+  return (
+    <div>
+      <SectionLabel>Bracket</SectionLabel>
+      <p style={styles.editHint}>
+        Double Elimination — {deBracket.winnersBracket.size}-team Winners Bracket, structure only. No match here is
+        startable yet (Winners/Losers Bracket progression and Grand Final Reset are later milestones).
+      </p>
+
+      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Winners Bracket</p>
+      <div style={styles.bracketScroll}>
+        {winnersRounds.map((round) => (
+          <BracketRoundColumn
+            key={`winners-${round.roundNumber}`}
+            round={round}
+            bracketCompleted={false}
+            collapsed={false}
+            onToggleCollapse={() => {}}
+            selectedMatchId={null}
+            availableCourts={[]}
+            roundRef={() => {}}
+            handlers={NOOP_HANDLERS}
+          />
+        ))}
+      </div>
+
+      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Losers Bracket</p>
+      <div style={styles.bracketScroll}>
+        {losersRounds.map((round) => (
+          <BracketRoundColumn
+            key={`losers-${round.roundNumber}`}
+            round={round}
+            bracketCompleted={false}
+            collapsed={false}
+            onToggleCollapse={() => {}}
+            selectedMatchId={null}
+            availableCourts={[]}
+            roundRef={() => {}}
+            handlers={NOOP_HANDLERS}
+          />
+        ))}
+      </div>
+
+      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Grand Final</p>
+      <div style={styles.bracketScroll}>
+        <div style={styles.bracketRoundColumn}>
+          <BracketMatchCard match={grandFinal} bracketCompleted={false} selected={false} onAdvancementPath={false} availableCourts={[]} {...NOOP_HANDLERS} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Consolation & Placement Brackets — see PROJECT.md. Renders
 // tournament.consolationBracket as its own labeled section below the
 // championship bracket, reusing BracketRoundColumn/BracketMatchCard
@@ -459,6 +561,8 @@ export default function TournamentBracketView({
   onWalkover,
   onAssignMatch,
   onReassignMatch,
+  seedError,
+  onGenerateDoubleEliminationBracket,
 }) {
   const [selectedMatchId, setSelectedMatchId] = useState(null);
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set());
@@ -470,6 +574,25 @@ export default function TournamentBracketView({
   }
   if (tournament.format !== "roundRobin") {
     return <div style={styles.placeholderCard}>Bracket generation isn't available for this tournament format yet.</div>;
+  }
+
+  // Double Elimination Foundation — see PROJECT.md. Structure-only this
+  // milestone: shows the generated Winners Bracket/Losers Bracket/Grand
+  // Final (or a Generate action before one exists), reusing
+  // BracketRoundColumn/BracketMatchCard completely unchanged. Deliberately
+  // its own early-return branch rather than folding into the single-
+  // elimination render below — the two bracket shapes (tournament.bracket
+  // vs. tournament.doubleEliminationBracket) never coexist, and no match
+  // in a Double Elimination bracket is ever startable/scoreable yet (no
+  // progression logic exists), so none of the existing handlers apply.
+  if ((tournament.bracketFormat ?? "singleElimination") === "doubleElimination") {
+    return (
+      <DoubleEliminationBracketSection
+        tournament={tournament}
+        seedError={seedError}
+        onGenerateDoubleEliminationBracket={onGenerateDoubleEliminationBracket}
+      />
+    );
   }
 
   if (tournament.bracket) {

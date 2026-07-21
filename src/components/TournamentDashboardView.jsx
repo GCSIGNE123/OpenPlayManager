@@ -25,6 +25,7 @@ import {
   saveTournamentSettings,
   saveManualSeeds,
   saveGenerateBracket,
+  saveGenerateDoubleEliminationBracket,
   saveQualificationPromote,
   saveQualificationEliminate,
   saveQualificationReplace,
@@ -153,10 +154,12 @@ function CompletedOverviewPanel({ tournament }) {
               : qualification.playoffSize.count - 1}
           </span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Bracket Status</span>
-          <span style={styles.sessionInfoValue}>{tournament.bracket ? tournament.bracket.status : "Not generated"}</span>
-        </div>
+        {(tournament.bracketFormat ?? "singleElimination") !== "doubleElimination" && (
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Bracket Status</span>
+            <span style={styles.sessionInfoValue}>{tournament.bracket ? tournament.bracket.status : "Not generated"}</span>
+          </div>
+        )}
         {tournament.bracket?.status === "completed" && (
           <>
             <div style={styles.sessionInfoItem}>
@@ -182,6 +185,26 @@ function CompletedOverviewPanel({ tournament }) {
           </>
         )}
       </div>
+      {(tournament.bracketFormat ?? "singleElimination") === "doubleElimination" && (
+        <div style={styles.sessionInfoCard}>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Tournament Format</span>
+            <span style={styles.sessionInfoValue}>Double Elimination</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Winners Bracket</span>
+            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.winnersBracket.status : "Not generated"}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Losers Bracket</span>
+            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.losersBracket.status : "Not generated"}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Grand Final</span>
+            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.grandFinal.status : "Not generated"}</span>
+          </div>
+        </div>
+      )}
       {tournament.bracket && (() => {
         // Best-of-3 Finals — see PROJECT.md. The Final round holds more
         // than one match exactly when it's a series; nothing to show
@@ -709,6 +732,21 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Double Elimination Foundation — same "call the lib function,
+  // setTournament(updated)" shape every other explicit generate action
+  // already uses (handleGenerateBracket above). Reuses seedError/setSeedError
+  // rather than a new error slot, same as handleGenerateBracket — the two
+  // are mutually exclusive (bracketFormat picks exactly one).
+  const handleGenerateDoubleEliminationBracket = async () => {
+    if (!tournament) return;
+    setSeedError("");
+    try {
+      setTournament(await saveGenerateDoubleEliminationBracket(tournament));
+    } catch (e) {
+      setSeedError(e.message);
+    }
+  };
+
   // Manual Qualification Override — same "call the lib function,
   // setTournament(updated)" shape every other tab's handlers already use.
   // qualificationError is cleared on every attempt so a stale message
@@ -864,6 +902,8 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onWalkover={handleWalkover}
           onAssignMatch={handleAssignMatch}
           onReassignMatch={handleReassignMatch}
+          seedError={seedError}
+          onGenerateDoubleEliminationBracket={handleGenerateDoubleEliminationBracket}
         />
       )}
 

@@ -31,6 +31,7 @@ import { fetchPlayer } from "./playerDatabase.js";
 
 const playoffEngine = new PlayoffEngine();
 const bracketGenerator = new PlayoffBracketGenerator();
+const doubleEliminationEngine = new DoubleEliminationEngine();
 const advancementService = new PlayoffAdvancementService();
 const placementService = new PlacementBracketService();
 const courtAssignmentService = new CourtAssignmentService();
@@ -500,6 +501,27 @@ export async function saveGenerateBracket(tournament) {
   }
   const { ready, consolationBracket, ...bracket } = generated;
   return saveTournament({ ...tournament, bracket: { ...bracket, generatedAt: Date.now() }, consolationBracket: consolationBracket ?? null });
+}
+
+// Double Elimination Foundation — see PROJECT.md / DoubleEliminationEngine.js.
+// A separate explicit action from saveGenerateBracket above, never both on
+// the same tournament: tournament.bracketFormat picks exactly one of
+// PlayoffBracketGenerator (tournament.bracket) or DoubleEliminationEngine
+// (tournament.doubleEliminationBracket) — no auto-generation this
+// milestone (structure only, no progression to auto-generate INTO yet).
+export async function saveGenerateDoubleEliminationBracket(tournament) {
+  const engine = getTournamentEngine(tournament.format);
+  const method = tournament.seedingMethod ?? "standardCrossPool";
+  const context = await buildSeedingContext(tournament, method, qualificationService.determineQualifiers(tournament, engine).qualifiedTeams);
+
+  const validation = doubleEliminationEngine.validateBracket(tournament, engine);
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(" "));
+  }
+
+  const generated = doubleEliminationEngine.generateBracket(tournament, engine, context);
+  const { ready, ...bracket } = generated;
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...bracket, generatedAt: Date.now() } });
 }
 
 // ---- Manual Qualification Override ----

@@ -70,6 +70,11 @@ Do not implement multiple unrelated features in a single task.
 - [x] Bronze Medal Match
 - [x] Manual Seeding
 - [ ] Double Elimination Brackets
+- [x] Double Elimination Foundation
+- [ ] Winners Bracket Progression
+- [ ] Losers Bracket Progression
+- [ ] Grand Final Reset
+- [ ] Double Elimination Reports
 - [x] Automatic Winner Advancement
 - [x] Winner Advancement Engine
 - [x] Automatic Tournament Completion
