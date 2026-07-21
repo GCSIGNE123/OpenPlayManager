@@ -26,6 +26,11 @@ import {
   saveManualSeeds,
   saveGenerateBracket,
   saveGenerateDoubleEliminationBracket,
+  saveDoubleEliminationMatchStart,
+  saveDoubleEliminationMatchResult,
+  saveDoubleEliminationPauseMatch,
+  saveDoubleEliminationResumeMatch,
+  saveDoubleEliminationWalkover,
   saveQualificationPromote,
   saveQualificationEliminate,
   saveQualificationReplace,
@@ -35,6 +40,7 @@ import {
 } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.js";
+import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { MATCH_FORMATS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
@@ -48,6 +54,7 @@ import TournamentReportsView from "./TournamentReportsView.jsx";
 
 const qualificationService = new PoolQualificationService();
 const seriesService = new ChampionshipSeriesService();
+const playoffEngine = new PlayoffEngine();
 const MATCH_FORMAT_LABELS = Object.fromEntries(MATCH_FORMATS.map((f) => [f.value, f.label]));
 
 const MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
@@ -205,6 +212,41 @@ function CompletedOverviewPanel({ tournament }) {
           </div>
         </div>
       )}
+      {/* Winners Bracket Progression — see PROJECT.md. Same "Current Round/
+          Matches Remaining/Completed Matches" shape the championship
+          bracket's own BracketProgressPanel already shows, reusing
+          PlayoffEngine.getCurrentRound (it's generic over any { rounds }
+          bracket object, so it works unchanged on winnersBracket too). Only
+          rendered once a Winners Bracket actually exists to summarize. */}
+      {tournament.doubleEliminationBracket &&
+        (() => {
+          const winnersBracket = tournament.doubleEliminationBracket.winnersBracket;
+          const allMatches = winnersBracket.rounds.flatMap((r) => r.matches);
+          const completed = allMatches.filter((m) => m.status === "completed").length;
+          const currentRound = playoffEngine.getCurrentRound(winnersBracket);
+          return (
+            <div style={styles.sessionInfoCard}>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Active Winners Bracket Round</span>
+                <span style={styles.sessionInfoValue}>{currentRound.name}</span>
+              </div>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Winners Bracket Matches Remaining</span>
+                <span style={styles.sessionInfoValue}>{allMatches.length - completed}</span>
+              </div>
+              <div style={styles.sessionInfoItem}>
+                <span style={styles.sessionInfoLabel}>Winners Bracket Completed Matches</span>
+                <span style={styles.sessionInfoValue}>{completed}</span>
+              </div>
+              {winnersBracket.champion && (
+                <div style={styles.sessionInfoItem}>
+                  <span style={styles.sessionInfoLabel}>Winners Bracket Champion</span>
+                  <span style={styles.sessionInfoValue}>{winnersBracket.champion.label}</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       {tournament.bracket && (() => {
         // Best-of-3 Finals — see PROJECT.md. The Final round holds more
         // than one match exactly when it's a series; nothing to show
@@ -542,6 +584,62 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     setMatchError("");
     try {
       setTournament(await saveWalkover(tournament, matchId, winnerId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  // Winners Bracket Progression — see PROJECT.md. Same "call the lib
+  // function, setTournament(updated)" shape as every other playoff handler
+  // above, just routed through the new saveDoubleElimination* functions
+  // (winnersBracket-scoped only — Losers Bracket/Grand Final matches aren't
+  // startable/scoreable yet). Reuses matchError/setMatchError rather than a
+  // new error slot, same as every other match-lifecycle handler here.
+  const handleDoubleEliminationStartMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationMatchStart(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationSaveResult = async (matchId, result) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationMatchResult(tournament, matchId, result));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationPauseMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationPauseMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationResumeMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationResumeMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationWalkover = async (matchId, winnerId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationWalkover(tournament, matchId, winnerId));
     } catch (e) {
       setMatchError(e.message);
     }
@@ -904,6 +1002,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onReassignMatch={handleReassignMatch}
           seedError={seedError}
           onGenerateDoubleEliminationBracket={handleGenerateDoubleEliminationBracket}
+          onDoubleEliminationStartMatch={handleDoubleEliminationStartMatch}
+          onDoubleEliminationSaveResult={handleDoubleEliminationSaveResult}
+          onDoubleEliminationPauseMatch={handleDoubleEliminationPauseMatch}
+          onDoubleEliminationResumeMatch={handleDoubleEliminationResumeMatch}
+          onDoubleEliminationWalkover={handleDoubleEliminationWalkover}
         />
       )}
 

@@ -524,6 +524,64 @@ export async function saveGenerateDoubleEliminationBracket(tournament) {
   return saveTournament({ ...tournament, doubleEliminationBracket: { ...bracket, generatedAt: Date.now() } });
 }
 
+// Winners Bracket Progression — see PROJECT.md. Reuses the existing,
+// already-generic PlayoffEngine singleton directly for start/pause/resume
+// (it operates on any { rounds: [...] } bracket object with zero format-
+// specific knowledge — already proven by reuse on tournament.bracket AND
+// tournament.consolationBracket) rather than building a parallel Double
+// Elimination lifecycle. Only match-result saving is genuinely new
+// (DoubleEliminationEngine.updateWinnersBracket, since it also needs to
+// stamp the loser's Losers Bracket destination placeholder) — see that
+// file for why. Every one of these is scoped to
+// tournament.doubleEliminationBracket.winnersBracket only: Losers Bracket
+// and Grand Final matches aren't startable/scoreable yet (no progression
+// logic exists for them this sprint).
+
+export async function saveDoubleEliminationMatchStart(tournament, matchId) {
+  const winnersBracket = playoffEngine.startMatch(tournament.doubleEliminationBracket.winnersBracket, matchId);
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } });
+}
+
+export async function saveDoubleEliminationMatchResult(tournament, matchId, result) {
+  const { winnersBracket: before, losersBracket } = tournament.doubleEliminationBracket;
+  const winnersBracket = doubleEliminationEngine.updateWinnersBracket(before, losersBracket, matchId, result);
+  const match = winnersBracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const updated = { ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } };
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(updated, match, "tournament");
+  return saveTournament(withAutoFill);
+}
+
+export async function saveDoubleEliminationPauseMatch(tournament, matchId) {
+  const winnersBracket = playoffEngine.pauseMatch(tournament.doubleEliminationBracket.winnersBracket, matchId);
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } });
+}
+
+export async function saveDoubleEliminationResumeMatch(tournament, matchId) {
+  const winnersBracket = playoffEngine.resumeMatch(tournament.doubleEliminationBracket.winnersBracket, matchId);
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } });
+}
+
+// Same "decided by forfeit rather than play" overlay saveWalkover already
+// applies for the championship bracket — winner still advances and the
+// loser still gets a Losers Bracket destination placeholder, exactly like
+// a normal completed match, just with a null score and a walkover flag.
+export async function saveDoubleEliminationWalkover(tournament, matchId, winnerId) {
+  const { winnersBracket: before, losersBracket } = tournament.doubleEliminationBracket;
+  const found = before.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const winnersBracket = doubleEliminationEngine.updateWinnersBracket(before, losersBracket, matchId, { scoreA: 0, scoreB: 0, winnerId });
+  const overlay = { score: { teamA: null, teamB: null }, walkover: true };
+  const finalWinnersBracket = {
+    ...winnersBracket,
+    rounds: winnersBracket.rounds.map((r) => ({ ...r, matches: r.matches.map((m) => (m.id === matchId ? { ...m, ...overlay } : m)) })),
+  };
+  const match = { ...found, ...overlay };
+  const updated = { ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket: finalWinnersBracket } };
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(updated, match, "tournament");
+  return saveTournament(withAutoFill);
+}
+
 // ---- Manual Qualification Override ----
 // Every write here funnels through one guard: enabled, no bracket
 // generated yet, qualification list not locked. "Manual edits after

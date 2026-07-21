@@ -368,14 +368,11 @@ function BracketRoundColumn({ round, bracketCompleted, collapsed, onToggleCollap
 }
 
 // Double Elimination Foundation — see PROJECT.md / DoubleEliminationEngine.js.
-// Structure-only display: every match renders with state forced to
-// "locked" regardless of whether it already has real teamA/teamB (Winners
-// Round 1 does) — no action buttons, ever, on this screen — since no
-// progression engine exists yet to actually start/score/advance a Double
-// Elimination match. BracketRoundColumn/BracketMatchCard render completely
-// unchanged; only the state each match carries is overridden here, which
-// is what makes "no advancement required this sprint" safe (nothing
-// clickable can call an unwired handler).
+// Losers Bracket and Grand Final stay structure-only this sprint: every
+// match renders with state forced to "locked" regardless of content — no
+// action buttons, ever — since Losers Bracket Progression and Grand Final
+// are later sprints. BracketRoundColumn/BracketMatchCard render completely
+// unchanged; only the state each match carries is overridden here.
 const NOOP_HANDLERS = {
   onSelect: () => {},
   onStartMatch: () => {},
@@ -391,7 +388,32 @@ function lockedRounds(rounds) {
   return rounds.map((round) => ({ ...round, matches: round.matches.map((m) => ({ ...m, state: "locked" })) }));
 }
 
-function DoubleEliminationBracketSection({ tournament, seedError, onGenerateDoubleEliminationBracket }) {
+// Winners Bracket Progression — see PROJECT.md. A completed match's
+// loserDestination (DoubleEliminationEngine.updateWinnersBracket) is a
+// placeholder only — nobody has actually been seated into the Losers
+// Bracket yet — so this renders as a plain informational line under the
+// match card rather than a link/button to anywhere.
+function LoserDestinationLine({ match }) {
+  if (!match.loserDestination || match.status !== "completed") return null;
+  return (
+    <p style={{ ...styles.editHint, marginTop: 4, marginBottom: 0 }}>
+      → Losers Bracket: {match.loserDestination.losersRoundName} (placeholder — not yet seated)
+    </p>
+  );
+}
+
+function DoubleEliminationBracketSection({
+  tournament,
+  seedError,
+  matchError,
+  onGenerateDoubleEliminationBracket,
+  onDoubleEliminationStartMatch,
+  onDoubleEliminationSaveResult,
+  onDoubleEliminationPauseMatch,
+  onDoubleEliminationResumeMatch,
+  onDoubleEliminationWalkover,
+}) {
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
   const deBracket = tournament.doubleEliminationBracket;
 
   if (!deBracket) {
@@ -400,8 +422,8 @@ function DoubleEliminationBracketSection({ tournament, seedError, onGenerateDoub
         <SectionLabel>Bracket</SectionLabel>
         <div style={styles.placeholderCard}>
           Double Elimination bracket format is selected — generate the Winners Bracket, Losers Bracket, and Grand
-          Final structure once pool qualification is ready. This is a structure-only preview: matches aren't
-          startable or scoreable yet (Winners/Losers Bracket progression is a later milestone).
+          Final structure once pool qualification is ready. Once generated, the Winners Bracket is fully playable;
+          the Losers Bracket and Grand Final remain structure-only previews (progression is a later milestone).
         </div>
         {seedError && <p style={styles.editWarning}>{seedError}</p>}
         <div style={styles.editActions}>
@@ -413,7 +435,25 @@ function DoubleEliminationBracketSection({ tournament, seedError, onGenerateDoub
     );
   }
 
-  const winnersRounds = lockedRounds(deBracket.winnersBracket.rounds);
+  // Winners Bracket Progression — see PROJECT.md. Real, playable rendering:
+  // buildBracketViewModel is generic over any { rounds } bracket object
+  // (already proven by reuse on tournament.bracket AND
+  // tournament.consolationBracket), so it works unchanged here too — real
+  // Locked/Ready/In Progress/Completed states and the same advancement-path
+  // highlight ("arrows") the single-elimination bracket already has.
+  const winnersViewModel = buildBracketViewModel(deBracket.winnersBracket, selectedMatchId);
+  const winnersBracketCompleted = deBracket.winnersBracket.status === "completed";
+  const winnersHandlers = {
+    onSelect: (id) => setSelectedMatchId(id === selectedMatchId ? null : id),
+    onStartMatch: onDoubleEliminationStartMatch,
+    onSaveResult: onDoubleEliminationSaveResult,
+    onPauseMatch: onDoubleEliminationPauseMatch,
+    onResumeMatch: onDoubleEliminationResumeMatch,
+    onWalkover: onDoubleEliminationWalkover,
+    onAssignMatch: () => {},
+    onReassignMatch: () => {},
+  };
+
   const losersRounds = lockedRounds(deBracket.losersBracket.rounds);
   const grandFinal = { ...deBracket.grandFinal, state: "locked" };
 
@@ -421,26 +461,47 @@ function DoubleEliminationBracketSection({ tournament, seedError, onGenerateDoub
     <div>
       <SectionLabel>Bracket</SectionLabel>
       <p style={styles.editHint}>
-        Double Elimination — {deBracket.winnersBracket.size}-team Winners Bracket, structure only. No match here is
-        startable yet (Winners/Losers Bracket progression and Grand Final Reset are later milestones).
+        Double Elimination — {deBracket.winnersBracket.size}-team bracket. Winners Bracket is fully playable; a
+        completed match's loser shows its Losers Bracket destination as a placeholder (Losers Bracket Progression
+        and Grand Final are later milestones).
       </p>
+      {matchError && <p style={styles.editWarning}>{matchError}</p>}
 
       <p style={{ ...styles.poolHeading, marginTop: 20 }}>Winners Bracket</p>
       <div style={styles.bracketScroll}>
-        {winnersRounds.map((round) => (
-          <BracketRoundColumn
-            key={`winners-${round.roundNumber}`}
-            round={round}
-            bracketCompleted={false}
-            collapsed={false}
-            onToggleCollapse={() => {}}
-            selectedMatchId={null}
-            availableCourts={[]}
-            roundRef={() => {}}
-            handlers={NOOP_HANDLERS}
-          />
+        {winnersViewModel.rounds.map((round) => (
+          <div key={`winners-${round.roundNumber}`} style={styles.bracketRoundColumn}>
+            <p style={{ ...styles.poolHeading, margin: 0 }}>
+              {round.name} {round.isCurrentRound && <span style={{ color: "var(--court)" }}>· current</span>}
+            </p>
+            {round.matches.map((m) => (
+              <div key={m.id}>
+                <BracketMatchCard
+                  match={m}
+                  bracketCompleted={winnersBracketCompleted}
+                  selected={m.id === selectedMatchId}
+                  onAdvancementPath={m.onAdvancementPath}
+                  availableCourts={[]}
+                  {...winnersHandlers}
+                />
+                <LoserDestinationLine match={m} />
+              </div>
+            ))}
+          </div>
         ))}
       </div>
+      {deBracket.winnersBracket.champion && (
+        <div style={styles.sessionInfoCard}>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Winners Bracket Champion</span>
+            <span style={styles.sessionInfoValue}>{deBracket.winnersBracket.champion.label}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Winners Bracket Runner-up</span>
+            <span style={styles.sessionInfoValue}>{deBracket.winnersBracket.runnerUp?.label ?? "—"}</span>
+          </div>
+        </div>
+      )}
 
       <p style={{ ...styles.poolHeading, marginTop: 20 }}>Losers Bracket</p>
       <div style={styles.bracketScroll}>
@@ -563,6 +624,11 @@ export default function TournamentBracketView({
   onReassignMatch,
   seedError,
   onGenerateDoubleEliminationBracket,
+  onDoubleEliminationStartMatch,
+  onDoubleEliminationSaveResult,
+  onDoubleEliminationPauseMatch,
+  onDoubleEliminationResumeMatch,
+  onDoubleEliminationWalkover,
 }) {
   const [selectedMatchId, setSelectedMatchId] = useState(null);
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set());
@@ -576,21 +642,25 @@ export default function TournamentBracketView({
     return <div style={styles.placeholderCard}>Bracket generation isn't available for this tournament format yet.</div>;
   }
 
-  // Double Elimination Foundation — see PROJECT.md. Structure-only this
-  // milestone: shows the generated Winners Bracket/Losers Bracket/Grand
-  // Final (or a Generate action before one exists), reusing
-  // BracketRoundColumn/BracketMatchCard completely unchanged. Deliberately
-  // its own early-return branch rather than folding into the single-
-  // elimination render below — the two bracket shapes (tournament.bracket
-  // vs. tournament.doubleEliminationBracket) never coexist, and no match
-  // in a Double Elimination bracket is ever startable/scoreable yet (no
-  // progression logic exists), so none of the existing handlers apply.
+  // Double Elimination Foundation / Winners Bracket Progression — see
+  // PROJECT.md. Deliberately its own early-return branch rather than
+  // folding into the single-elimination render below — the two bracket
+  // shapes (tournament.bracket vs. tournament.doubleEliminationBracket)
+  // never coexist. The Winners Bracket is fully playable via its own
+  // handlers; Losers Bracket/Grand Final stay structure-only (no
+  // progression logic exists for them yet).
   if ((tournament.bracketFormat ?? "singleElimination") === "doubleElimination") {
     return (
       <DoubleEliminationBracketSection
         tournament={tournament}
         seedError={seedError}
+        matchError={matchError}
         onGenerateDoubleEliminationBracket={onGenerateDoubleEliminationBracket}
+        onDoubleEliminationStartMatch={onDoubleEliminationStartMatch}
+        onDoubleEliminationSaveResult={onDoubleEliminationSaveResult}
+        onDoubleEliminationPauseMatch={onDoubleEliminationPauseMatch}
+        onDoubleEliminationResumeMatch={onDoubleEliminationResumeMatch}
+        onDoubleEliminationWalkover={onDoubleEliminationWalkover}
       />
     );
   }

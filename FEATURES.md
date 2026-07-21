@@ -71,7 +71,7 @@ Do not implement multiple unrelated features in a single task.
 - [x] Manual Seeding
 - [ ] Double Elimination Brackets
 - [x] Double Elimination Foundation
-- [ ] Winners Bracket Progression
+- [x] Winners Bracket Progression
 - [ ] Losers Bracket Progression
 - [ ] Grand Final Reset
 - [ ] Double Elimination Reports

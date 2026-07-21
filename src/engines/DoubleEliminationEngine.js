@@ -19,12 +19,14 @@
 import { TournamentEngine } from "./TournamentEngine.js";
 import { PlayoffBracketGenerator, makeBracketMatch } from "./PlayoffBracketGenerator.js";
 import { PoolQualificationService } from "./PoolQualificationService.js";
+import { WinnersBracketAdvancementService } from "./WinnersBracketAdvancementService.js";
 import { uid } from "../lib/random.js";
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Double Elimination is not implemented yet — architecture only (Tournament Engine Foundation)." };
 
 const qualificationService = new PoolQualificationService();
 const bracketGenerator = new PlayoffBracketGenerator();
+const winnersAdvancementService = new WinnersBracketAdvancementService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, winnersBracket: null, losersBracket: null, grandFinal: null };
 
@@ -202,9 +204,89 @@ export class DoubleEliminationEngine extends TournamentEngine {
       id: uid(),
       status: "ready",
       completedAt: null,
-      winnersBracket: { id: uid(), size, status: "pending", rounds: winnersRounds },
+      winnersBracket: { id: uid(), size, status: "pending", rounds: winnersRounds, champion: null, runnerUp: null },
       losersBracket: { id: uid(), size, status: "pending", rounds: losersRounds },
       grandFinal,
     };
+  }
+
+  // Winners Bracket Progression — see PROJECT.md. The Winners Bracket
+  // equivalent of PlayoffEngine.updateBracket, scoped to exactly one
+  // concern: record a result, advance the winner into the next Winners
+  // Bracket match, and stamp a Losers Bracket destination PLACEHOLDER onto
+  // the loser (never write the loser into losersBracket itself — that's
+  // Losers Bracket Progression, a later sprint). winnersBracket.champion/
+  // runnerUp are stamped the moment the Winners Final completes — future
+  // compatibility for Grand Final population (a later sprint reads these
+  // rather than re-deriving them), without this sprint doing anything with
+  // them itself.
+  // winnersBracket/losersBracket: the sub-records of
+  // tournament.doubleEliminationBracket; result: { scoreA, scoreB, winnerId }
+  // returns: the updated winnersBracket (never mutates the one passed in).
+  updateWinnersBracket(winnersBracket, losersBracket, matchId, result) {
+    const validation = winnersAdvancementService.validateAdvancement(winnersBracket, matchId, result);
+    if (!validation.valid) {
+      throw new Error(validation.errors.join(" "));
+    }
+
+    let found = null;
+    for (let roundIndex = 0; roundIndex < winnersBracket.rounds.length; roundIndex++) {
+      const match = winnersBracket.rounds[roundIndex].matches.find((m) => m.id === matchId);
+      if (match) {
+        found = { match, roundIndex };
+        break;
+      }
+    }
+
+    // Same inline score/winner checks PlayoffEngine.updateBracket already
+    // applies for the championship bracket — validateAdvancement above
+    // covers the Validation section's four named rules (no winner,
+    // duplicate advancement, invalid mapping, completed-tournament edits);
+    // these are the same basic data-integrity checks every other match-
+    // result save path in this app applies before persisting a score.
+    const { scoreA, scoreB, winnerId } = result;
+    if (scoreA === "" || scoreB === "" || scoreA == null || scoreB == null) {
+      throw new Error("Enter a score for both teams.");
+    }
+    const numA = Number(scoreA);
+    const numB = Number(scoreB);
+    if (!Number.isFinite(numA) || !Number.isFinite(numB) || numA < 0 || numB < 0) {
+      throw new Error("Scores can't be negative.");
+    }
+    if (winnerId !== found.match.teamA.participantId && winnerId !== found.match.teamB.participantId) {
+      throw new Error("Winner must be one of this match's two teams.");
+    }
+    const winnerTeam = winnerId === found.match.teamA.participantId ? found.match.teamA : found.match.teamB;
+    const loserTeam = winnerTeam === found.match.teamA ? found.match.teamB : found.match.teamA;
+
+    const updatedMatch = {
+      ...winnersAdvancementService.updateMatchStatus(found.match, "completed"),
+      score: { teamA: numA, teamB: numB },
+      winner: winnerId,
+      completedAt: Date.now(),
+      loserDestination: winnersAdvancementService.recordLoserDestination(winnersBracket, losersBracket, matchId),
+    };
+
+    let rounds = winnersBracket.rounds.map((r, i) => {
+      if (i !== found.roundIndex) return r;
+      const matches = r.matches.map((m) => (m.id === updatedMatch.id ? updatedMatch : m));
+      return { ...r, matches };
+    });
+    rounds = winnersAdvancementService.advanceWinner({ rounds }, matchId, winnerTeam);
+
+    let next = { ...winnersBracket, rounds };
+    const finalRound = rounds[rounds.length - 1];
+    if (winnersAdvancementService.isRoundComplete(finalRound) && found.roundIndex === rounds.length - 1) {
+      next = { ...next, champion: winnerTeam, runnerUp: loserTeam };
+    }
+
+    const allMatches = rounds.flatMap((r) => r.matches);
+    if (allMatches.every((m) => m.status === "completed")) {
+      next = { ...next, status: "completed", completedAt: Date.now() };
+    } else {
+      next = { ...next, status: allMatches.some((m) => m.status === "inProgress" || m.status === "completed") ? "running" : "ready" };
+    }
+
+    return next;
   }
 }
