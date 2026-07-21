@@ -267,3 +267,17 @@ export function recordRotationHistory(players, teamA, teamB, courtNumber) {
 
   return next;
 }
+
+// Create Session's "Expected Playing Opportunities" estimate — a pure
+// projection from session duration + court/match-duration assumptions,
+// never a guarantee (actual games/player depends on real match lengths,
+// no-shows, byes, etc.). Rounded to the nearest whole number for display;
+// 0 whenever there aren't yet enough registered players or courts to
+// divide by (rather than NaN/Infinity).
+export function estimateGamesPerPlayer({ sessionDurationHours, courtsCount, registeredPlayers, avgMatchDurationMinutes }) {
+  if (!sessionDurationHours || !courtsCount || !registeredPlayers || !avgMatchDurationMinutes) return 0;
+  const totalCourtMinutes = sessionDurationHours * 60 * courtsCount;
+  const estimatedMatches = totalCourtMinutes / avgMatchDurationMinutes;
+  const totalPlayerAppearances = estimatedMatches * 4;
+  return Math.round(totalPlayerAppearances / registeredPlayers);
+}

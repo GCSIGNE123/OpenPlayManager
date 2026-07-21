@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Camera, ChevronDown, ChevronRight, LogIn, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { resizeImageToAvatar } from "../lib/utils.js";
+import { resizeImageToAvatar, estimateGamesPerPlayer } from "../lib/utils.js";
 import { emptyPlayerRecord, fetchAllPlayers, filterPlayersByQuery, savePlayerRecord } from "../lib/playerDatabase.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import Avatar from "./Avatar.jsx";
@@ -24,7 +24,15 @@ export default function CreateSessionScreen({
   const [sessionType, setSessionType] = useState(sessionTypes?.[0]?.value ?? "openPlay");
   const [rotationMode, setRotationMode] = useState(rotationModes?.[0]?.value ?? "continuous");
   const [tournamentFormat, setTournamentFormat] = useState(tournamentFormats?.[0]?.value ?? "roundRobin");
-  const [expectedGamesPerPlayer, setExpectedGamesPerPlayer] = useState(6);
+  // Expected Playing Opportunities — see PROJECT.md. Session Duration is
+  // the organizer-facing input now; expectedGamesPerPlayer itself is
+  // computed automatically (estimateGamesPerPlayer, below) rather than
+  // typed directly, but the stored field name/shape passed to onStart is
+  // unchanged — every downstream consumer (Progressive Skill Rotation's
+  // phase calc, the mid-session Settings dialog, the simulator) keeps
+  // working exactly as before, since it only ever sees a plain number.
+  const [sessionDurationHours, setSessionDurationHours] = useState(2);
+  const [avgMatchDurationMinutes, setAvgMatchDurationMinutes] = useState(15);
   const [roster, setRoster] = useState([]);
 
   // ---- Tournament Templates — see engines/TournamentTemplateService.js ----
@@ -129,7 +137,11 @@ export default function CreateSessionScreen({
 
   const removePlayer = (id) => setRoster((r) => r.filter((p) => p.id !== id));
   const adjustCourts = (delta) => setCourts((c) => Math.min(8, Math.max(1, c + delta)));
-  const canStart = venue.trim().length > 0 && courts >= 1 && !creating;
+  const canStart =
+    venue.trim().length > 0 &&
+    courts >= 1 &&
+    !creating &&
+    (sessionType === "tournament" || Number(sessionDurationHours) > 0);
 
   // Creating a new player always saves it to the database (this is what
   // makes the database grow from nothing — no separate migration step is
@@ -320,18 +332,53 @@ export default function CreateSessionScreen({
 
       {sessionType !== "tournament" && (
         <>
-          <SectionLabel>5. Expected games per player</SectionLabel>
+          <SectionLabel>5. Session duration</SectionLabel>
           <p style={styles.editHint}>
-            How many games each player expects to play this session. Stored with the session — not used anywhere
-            yet.
+            How long today's session will run, in hours (decimals allowed — e.g. 1.5, 2.5). Used below to estimate
+            how many games each player can expect to play.
           </p>
-          <input
-            type="number"
-            min={1}
-            style={{ ...styles.expectedGamesInput, width: 64 }}
-            value={expectedGamesPerPlayer}
-            onChange={(e) => setExpectedGamesPerPlayer(e.target.value)}
-          />
+          <div style={styles.checkinRow}>
+            <label style={styles.settingsField}>
+              Hours
+              <input
+                type="number"
+                min={0.5}
+                step={0.5}
+                style={{ ...styles.expectedGamesInput, width: 64 }}
+                value={sessionDurationHours}
+                onChange={(e) => setSessionDurationHours(e.target.value)}
+              />
+            </label>
+            <label style={styles.settingsField}>
+              Average match duration (minutes)
+              <input
+                type="number"
+                min={1}
+                style={{ ...styles.expectedGamesInput, width: 64 }}
+                value={avgMatchDurationMinutes}
+                onChange={(e) => setAvgMatchDurationMinutes(e.target.value)}
+              />
+            </label>
+          </div>
+          {/* Expected Playing Opportunities — see PROJECT.md. Read-only,
+              always computed (estimateGamesPerPlayer) — never a manually
+              editable field, and it recomputes live off registered
+              players/courts/duration/match-duration on every render since
+              none of those are debounced or gated behind a save action. */}
+          <div style={styles.sessionInfoCard}>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Expected Playing Opportunities</span>
+              <span style={styles.sessionInfoValue}>
+                {estimateGamesPerPlayer({
+                  sessionDurationHours: Number(sessionDurationHours) || 0,
+                  courtsCount: courts,
+                  registeredPlayers: roster.length,
+                  avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0,
+                })}{" "}
+                Games
+              </span>
+            </div>
+          </div>
         </>
       )}
 
@@ -558,7 +605,15 @@ export default function CreateSessionScreen({
             courts,
             roster,
             rotationMode,
-            Math.max(1, Number(expectedGamesPerPlayer) || 1),
+            Math.max(
+              1,
+              estimateGamesPerPlayer({
+                sessionDurationHours: Number(sessionDurationHours) || 0,
+                courtsCount: courts,
+                registeredPlayers: roster.length,
+                avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0,
+              }) || 1
+            ),
             sessionType,
             sessionType === "tournament" ? tournamentFormat : null,
             sessionType === "tournament" && templateChoice === "template" && selectedTemplate

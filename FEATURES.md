@@ -27,6 +27,11 @@ Do not implement multiple unrelated features in a single task.
   - Full Screen Mode
   - Real-time Updates
   - Player Photos & Broadcast Experience
+- [x] Expected Playing Opportunities (Session Duration-Based Estimate)
+  - Session Duration input (hours, decimal-friendly) replaces manual Expected Games Per Player entry
+  - Configurable Average Match Duration (default 15 minutes)
+  - Read-only, auto-computed estimate — never manually editable
+  - Live-updates on courts/duration/registered players/match duration changes
 - [ ] Progressive Skill Rotation
 - [ ] Winner Pool Rotation
 - [ ] Game History
