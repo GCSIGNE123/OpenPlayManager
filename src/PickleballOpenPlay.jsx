@@ -39,7 +39,7 @@ import DeveloperView from "./components/DeveloperView.jsx";
 import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 import UserManagementScreen from "./components/UserManagementScreen.jsx";
 import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
-import MembershipScreen from "./components/MembershipScreen.jsx";
+import PlayerManagementScreen from "./components/PlayerManagementScreen.jsx";
 import RatingsScreen from "./components/RatingsScreen.jsx";
 import TournamentHistoryScreen from "./components/TournamentHistoryScreen.jsx";
 
@@ -66,7 +66,7 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
 }
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | membership | ratings
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | ratings
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -1084,7 +1084,7 @@ export default function PickleballOpenPlay() {
           onTemplates={() => setScreen("templates")}
           onPlayerPortal={() => setScreen("portal")}
           onLeagues={() => setScreen("leagues")}
-          onMembership={() => setScreen("membership")}
+          onPlayerManagement={() => setScreen("playerManagement")}
           onRatings={() => setScreen("ratings")}
           onTournamentHistory={() => setScreen("tournamentHistory")}
           joinCode={joinCode}
@@ -1105,7 +1105,7 @@ export default function PickleballOpenPlay() {
 
       {screen === "leagues" && <LeagueManagerScreen onBack={goToLanding} />}
 
-      {screen === "membership" && <MembershipScreen onBack={goToLanding} />}
+      {screen === "playerManagement" && <PlayerManagementScreen onBack={goToLanding} />}
 
       {screen === "ratings" && <RatingsScreen onBack={goToLanding} />}
 

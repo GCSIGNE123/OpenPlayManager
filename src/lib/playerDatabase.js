@@ -21,17 +21,29 @@ import { uid } from "./random.js";
 import { PLAYER_DB_PREFIX } from "./constants.js";
 
 // id -> {
-//   id, firstName, lastName (nullable), displayName, photo (nullable, data
-//   URL — same format session players already use), gender (nullable),
-//   skill ('beginner' | 'intermediate' — doubles as Membership's "Skill
-//   Level", see PROJECT.md's Membership Management section), duprRating
-//   (nullable number), contactNumber (nullable), notes (nullable — doubles
-//   as Membership's "Notes"), active (bool), createdAt, updatedAt (ms epoch),
+//   id, firstName, lastName (nullable), displayName, nickname (nullable —
+//   Player Management's optional registration field, see PROJECT.md's
+//   Player Management section), photo (nullable, data URL — same format
+//   session players already use), gender (nullable), skill ('beginner' |
+//   'intermediate' | 'advanced' — see Player Management's skill filter;
+//   note Open Play's matchmaking engines (BalancedRotationEngine et al.)
+//   still only ever check for exactly 'beginner'/'intermediate' — an
+//   'advanced'-tagged player added to a session roster won't be recognized
+//   by either group in Mentorship-phase pairing. That's an existing-code
+//   limitation this task deliberately leaves alone, not a bug introduced
+//   here; a player only ever gets tagged 'advanced' via an explicit choice
+//   in the Player Management profile editor, never by any existing
+//   session flow), duprRating (nullable number), contactNumber (nullable),
+//   notes (nullable — doubles as Membership's "Notes"), active (bool),
+//   createdAt, updatedAt (ms epoch),
 //
 //   -- Membership Management fields (additive; a record from before this
 //   task simply has memberId/membershipStatus/etc. as null/undefined,
 //   read as "no membership set up yet" — see engines/MembershipService.js,
-//   which is the only thing that gives these fields real meaning):
+//   which is the only thing that gives these fields real meaning). Player
+//   Management (the directory/profile UI) never reads or writes these —
+//   they're left fully intact for League/Tournament membership-eligibility
+//   gating, which is a separate, still-active feature:
 //   memberId (nullable string, a short organizer-facing code e.g. "M-A1B2C3"),
 //   membershipStatus ('active' | 'expired' | 'suspended' | 'pending' | null —
 //     the STORED status; MembershipService.getMembershipStatus is what
@@ -47,6 +59,7 @@ export function emptyPlayerRecord({
   firstName,
   lastName = null,
   displayName,
+  nickname = null,
   photo = null,
   gender = null,
   skill = "beginner",
@@ -67,9 +80,10 @@ export function emptyPlayerRecord({
     firstName: firstName.trim(),
     lastName: lastName ? lastName.trim() : null,
     displayName: (displayName || firstName).trim(),
+    nickname: nickname ? nickname.trim() : null,
     photo,
     gender,
-    skill: skill === "intermediate" ? "intermediate" : "beginner",
+    skill: ["intermediate", "advanced"].includes(skill) ? skill : "beginner",
     duprRating: duprRating === "" || duprRating == null ? null : Number(duprRating),
     contactNumber: contactNumber ? contactNumber.trim() : null,
     notes: notes ? notes.trim() : null,
@@ -132,12 +146,16 @@ export async function savePlayerRecord(record) {
   return stamped;
 }
 
-// case-insensitive match on display/first/last name — same "no query = show
-// everything" convention as PlayerPicker's search
+// case-insensitive match on display/first/last name plus contact number —
+// same "no query = show everything" convention as PlayerPicker's search.
+// Every existing caller (CreateSessionScreen's "select existing player"
+// search, this function's own original name-only behavior) picks up
+// contact-number search for free rather than needing a second,
+// Player-Management-specific search function.
 export function filterPlayersByQuery(players, query) {
   const q = query.trim().toLowerCase();
   if (!q) return players;
   return players.filter((p) =>
-    [p.displayName, p.firstName, p.lastName].some((s) => s && s.toLowerCase().includes(q))
+    [p.displayName, p.firstName, p.lastName, p.nickname, p.contactNumber].some((s) => s && s.toLowerCase().includes(q))
   );
 }

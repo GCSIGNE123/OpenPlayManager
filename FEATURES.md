@@ -176,9 +176,17 @@ Do not implement multiple unrelated features in a single task.
 - [ ] Season History
 - [ ] DUPR Integration
 
-## 💳 Membership Management
+## 🧑‍🤝‍🧑 Player Management
 
-- [x] Membership Management
+- [x] Player Management
+  - Player Directory
+  - Player Profiles
+  - Profile Photos
+  - Player Statistics
+  - Search
+  - Sorting
+  - Editing
+  - TV Mode Integration
 - [ ] Online Payments
 - [ ] Auto Renewal
 - [ ] Family Memberships

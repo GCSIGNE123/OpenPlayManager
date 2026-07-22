@@ -82,6 +82,7 @@ export default function CreateSessionScreen({
   const [lastName, setLastName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayNameTouched, setDisplayNameTouched] = useState(false);
+  const [nickname, setNickname] = useState("");
   const [skillInput, setSkillInput] = useState("beginner");
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -168,6 +169,7 @@ export default function CreateSessionScreen({
       firstName: trimmedFirst,
       lastName,
       displayName: displayName.trim() || trimmedFirst,
+      nickname,
       photo: photoDataUrl || null,
       gender: gender || null,
       skill: skillInput,
@@ -186,6 +188,7 @@ export default function CreateSessionScreen({
     setLastName("");
     setDisplayName("");
     setDisplayNameTouched(false);
+    setNickname("");
     setPhotoDataUrl(null);
     setGender("");
     setDuprRating("");
@@ -479,6 +482,12 @@ export default function CreateSessionScreen({
               setDisplayName(e.target.value);
               setDisplayNameTouched(true);
             }}
+          />
+          <input
+            style={{ ...styles.input, ...styles.playerSearchInput }}
+            placeholder="Nickname (optional)"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
           />
           <SkillToggle value={skillInput} onChange={setSkillInput} />
           <div style={styles.photoRow}>
