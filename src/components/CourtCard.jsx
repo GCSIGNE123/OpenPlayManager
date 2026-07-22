@@ -24,6 +24,7 @@ export default function CourtCard({
   canFill,
   pairPartnerNumber,
   poolingMode,
+  reserved,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
   const isManual = court.assignmentMode === "manual";
@@ -87,6 +88,13 @@ export default function CourtCard({
             <Lock size={10} strokeWidth={3} />
             Manual Assignment
           </span>
+        ) : reserved && court.status === "open" ? (
+          // Court Booking & Reservations integration — see PROJECT.md.
+          // Only shown for an otherwise-OPEN court — a court already LIVE/
+          // FINISHED keeps its normal badge, since Court Booking never
+          // interrupts a match already in progress, only blocks a NEW one
+          // from being assigned onto a reserved slot.
+          <span style={styles.resultTag("loss")}>RESERVED</span>
         ) : (
           <span style={styles.statusTag(court.status)}>
             {court.awaitingPair
@@ -119,7 +127,7 @@ export default function CourtCard({
 
       {!isLive && !isManual && (
         <div style={styles.openCourtBody}>
-          <p style={styles.openCourtText}>Court is free</p>
+          <p style={styles.openCourtText}>{reserved ? "Reserved via Court Booking" : "Court is free"}</p>
           {!readOnly && (
             <button
               style={{ ...styles.secondaryBtn, ...(!canFill ? styles.btnDisabled : {}) }}

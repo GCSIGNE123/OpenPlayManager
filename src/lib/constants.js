@@ -13,6 +13,8 @@ export const RATING_PREFIX = "opl-playerrating-"; // one KV record per player's 
 export const RATING_HISTORY_PREFIX = "opl-ratinghistory-"; // one KV record per player holding their full RatingHistory array, shared — see lib/ratingModel.js
 export const ACHIEVEMENT_PREFIX = "opl-achievement-"; // one KV record per player holding their earned Achievement array, shared — see engines/AchievementService.js
 export const QUALIFICATION_AUDIT_PREFIX = "opl-qualaudit-"; // one KV record per tournament holding its full Manual Qualification Override audit trail array — see lib/qualificationAuditModel.js
+export const COURT_PREFIX = "opl-court-"; // one KV record per physical club Court, shared — see lib/courtDatabase.js. The first PERSISTENT Court entity in this app: Open Play's state.courts and Tournament's tournament.courts are both still freshly-generated, numbered-only, container-scoped arrays with no identity beyond that one session/tournament — this is deliberately a separate, new registry (Court Booking & Reservations' "master" court list), not a rename/migration of either.
+export const BOOKING_PREFIX = "opl-booking-"; // one KV record per court reservation, shared — see lib/bookingModel.js
 
 export const SKILL_DIVISIONS = ["Beginner", "Intermediate", "Advanced", "Open"]; // default suggested division names — a League Season can use any of these or a custom name; "future divisions configurable" just means any label works, not a separate catalog to maintain
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts

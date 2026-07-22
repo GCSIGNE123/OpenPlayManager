@@ -2,7 +2,7 @@ import { LogIn, Plus } from "lucide-react";
 import { styles } from "../styles.js";
 import { APP_NAME, TAGLINE, FOOTER_TEXT } from "../lib/brand.js";
 
-export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, onPlayerPortal, onLeagues, onPlayerManagement, onRatings, onTournamentHistory, joinCode, setJoinCode, handleJoin, joinError, joining }) {
+export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, onPlayerPortal, onLeagues, onPlayerManagement, onCourtBooking, onRatings, onTournamentHistory, joinCode, setJoinCode, handleJoin, joinError, joining }) {
   return (
     <div style={styles.landingWrap}>
       <div style={styles.landingHero}>
@@ -59,6 +59,9 @@ export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTempla
       </button>
       <button style={styles.adminLink} onClick={onPlayerManagement}>
         Manage players →
+      </button>
+      <button style={styles.adminLink} onClick={onCourtBooking}>
+        Court Booking & Reservations →
       </button>
       <button style={styles.adminLink} onClick={onRatings}>
         View club rankings →

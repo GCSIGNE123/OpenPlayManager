@@ -18,6 +18,14 @@ Do not implement multiple unrelated features in a single task.
 
 ## 🔥 High Priority
 
+- [x] Court Booking & Reservations
+  - Booking Dashboard
+  - Court Management
+  - Booking Calendar
+  - Availability Engine
+  - Conflict Detection
+  - Booking CRUD
+  - Reservation Status
 - [x] Open Play TV Mode
   - Live Court Display
   - Live Standings

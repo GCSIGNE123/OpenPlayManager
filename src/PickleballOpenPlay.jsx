@@ -19,6 +19,9 @@ import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
 import { RatingEngine } from "./engines/RatingEngine.js";
+import { fetchAllCourts as fetchAllClubCourts } from "./lib/courtDatabase.js";
+import { fetchAllBookings } from "./lib/bookingModel.js";
+import { getCourtsReservedNow } from "./engines/AvailabilityService.js";
 import { AchievementService } from "./engines/AchievementService.js";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
@@ -40,6 +43,7 @@ import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 import UserManagementScreen from "./components/UserManagementScreen.jsx";
 import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
 import PlayerManagementScreen from "./components/PlayerManagementScreen.jsx";
+import CourtBookingScreen from "./components/CourtBookingScreen.jsx";
 import RatingsScreen from "./components/RatingsScreen.jsx";
 import TournamentHistoryScreen from "./components/TournamentHistoryScreen.jsx";
 
@@ -66,7 +70,7 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
 }
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | ratings
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | courtBooking | ratings
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -144,6 +148,34 @@ export default function PickleballOpenPlay() {
 
   const [state, setState] = useState(defaultState);
   const [loaded, setLoaded] = useState(false);
+
+  // Court Booking & Reservations integration — see PROJECT.md and
+  // fillCourt/fillAllCourts below. Polled (not a live realtime
+  // subscription) every 30s while an Open Play session is actually
+  // loaded — reservations changing mid-session is rare enough that a
+  // light poll is the right amount of complexity for this integration, a
+  // deliberate simplification over the full subscribeToKey treatment
+  // every session's OWN data gets. An empty Set (the default) makes every
+  // isCourtReserved() check a no-op, so a club that's never set up Court
+  // Booking sees zero behavior change.
+  const [reservedCourtNumbers, setReservedCourtNumbers] = useState(new Set());
+  useEffect(() => {
+    if (screen !== "app" || !loaded || state.sessionType === "tournament") return undefined;
+    let cancelled = false;
+    const refresh = () => {
+      Promise.all([fetchAllClubCourts(), fetchAllBookings()])
+        .then(([clubCourts, bookings]) => {
+          if (!cancelled) setReservedCourtNumbers(getCourtsReservedNow(clubCourts, bookings));
+        })
+        .catch(() => {}); // Court Booking data being unreachable shouldn't break Open Play
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [screen, loaded, state.sessionType]);
   const [view, setView] = useState("board"); // board | checkin | standings | scorer
   const [scorerAuthed, setScorerAuthed] = useState(false);
   const [pin, setPin] = useState("");
@@ -573,6 +605,20 @@ export default function PickleballOpenPlay() {
     setTimeout(() => setCheckinMsg(""), 2500);
   };
 
+  // Court Booking & Reservations integration — see PROJECT.md. A court
+  // NUMBER currently inside an active Court Booking reservation is
+  // excluded from automatic fill, the same way an "open" check already
+  // gates a court that's mid-match — matched by number since that's the
+  // only identity Open Play's own state.courts has ever had (see
+  // lib/courtDatabase.js's header comment). `reservedCourtNumbers` is
+  // refreshed on a light interval (courtBookingRefresh below) rather than
+  // a live realtime subscription — reservations changing mid-session is a
+  // rare event, and this keeps the integration simple and low-risk rather
+  // than wiring a second subscribeToKey stream into every Open Play
+  // session. Entirely a no-op (empty Set) for any club that hasn't set up
+  // Court Booking at all, so existing Open Play behavior is unaffected.
+  const isCourtReserved = (courtNumber) => reservedCourtNumbers.has(courtNumber);
+
   // courts are filled from the front of nextMatchups — pre-built (and
   // possibly scorer-edited) upcoming matchups — rather than recomputed on
   // the spot, so what the scorer reviewed is exactly what gets deployed
@@ -580,7 +626,7 @@ export default function PickleballOpenPlay() {
     const court = state.courts[courtIdx];
     // manual courts are filled by lockManualCourt (the organizer's own
     // picks), never by deploying a pre-built rotation-engine matchup
-    if (court.status !== "open" || court.assignmentMode === "manual") return;
+    if (court.status !== "open" || court.assignmentMode === "manual" || isCourtReserved(court.number)) return;
     const [nextMatch, ...restMatchups] = state.nextMatchups || [];
     if (!nextMatch) return;
 
@@ -598,7 +644,7 @@ export default function PickleballOpenPlay() {
     let queueIds = [...state.queueIds];
     let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
-      if (c.status !== "open" || c.assignmentMode === "manual") return c;
+      if (c.status !== "open" || c.assignmentMode === "manual" || isCourtReserved(c.number)) return c;
       const [nextMatch, ...rest] = remainingMatchups;
       if (!nextMatch) return c;
       remainingMatchups = rest;
@@ -1085,6 +1131,7 @@ export default function PickleballOpenPlay() {
           onPlayerPortal={() => setScreen("portal")}
           onLeagues={() => setScreen("leagues")}
           onPlayerManagement={() => setScreen("playerManagement")}
+          onCourtBooking={() => setScreen("courtBooking")}
           onRatings={() => setScreen("ratings")}
           onTournamentHistory={() => setScreen("tournamentHistory")}
           joinCode={joinCode}
@@ -1106,6 +1153,8 @@ export default function PickleballOpenPlay() {
       {screen === "leagues" && <LeagueManagerScreen onBack={goToLanding} />}
 
       {screen === "playerManagement" && <PlayerManagementScreen onBack={goToLanding} />}
+
+      {screen === "courtBooking" && <CourtBookingScreen onBack={goToLanding} />}
 
       {screen === "ratings" && <RatingsScreen onBack={goToLanding} />}
 
@@ -1350,6 +1399,7 @@ export default function PickleballOpenPlay() {
                   removeCourt={removeCourt}
                   endSession={endSession}
                   updateSessionSettings={updateSessionSettings}
+                  reservedCourtNumbers={reservedCourtNumbers}
                 />
               )}
 

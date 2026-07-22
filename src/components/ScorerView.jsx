@@ -49,6 +49,7 @@ export default function ScorerView({
   removeCourt,
   endSession,
   updateSessionSettings,
+  reservedCourtNumbers,
 }) {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const nextMatchups = state.nextMatchups || [];
@@ -249,6 +250,13 @@ export default function ScorerView({
           return state.courts.map((court, i) => {
             const partnerIdx = poolingActive || court.awaitingPair ? getPairPartnerIndex(state.courts, i) : null;
             const pairPartnerNumber = partnerIdx !== null ? state.courts[partnerIdx]?.number : null;
+            // Court Booking & Reservations integration — see PROJECT.md.
+            // A reserved court's "Assign match"/manual-lock affordances
+            // are hidden the same way an already-live court's are — the
+            // real enforcement lives in fillCourt/fillAllCourts
+            // themselves (PickleballOpenPlay.jsx); this is the matching
+            // UI-side reflection of that same check.
+            const isReserved = reservedCourtNumbers?.has(court.number) ?? false;
             return (
               <CourtCard
                 key={i}
@@ -266,9 +274,10 @@ export default function ScorerView({
                 onClearManualPlayer={(side, slotIndex) => clearManualCourtPlayer(i, side, slotIndex)}
                 onLock={() => lockManualCourt(i)}
                 onUnlock={() => unlockManualCourt(i)}
-                canFill={canFillCourt}
+                canFill={canFillCourt && !isReserved}
                 pairPartnerNumber={pairPartnerNumber}
                 poolingMode={poolingActive}
+                reserved={isReserved}
               />
             );
           });
