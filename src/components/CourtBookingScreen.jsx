@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calendar, Check, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Calendar, Camera, Check, Grid3x3, Lightbulb, Plus, Search, ShowerHead, Umbrella, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { fetchAllCourts, saveCourtRecord, emptyCourtRecord } from "../lib/courtDatabase.js";
-import { fetchAllBookings, BOOKING_SOURCES, BOOKING_STATUSES } from "../lib/bookingModel.js";
+import { fetchAllCourts, saveCourtRecord, emptyCourtRecord, SURFACE_TYPES, EQUIPMENT_TYPES } from "../lib/courtDatabase.js";
+import { fetchAllBookings, filterBookingsByQuery, BOOKING_SOURCES, BOOKING_STATUSES } from "../lib/bookingModel.js";
 import { fetchAllPlayers, savePlayerRecord, emptyPlayerRecord, filterPlayersByQuery } from "../lib/playerDatabase.js";
-import { getAvailableCourts, isValidTimeRange } from "../engines/AvailabilityService.js";
+import { resizeImageToAvatar } from "../lib/utils.js";
+import { getAvailableCourts, getCourtsReservedNow, isValidTimeRange, validateBookingFields } from "../engines/AvailabilityService.js";
 import { BookingService } from "../engines/BookingService.js";
+import ReservationTimeline, { TIMELINE_HOURS } from "./ReservationTimeline.jsx";
+import { useActiveVenue } from "../context/ActiveVenueContext.jsx";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import CurrentVenueBadge from "./CurrentVenueBadge.jsx";
 
 const bookingService = new BookingService();
 
@@ -43,6 +47,12 @@ function todayString() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 const STATUS_LABELS = { reserved: "Reserved", completed: "Completed", cancelled: "Cancelled", noShow: "No Show" };
+// Reservation Calendar block color — maps Booking.status onto
+// styles.reservationStatusColor's keys. "reserved" reads as 🟢 Confirmed
+// here (in this app "reserved" already means a confirmed reservation —
+// there's no separate pending/unconfirmed state), per the plan agreed
+// before implementation. Status colors themselves are unchanged.
+const STATUS_COLOR_KEY = { reserved: "confirmed", completed: "completed", cancelled: "cancelled", noShow: "noShow" };
 
 // ---- Dashboard ----
 function DashboardPanel({ courts, bookings }) {
@@ -89,21 +99,141 @@ function DashboardPanel({ courts, bookings }) {
   );
 }
 
+// Court photo upload — the exact same resizeImageToAvatar pipeline Player
+// Management's PhotoEditor already uses, just a rectangular thumbnail
+// (styles.courtPhotoThumb) instead of a circular avatar, since a court
+// isn't a person. Purely a display field — see courtDatabase.js.
+function CourtPhotoEditor({ photo, onChange, busy, setBusy }) {
+  const handleSelect = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      onChange(await resizeImageToAvatar(file));
+    } catch (e) {
+      // photo stays as-is on a read/decode failure
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={styles.photoRow}>
+      <div style={styles.courtPhotoThumbWrap}>
+        {photo ? (
+          <img src={photo} alt="" style={styles.courtPhotoThumb} />
+        ) : (
+          <div style={styles.courtPhotoThumbPlaceholder}>
+            <Camera size={18} strokeWidth={2} color="var(--color-text-faint)" />
+          </div>
+        )}
+        {photo && (
+          <button type="button" style={styles.photoClearBtn} onClick={() => onChange(null)} aria-label="remove court photo">
+            <X size={11} strokeWidth={3} />
+          </button>
+        )}
+      </div>
+      <label style={styles.photoLabel}>
+        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleSelect(e.target.files?.[0])} />
+        {busy ? "Adding photo…" : photo ? "Change photo" : "Add a court photo"}
+      </label>
+    </div>
+  );
+}
+
+// Court Management card's operational status — pure display, derived from
+// existing signals only: court.active, court.maintenance,
+// AvailabilityService.getCourtsReservedNow (reused, not re-derived), and —
+// new this sprint — the bookingSource already stored on whichever booking
+// currently has the court reserved (openPlay/tournament/coaching read as
+// their own badge; every other source reads as generic "Reserved"). This
+// is strictly a display categorization layered on top of fields that
+// already exist; nothing new is persisted and neither AvailabilityService
+// nor BookingService are touched. Precedence: an inactive court is always
+// "Inactive" regardless of anything else; maintenance next; otherwise
+// whatever's reserved right now (by source) vs available.
+function courtOperationalStatus(court, bookings, reservedNumbers) {
+  if (!court.active) return "inactive";
+  if (court.maintenance) return "maintenance";
+  if (!reservedNumbers.has(court.number)) return "available";
+  const today = todayString();
+  const now = new Date();
+  const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const activeBooking = bookings.find(
+    (b) => b.courtId === court.id && b.status === "reserved" && b.date === today && b.startTime <= nowTime && nowTime < b.endTime
+  );
+  if (activeBooking?.bookingSource === "openPlay") return "openPlay";
+  if (activeBooking?.bookingSource === "tournament") return "tournament";
+  if (activeBooking?.bookingSource === "coaching") return "coaching";
+  return "reserved";
+}
+const STATUS_BADGE_META = {
+  available: { emoji: "🟢", label: "Available" },
+  reserved: { emoji: "🔵", label: "Reserved" },
+  openPlay: { emoji: "🟠", label: "Open Play" },
+  tournament: { emoji: "🟣", label: "Tournament" },
+  coaching: { emoji: "🟡", label: "Coaching" },
+  maintenance: { emoji: "🔴", label: "Maintenance" },
+  inactive: { emoji: "⚫", label: "Inactive" },
+};
+const SURFACE_LABELS = Object.fromEntries(SURFACE_TYPES.map((s) => [s.value, s.label]));
+const SURFACE_EMOJI = { concrete: "🟫", asphalt: "🟩", cushioned: "🟦", synthetic: "🟩", wood: "🟨" };
+const EQUIPMENT_ICONS = { lights: Lightbulb, covered: Umbrella, nets: Grid3x3, washroom: ShowerHead };
+const EQUIPMENT_LABELS = Object.fromEntries(EQUIPMENT_TYPES.map((e) => [e.value, e.label]));
+
+// Professional "no photo" illustration — a simplified top-down pickleball
+// court, filling the same 16:9 hero area a real photo would. Inline SVG
+// (no external asset/library) so it always renders instantly and reuses
+// the app's own CSS custom properties for color, per the existing design
+// language rather than a generic gray box or stock icon.
+function CourtHeroIllustration() {
+  return (
+    <svg viewBox="0 0 400 225" style={{ width: "100%", height: "100%", display: "block" }} preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="courtHeroGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" style={{ stopColor: "var(--color-primary)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--color-primary-dark)" }} />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="225" fill="url(#courtHeroGrad)" />
+      <rect x="46" y="34" width="308" height="157" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="3" rx="3" />
+      <line x1="200" y1="34" x2="200" y2="191" stroke="rgba(255,255,255,0.85)" strokeWidth="3" />
+      <line x1="132" y1="34" x2="132" y2="191" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeDasharray="5 4" />
+      <line x1="268" y1="34" x2="268" y2="191" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeDasharray="5 4" />
+      <circle cx="200" cy="112.5" r="9" fill="var(--color-secondary)" />
+      <text x="200" y="208" textAnchor="middle" fontFamily="'Space Mono', monospace" fontSize="12" fontWeight="700" fill="rgba(255,255,255,0.75)" letterSpacing="1">
+        NO PHOTO
+      </text>
+    </svg>
+  );
+}
+
 // ---- Court Management ----
-function CourtManagementPanel({ courts, onReload }) {
+function CourtManagementPanel({ courts, bookings, onReload }) {
+  const { activeVenueId } = useActiveVenue();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
   const [number, setNumber] = useState(courts.length + 1);
   const [location, setLocation] = useState("outdoor");
+  const [surfaceType, setSurfaceType] = useState("concrete");
+  const [photo, setPhoto] = useState(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [hourlyRate, setHourlyRate] = useState("");
+  const [equipment, setEquipment] = useState([]);
   const [error, setError] = useState("");
+
+  const reservedNumbers = useMemo(() => getCourtsReservedNow(courts, bookings), [courts, bookings]);
+  const today = todayString();
+  const now = new Date();
+  const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   const startAdd = () => {
     setName("");
     setNumber(courts.length + 1);
     setLocation("outdoor");
+    setSurfaceType("concrete");
+    setPhoto(null);
     setHourlyRate("");
+    setEquipment([]);
     setError("");
     setEditingId(null);
     setAdding(true);
@@ -112,12 +242,18 @@ function CourtManagementPanel({ courts, onReload }) {
     setName(court.name);
     setNumber(court.number);
     setLocation(court.location);
+    setSurfaceType(court.surfaceType || "concrete");
+    setPhoto(court.photo || null);
     setHourlyRate(court.hourlyRate ?? "");
+    setEquipment(court.equipment || []);
     setError("");
     setEditingId(court.id);
     setAdding(true);
   };
   const cancel = () => setAdding(false);
+  const toggleEquipment = (value) => {
+    setEquipment((prev) => (prev.includes(value) ? prev.filter((e) => e !== value) : [...prev, value]));
+  };
 
   const save = async () => {
     if (!number || Number(number) < 1) {
@@ -127,8 +263,17 @@ function CourtManagementPanel({ courts, onReload }) {
     setError("");
     const existing = editingId ? courts.find((c) => c.id === editingId) : null;
     const record = existing
-      ? { ...existing, name: name.trim() || `Court ${number}`, number: Number(number), location, hourlyRate: hourlyRate === "" ? null : Number(hourlyRate) }
-      : emptyCourtRecord({ name, number, location, hourlyRate });
+      ? {
+          ...existing,
+          name: name.trim() || `Court ${number}`,
+          number: Number(number),
+          location,
+          surfaceType,
+          photo,
+          hourlyRate: hourlyRate === "" ? null : Number(hourlyRate),
+          equipment,
+        }
+      : emptyCourtRecord({ name, number, location, surfaceType, photo, hourlyRate, equipment, venueId: activeVenueId });
     await saveCourtRecord(record);
     setAdding(false);
     onReload();
@@ -136,6 +281,10 @@ function CourtManagementPanel({ courts, onReload }) {
 
   const toggleActive = async (court) => {
     await saveCourtRecord({ ...court, active: !court.active });
+    onReload();
+  };
+  const toggleMaintenance = async (court) => {
+    await saveCourtRecord({ ...court, maintenance: !court.maintenance });
     onReload();
   };
 
@@ -151,6 +300,7 @@ function CourtManagementPanel({ courts, onReload }) {
       )}
       {adding && (
         <div style={styles.tournamentSetupCard}>
+          <CourtPhotoEditor photo={photo} onChange={setPhoto} busy={photoBusy} setBusy={setPhotoBusy} />
           <div style={styles.checkinRow}>
             <input style={styles.input} placeholder="Court name (e.g. Court 1)" value={name} onChange={(e) => setName(e.target.value)} />
             <input
@@ -170,6 +320,16 @@ function CourtManagementPanel({ courts, onReload }) {
             </button>
           </div>
           <label style={styles.settingsField}>
+            Surface Type
+            <select style={styles.rotationSelect} value={surfaceType} onChange={(e) => setSurfaceType(e.target.value)}>
+              {SURFACE_TYPES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={styles.settingsField}>
             Hourly rate (stored only — not charged yet)
             <input
               type="number"
@@ -180,6 +340,16 @@ function CourtManagementPanel({ courts, onReload }) {
               onChange={(e) => setHourlyRate(e.target.value)}
             />
           </label>
+          <div style={styles.settingsField}>
+            Equipment
+            <div style={styles.skillToggle}>
+              {EQUIPMENT_TYPES.map((e) => (
+                <button key={e.value} type="button" style={styles.skillToggleBtn(equipment.includes(e.value))} onClick={() => toggleEquipment(e.value)}>
+                  {e.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {error && <p style={styles.editWarning}>{error}</p>}
           <div style={styles.editActions}>
             <button type="button" style={styles.secondaryBtn} onClick={cancel}>
@@ -194,22 +364,85 @@ function CourtManagementPanel({ courts, onReload }) {
       {courts.length === 0 ? (
         <p style={styles.editHint}>No courts set up yet — add your first one above.</p>
       ) : (
-        <ul style={{ ...styles.rosterList, maxWidth: "100%" }}>
-          {courts.map((court) => (
-            <li key={court.id} style={styles.rosterItem}>
-              <span style={{ fontWeight: 700 }}>{court.name}</span>
-              <span style={styles.queueSourceTag}>{court.location === "indoor" ? "Indoor" : "Outdoor"}</span>
-              <span style={styles.resultTag(court.active ? "win" : "loss")}>{court.active ? "ACTIVE" : "INACTIVE"}</span>
-              {court.hourlyRate != null && <span style={styles.editHint}>₱{court.hourlyRate}/hr</span>}
-              <button style={styles.checkInTapBtn} onClick={() => startEdit(court)}>
-                Edit
-              </button>
-              <button style={styles.checkInTapBtn} onClick={() => toggleActive(court)}>
-                {court.active ? "Deactivate" : "Activate"}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div style={styles.courtMgmtGrid}>
+          {courts.map((court) => {
+            const status = courtOperationalStatus(court, bookings, reservedNumbers);
+            const statusMeta = STATUS_BADGE_META[status];
+            const todaysCourtBookings = bookings.filter((b) => b.courtId === court.id && b.date === today && b.status !== "cancelled");
+            const nextBooking = todaysCourtBookings
+              .filter((b) => b.status === "reserved" && b.startTime > nowTime)
+              .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
+            return (
+              <div key={court.id} style={styles.courtMgmtCard}>
+                <div style={styles.courtHeroWrap}>
+                  {court.photo ? <img src={court.photo} alt="" style={styles.courtHeroImg} /> : <CourtHeroIllustration />}
+                </div>
+                <div style={styles.courtMgmtCardBody}>
+                  <h3 style={styles.courtNumberHeading}>{court.name}</h3>
+                  {/* Status badge sits in a generic badge row — future accolade
+                      badges (Premium Court, Competition Court, Training Court,
+                      Members Only, ...) can be appended here later with no
+                      layout change, per Future Compatibility. */}
+                  <div style={styles.courtBadgeRow}>
+                    <span style={styles.courtOperationalBadge(status)}>
+                      {statusMeta.emoji} {statusMeta.label}
+                    </span>
+                  </div>
+                  <div style={styles.courtInfoPillRow}>
+                    <span style={styles.courtInfoPill}>{court.location === "indoor" ? "🏟 Indoor" : "🌤 Outdoor"}</span>
+                    <span style={styles.courtInfoPill}>
+                      {SURFACE_EMOJI[court.surfaceType] || "🟫"} {SURFACE_LABELS[court.surfaceType] || "Concrete"}
+                    </span>
+                  </div>
+                  {court.equipment?.length > 0 && (
+                    <div style={styles.courtEquipmentRow}>
+                      {court.equipment.map((eq) => {
+                        const Icon = EQUIPMENT_ICONS[eq] || Check;
+                        return (
+                          <span key={eq} style={styles.courtEquipmentPill}>
+                            <Icon size={11} strokeWidth={2.5} />
+                            {EQUIPMENT_LABELS[eq] || eq}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {court.hourlyRate != null && (
+                    <div style={styles.courtRateLine}>
+                      <span style={styles.courtRateAmount}>₱{court.hourlyRate}</span>
+                      <span style={styles.courtRateUnit}>/ hour</span>
+                    </div>
+                  )}
+                  {todaysCourtBookings.length === 0 ? (
+                    <p style={styles.editHint}>No reservations today</p>
+                  ) : (
+                    <div style={styles.courtReservationSummary}>
+                      <div style={styles.courtReservationStat}>
+                        <span style={styles.courtReservationLabel}>Today's Reservations</span>
+                        <span style={styles.courtReservationValue}>{todaysCourtBookings.length}</span>
+                      </div>
+                      <div style={styles.courtReservationStat}>
+                        <span style={styles.courtReservationLabel}>Next Booking</span>
+                        <span style={styles.courtReservationValue}>{nextBooking ? formatTime(nextBooking.startTime) : "—"}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div style={styles.courtMgmtCardActions}>
+                    <button type="button" style={styles.checkInTapBtn} onClick={() => startEdit(court)}>
+                      Edit
+                    </button>
+                    <button type="button" style={styles.checkInTapBtn} onClick={() => toggleActive(court)}>
+                      {court.active ? "Deactivate" : "Activate"}
+                    </button>
+                    <button type="button" style={styles.checkInTapBtn} onClick={() => toggleMaintenance(court)}>
+                      {court.maintenance ? "Clear Maintenance" : "Mark Maintenance"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -228,6 +461,7 @@ function CourtManagementPanel({ courts, onReload }) {
 // Booking are a denormalized snapshot of whichever player ends up linked,
 // kept for fast list/calendar rendering without an N+1 fetch per row.
 function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, defaultStartTime, onSaved, onCancel }) {
+  const { activeVenueId } = useActiveVenue();
   const isEdit = Boolean(booking);
   const [playerId, setPlayerId] = useState(booking?.playerId ?? null);
   const [playerSearch, setPlayerSearch] = useState("");
@@ -278,6 +512,21 @@ function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, d
   const selectedCourt = courts.find((c) => c.id === courtId);
   const courtOptions = selectedCourt && !availableCourts.some((c) => c.id === courtId) ? [selectedCourt, ...availableCourts] : availableCourts;
 
+  // Live conflict warning — "immediately warn" while editing, not only on
+  // Save. Calls the exact same validateBookingFields already wired to the
+  // Save button below (AvailabilityService, reused), just earlier — no
+  // second/parallel validation path. Only shown once a court AND both
+  // times are chosen, so it doesn't nag on a half-filled form.
+  const liveWarning = useMemo(() => {
+    if (!courtId || !startTime || !endTime) return null;
+    const result = validateBookingFields(
+      { court: selectedCourt, date, startTime, endTime },
+      bookings,
+      isEdit ? booking.id : null
+    );
+    return result.valid ? null : result.errors[0];
+  }, [selectedCourt, courtId, date, startTime, endTime, bookings, isEdit, booking]);
+
   const save = async () => {
     setError("");
     let finalPlayerId = playerId;
@@ -313,7 +562,7 @@ function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, d
       // record (no photo required) the moment a genuinely new guest is
       // booked, so every booking ends up referencing a real player.
       if (guestMode && !finalPlayerId) {
-        const guestRecord = emptyPlayerRecord({ firstName: finalName, contactNumber: finalContact || null, skill: "beginner" });
+        const guestRecord = emptyPlayerRecord({ firstName: finalName, contactNumber: finalContact || null, skill: "beginner", venueId: activeVenueId });
         await savePlayerRecord(guestRecord);
         finalPlayerId = guestRecord.id;
       }
@@ -329,6 +578,7 @@ function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, d
         numberOfPlayers,
         notes,
         bookingSource,
+        venueId: activeVenueId,
       };
       const saved = isEdit
         ? await bookingService.updateBooking(booking, fields, bookings)
@@ -444,6 +694,7 @@ function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, d
       {startTime && endTime && courts.length > courtOptions.length && (
         <p style={styles.editHint}>{courts.length - courtOptions.length} court(s) unavailable for this time and hidden above.</p>
       )}
+      {liveWarning && <p style={styles.editWarning}>{liveWarning}</p>}
 
       <div style={styles.checkinRow}>
         <input
@@ -491,100 +742,51 @@ function BookingForm({ booking, courts, bookings, defaultCourtId, defaultDate, d
   );
 }
 
-// ---- Booking Calendar (Day timeline — the primary interface) ----
-const TIMELINE_START_HOUR = 6;
-const TIMELINE_END_HOUR = 22;
-const TIMELINE_HOURS = Array.from({ length: TIMELINE_END_HOUR - TIMELINE_START_HOUR }, (_, i) => TIMELINE_START_HOUR + i);
-
-function timeToFraction(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h + m / 60 - TIMELINE_START_HOUR) / (TIMELINE_END_HOUR - TIMELINE_START_HOUR);
+// ---- Booking Calendar (the Interactive Reservation Timeline — the
+// primary interface) ----
+// Maps a Booking record into ReservationTimeline's generic block shape.
+// This is pure display-mapping, not scheduling logic — everything that
+// actually decides whether a booking IS a conflict still lives in
+// AvailabilityService, called from BookingForm/BookingService only.
+function bookingToBlock(b, court, onBookingClick) {
+  return {
+    id: b.id,
+    label: b.customerName,
+    timeLabel: `${formatTime(b.startTime)}–${formatTime(b.endTime)}`,
+    startTime: b.startTime,
+    endTime: b.endTime,
+    statusKey: STATUS_COLOR_KEY[b.status] || "noShow",
+    tooltip: [
+      `${court?.name ?? "Court"} · ${STATUS_LABELS[b.status]}`,
+      `Contact: ${b.contactNumber || "—"}`,
+      `Players: ${b.numberOfPlayers ?? "—"}`,
+      `Notes: ${b.notes || "—"}`,
+    ],
+    onClick: () => onBookingClick(b),
+  };
 }
-
-// Click an empty slot -> create a booking pre-filled with that court/date/
-// hour; click an existing block -> edit it. This IS the primary interface
-// per the organizer's own explicit recommendation, not a secondary view
-// alongside a list — the list (BookingListPanel) still exists for
-// search/filter/status-triage, but the timeline is what a staff member
-// actually books off of day-to-day.
-function DayTimeline({ courts, bookings, date, onSlotClick, onBookingClick }) {
-  const dayBookings = bookings.filter((b) => b.date === date && b.status !== "cancelled");
-  return (
-    <div>
-      <div style={styles.bracketScroll}>
-        <div style={{ display: "flex", paddingLeft: 110 }}>
-          {TIMELINE_HOURS.map((h) => (
-            <div key={h} style={{ flex: 1, minWidth: 70, fontSize: 11, color: "var(--color-text-faint)", fontFamily: "'Space Mono', monospace" }}>
-              {h % 12 === 0 ? 12 : h % 12}{h >= 12 ? "PM" : "AM"}
-            </div>
-          ))}
-        </div>
-        {courts.map((court) => (
-          <div key={court.id} style={{ display: "flex", alignItems: "center", marginTop: 8, opacity: court.active ? 1 : 0.4 }}>
-            <div style={{ width: 110, flexShrink: 0, fontWeight: 700, fontSize: 13 }}>{court.name}</div>
-            <div style={{ position: "relative", flex: 1, minWidth: TIMELINE_HOURS.length * 70, height: 44, background: "var(--color-surface)", border: "1.5px solid var(--line)", borderRadius: 8 }}>
-              {TIMELINE_HOURS.map((h, i) => (
-                <div
-                  key={h}
-                  onClick={() => court.active && onSlotClick(court, date, `${String(h).padStart(2, "0")}:00`)}
-                  style={{
-                    position: "absolute",
-                    left: `${(i / TIMELINE_HOURS.length) * 100}%`,
-                    width: `${(1 / TIMELINE_HOURS.length) * 100}%`,
-                    height: "100%",
-                    borderLeft: i > 0 ? "1px dashed var(--line)" : "none",
-                    cursor: court.active ? "pointer" : "not-allowed",
-                  }}
-                  title={court.active ? "Click to book this slot" : "Court inactive"}
-                />
-              ))}
-              {dayBookings
-                .filter((b) => b.courtId === court.id)
-                .map((b) => {
-                  const left = Math.max(0, timeToFraction(b.startTime)) * 100;
-                  const width = (Math.min(1, timeToFraction(b.endTime)) - Math.max(0, timeToFraction(b.startTime))) * 100;
-                  return (
-                    <div
-                      key={b.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBookingClick(b);
-                      }}
-                      style={{
-                        position: "absolute",
-                        left: `${left}%`,
-                        width: `${Math.max(width, 2)}%`,
-                        height: "100%",
-                        background: "var(--court)",
-                        color: "var(--chalk)",
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        cursor: "pointer",
-                        zIndex: 1,
-                      }}
-                      title={`${b.customerName} · ${formatTime(b.startTime)}–${formatTime(b.endTime)}`}
-                    >
-                      {b.customerName}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+// A court under maintenance renders as one full-width, unclickable
+// "Maintenance" band per day — reuses the existing court.maintenance flag
+// (Court Management, last sprint), no new booking/status data added.
+function maintenanceBlock(court) {
+  return {
+    id: `maint-${court.id}`,
+    label: "Maintenance",
+    timeLabel: "All day",
+    startTime: "00:00",
+    endTime: "23:59",
+    statusKey: "maintenance",
+    tooltip: [`${court.name} · Under maintenance`],
+    onClick: () => {},
+  };
 }
 
 function CalendarPanel({ courts, bookings, onSlotClick, onBookingClick }) {
   const [view, setView] = useState("day"); // "day" | "week"
   const [date, setDate] = useState(todayString());
+  const [courtFilter, setCourtFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
 
   const weekDates = useMemo(() => {
     const base = new Date(date + "T00:00:00");
@@ -596,6 +798,27 @@ function CalendarPanel({ courts, bookings, onSlotClick, onBookingClick }) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     });
   }, [date]);
+
+  // Filtering (Court/Date/Status) + Search (Player Name/Contact Number) —
+  // narrows which courts render as rows and which bookings render as
+  // blocks. Date is already the view's own date/weekDates; nothing here
+  // touches AvailabilityService/BookingService.
+  const visibleCourts = courtFilter === "all" ? courts : courts.filter((c) => c.id === courtFilter);
+  const filteredBookings = useMemo(() => {
+    let list = statusFilter === "all" ? bookings : bookings.filter((b) => b.status === statusFilter);
+    return filterBookingsByQuery(list, query);
+  }, [bookings, statusFilter, query]);
+
+  const getBlocksForCourt = (court) => {
+    const dayBookings = filteredBookings.filter((b) => b.courtId === court.id && b.date === date && b.status !== "cancelled");
+    const blocks = dayBookings.map((b) => bookingToBlock(b, court, onBookingClick));
+    return court.maintenance ? [...blocks, maintenanceBlock(court)] : blocks;
+  };
+  const getBlocksForCourtDay = (court, d) => {
+    const dayBookings = filteredBookings.filter((b) => b.courtId === court.id && b.date === d && b.status !== "cancelled");
+    const blocks = dayBookings.map((b) => bookingToBlock(b, court, onBookingClick));
+    return court.maintenance ? [...blocks, maintenanceBlock(court)] : blocks;
+  };
 
   return (
     <div>
@@ -610,34 +833,58 @@ function CalendarPanel({ courts, bookings, onSlotClick, onBookingClick }) {
       <div style={styles.checkinRow}>
         <Calendar size={16} strokeWidth={2.5} />
         <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+        <select style={styles.rotationSelect} value={courtFilter} onChange={(e) => setCourtFilter(e.target.value)}>
+          <option value="all">All Courts</option>
+          {courts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select style={styles.rotationSelect} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="all">All Statuses</option>
+          {BOOKING_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div style={styles.historySearchBox}>
+        <Search size={14} strokeWidth={2.5} />
+        <input
+          style={styles.historySearchInput}
+          placeholder="Search by customer name or contact number…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
 
       {courts.length === 0 ? (
         <p style={styles.editHint}>Add a court in Court Management before booking.</p>
+      ) : visibleCourts.length === 0 ? (
+        <p style={styles.editHint}>No courts match this filter.</p>
       ) : view === "day" ? (
-        <DayTimeline courts={courts} bookings={bookings} date={date} onSlotClick={onSlotClick} onBookingClick={onBookingClick} />
+        <ReservationTimeline
+          mode="day"
+          courts={visibleCourts}
+          date={date}
+          todayDate={todayString()}
+          hours={TIMELINE_HOURS}
+          getBlocksForCourt={getBlocksForCourt}
+          onSlotClick={(court, startTime) => onSlotClick(court, date, startTime)}
+        />
       ) : (
-        <div style={styles.editGrid}>
-          {weekDates.map((d) => {
-            const count = bookings.filter((b) => b.date === d && b.status !== "cancelled").length;
-            return (
-              <button
-                key={d}
-                type="button"
-                style={{ ...styles.editChip, ...(d === date ? styles.editChipA : {}) }}
-                onClick={() => {
-                  setDate(d);
-                  setView("day");
-                }}
-              >
-                <span style={styles.editChipName}>
-                  {formatDate(d)}
-                  <span style={styles.pickerScheduledTag}>{count} booking{count === 1 ? "" : "s"}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <ReservationTimeline
+          mode="week"
+          courts={visibleCourts}
+          weekDates={weekDates}
+          todayDate={todayString()}
+          formatDayLabel={formatDate}
+          hours={TIMELINE_HOURS}
+          getBlocksForCourtDay={getBlocksForCourtDay}
+          onDayCellClick={(court, d) => onSlotClick(court, d, "")}
+        />
       )}
     </div>
   );
@@ -744,6 +991,7 @@ export default function CourtBookingScreen({ onBack }) {
         Back
       </button>
       <SectionLabel>Court Booking & Reservations</SectionLabel>
+      <CurrentVenueBadge />
 
       <div style={styles.dashboardTabRow}>
         {TABS.map((t) => (
@@ -769,7 +1017,7 @@ export default function CourtBookingScreen({ onBack }) {
       ) : (
         <>
           {tab === "dashboard" && <DashboardPanel courts={courts} bookings={bookings} />}
-          {tab === "courts" && <CourtManagementPanel courts={courts} onReload={load} />}
+          {tab === "courts" && <CourtManagementPanel courts={courts} bookings={bookings} onReload={load} />}
           {tab === "calendar" && (
             <>
               <div style={styles.editActions}>

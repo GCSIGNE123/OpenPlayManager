@@ -1667,6 +1667,338 @@ export const styles = {
     letterSpacing: "0.03em",
     marginLeft: 8,
   },
+  // Court Management (Court Booking & Reservations) — a visual management
+  // dashboard: responsive card grid, 16:9 hero photo/illustration, large
+  // court-number heading, reusable operational-status badge, info/
+  // equipment pill rows, and an inline reservation summary. Deliberately
+  // separate names from courtGrid/courtCard above (Open Play's live
+  // Scorer court cards) — same visual family, different data/props shape,
+  // not a shared component. `courtPhotoThumb*` below is still used
+  // unchanged by the small upload preview in the Add/Edit court form
+  // (CourtPhotoEditor) — the hero card styles are new and separate.
+  courtMgmtGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
+    gap: 20,
+    margin: "16px 0",
+  },
+  courtMgmtCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 14,
+    overflow: "hidden",
+    boxShadow: "0 2px 10px rgba(20,30,45,0.06)",
+    display: "flex",
+    flexDirection: "column",
+    transition: "box-shadow 0.15s ease, transform 0.15s ease",
+  },
+  courtMgmtCardBody: {
+    padding: "16px 18px 18px 18px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  // 16:9 hero — photo when present, a professional court illustration
+  // (courtHeroIllustration below) otherwise. `aspect-ratio` keeps the
+  // proportion at any card width without JS measuring.
+  courtHeroWrap: {
+    position: "relative",
+    width: "100%",
+    aspectRatio: "16 / 9",
+    background: "var(--color-primary)",
+    overflow: "hidden",
+  },
+  courtHeroImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  courtNumberHeading: {
+    fontFamily: "'Anton', sans-serif",
+    fontWeight: 400,
+    fontSize: 26,
+    lineHeight: 1.05,
+    letterSpacing: "0.01em",
+    textTransform: "uppercase",
+    color: "var(--ink)",
+    margin: 0,
+  },
+  // The badge row a status badge sits in — deliberately generic (not
+  // "courtStatusRow") so future accolade badges (Premium Court,
+  // Competition Court, Training Court, Members Only, ...) can be appended
+  // here later without any layout change, per Future Compatibility.
+  courtBadgeRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  courtInfoPillRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  courtInfoPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+    background: "var(--chalk)",
+    border: "1px solid var(--line)",
+    borderRadius: 999,
+    padding: "3px 10px",
+  },
+  courtEquipmentRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 5,
+  },
+  courtEquipmentPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 10.5,
+    fontWeight: 600,
+    color: "var(--color-success)",
+    background: "rgba(31,138,87,0.09)",
+    borderRadius: 6,
+    padding: "2.5px 7px",
+  },
+  courtRateLine: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 4,
+    fontFamily: "'Space Mono', monospace",
+  },
+  courtRateAmount: {
+    fontSize: 17,
+    fontWeight: 700,
+    color: "var(--ink)",
+  },
+  courtRateUnit: {
+    fontSize: 11.5,
+    color: "var(--color-text-muted)",
+  },
+  courtReservationSummary: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 10,
+    borderTop: "1px solid var(--line)",
+  },
+  courtReservationStat: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 1,
+  },
+  courtReservationLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "var(--color-text-faint)",
+  },
+  courtReservationValue: {
+    fontSize: 14.5,
+    fontWeight: 800,
+    color: "var(--ink)",
+  },
+  courtMgmtCardActions: {
+    display: "flex",
+    gap: 6,
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  courtPhotoThumbWrap: {
+    position: "relative",
+    width: 56,
+    height: 56,
+    flexShrink: 0,
+  },
+  courtPhotoThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    objectFit: "cover",
+    border: "1.5px solid var(--line)",
+    display: "block",
+  },
+  courtPhotoThumbPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    background: "var(--chalk)",
+    border: "1.5px dashed var(--line)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // The Court Management operational-status badge — 7 states, reusable
+  // anywhere in the app a court's live state needs showing (not just this
+  // screen). Pure display: CourtBookingScreen.jsx derives which of the 7
+  // applies from existing signals only (court.active, court.maintenance,
+  // AvailabilityService.getCourtsReservedNow, and a currently-active
+  // booking's already-stored bookingSource) — nothing new is persisted,
+  // and neither AvailabilityService nor BookingService are touched.
+  // Named distinctly from the pre-existing `courtStatusBadge` (used by
+  // TournamentCourtsView.jsx for its own, differently-shaped
+  // available/occupied/maintenance/disabled status) to avoid colliding
+  // with it — the two are unrelated status vocabularies.
+  courtOperationalBadge: (kind) => {
+    const map = {
+      available: "var(--color-success)",
+      reserved: "var(--color-avatar-3)",
+      openPlay: "var(--color-secondary)",
+      tournament: "var(--color-avatar-4)",
+      coaching: "var(--color-warning)",
+      maintenance: "var(--color-error)",
+      inactive: "var(--color-text-faint)",
+    };
+    return {
+      fontFamily: "'Space Mono', monospace",
+      fontSize: 10.5,
+      fontWeight: 800,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      color: "var(--color-surface)",
+      background: map[kind] || map.inactive,
+      borderRadius: 999,
+      padding: "4px 10px",
+      flexShrink: 0,
+    };
+  },
+  // ---- Reservation Calendar (Interactive Reservation Timeline) ----
+  // See src/components/ReservationTimeline.jsx. Colors reuse the exact
+  // same CSS custom properties as everything else in this app (no new
+  // hex values) — status colors kept as-is per explicit direction, not
+  // reinvented for this sprint.
+  reservationStatusColor: (statusKey) => {
+    switch (statusKey) {
+      case "confirmed": // Booking.status "reserved" — 🟢
+        return { background: "var(--color-success)", color: "var(--color-surface)" };
+      case "cancelled": // 🔴
+        return { background: "var(--color-error)", color: "var(--color-surface)" };
+      case "completed": // ⚪
+        return { background: "var(--chalk)", color: "var(--color-text-muted)", border: "1.5px solid var(--line)" };
+      case "maintenance": // 🟠 — court-level, not a booking status
+        return { background: "var(--color-accent)", color: "var(--ink)" };
+      case "noShow":
+      default:
+        return { background: "var(--color-text-faint)", color: "var(--ink)" };
+    }
+  },
+  reservationScroll: {
+    overflowX: "auto",
+    paddingBottom: 4,
+  },
+  timelineHeaderRow: {
+    display: "flex",
+  },
+  timelineHeaderCell: {
+    flex: 1,
+    minWidth: 46,
+    fontSize: 11,
+    color: "var(--color-text-faint)",
+    fontFamily: "'Space Mono', monospace",
+  },
+  timelineWeekHeaderCell: (isToday) => ({
+    flex: 1,
+    minWidth: 92,
+    textAlign: "center",
+    fontSize: 11.5,
+    fontWeight: isToday ? 800 : 600,
+    color: isToday ? "var(--court)" : "var(--color-text-muted)",
+    fontFamily: "'Space Mono', monospace",
+    padding: "2px 4px",
+  }),
+  timelineRow: {
+    display: "flex",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  timelineRowLabel: {
+    width: 104,
+    flexShrink: 0,
+    fontWeight: 700,
+    fontSize: 13,
+    paddingRight: 6,
+  },
+  timelineGridTrack: {
+    position: "relative",
+    flex: 1,
+    minWidth: 0,
+    height: 44,
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 8,
+  },
+  timelineGridCell: (clickable) => ({
+    position: "absolute",
+    top: 0,
+    height: "100%",
+    cursor: clickable ? "pointer" : "not-allowed",
+  }),
+  timelineNowLine: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    width: 2,
+    background: "var(--color-error)",
+    zIndex: 2,
+    pointerEvents: "none",
+  },
+  reservationBlock: {
+    position: "absolute",
+    top: 0,
+    height: "100%",
+    borderRadius: 6,
+    fontSize: 10.5,
+    fontWeight: 700,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    padding: "0 6px",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    zIndex: 1,
+  },
+  reservationBlockTime: {
+    fontSize: 9,
+    fontWeight: 600,
+    opacity: 0.85,
+  },
+  reservationTooltip: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    marginTop: 6,
+    minWidth: 190,
+    background: "var(--ink)",
+    color: "var(--chalk)",
+    borderRadius: 8,
+    padding: "8px 10px",
+    fontSize: 11.5,
+    lineHeight: 1.5,
+    zIndex: 10,
+    boxShadow: "0 6px 16px rgba(0,0,0,0.22)",
+    pointerEvents: "none",
+  },
+  weekDayCell: {
+    position: "relative",
+    flex: 1,
+    minWidth: 92,
+    height: 40,
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 6,
+    marginRight: 4,
+    cursor: "pointer",
+  },
   courtSelect: {
     padding: "6px 8px",
     borderRadius: 6,

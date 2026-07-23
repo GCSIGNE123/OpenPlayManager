@@ -62,6 +62,7 @@ export function emptyBooking({
   numberOfPlayers = null,
   notes = null,
   bookingSource = "staffReservation",
+  venueId = null, // Phase 0: Multi-Tenant Foundation, see lib/venueModel.js — architecture-only, nothing reads this yet
 }) {
   const now = Date.now();
   return {
@@ -77,6 +78,7 @@ export function emptyBooking({
     notes: notes ? notes.trim() : null,
     status: "reserved",
     bookingSource: BOOKING_SOURCES.some((s) => s.value === bookingSource) ? bookingSource : "staffReservation",
+    venueId,
     paymentStatus: null,
     paymentMethod: null,
     price: null,
@@ -86,6 +88,17 @@ export function emptyBooking({
     createdAt: now,
     updatedAt: now,
   };
+}
+
+// Shared by BookingListPanel and the Reservation Calendar's search box
+// (CourtBookingScreen.jsx) — one implementation so "search by customer
+// name/contact number" behaves identically everywhere it appears.
+export function filterBookingsByQuery(bookings, query) {
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return bookings;
+  return bookings.filter(
+    (b) => (b.customerName || "").toLowerCase().includes(q) || (b.contactNumber || "").toLowerCase().includes(q)
+  );
 }
 
 export async function fetchAllBookings() {
