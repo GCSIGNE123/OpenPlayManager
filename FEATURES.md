@@ -18,10 +18,41 @@ Do not implement multiple unrelated features in a single task.
 
 ## 🔥 High Priority
 
+- [x] Multi-Tenant Venue Architecture
+  - Venue entity
+  - Venue dashboard
+  - Venue ownership model
+  - Venue-ready modules
+  - Future organization support
+  - Multi-tenant foundation
+  - ✅ Active Venue Workspace Architecture
+    - Active Venue Context
+    - Venue Workspace Model
+    - Multi-Venue Ready
+    - Venue-scoped Navigation
+    - Future Authentication Ready
 - [x] Court Booking & Reservations
   - Booking Dashboard
   - Court Management
+    - Court Photos
+    - Surface Type
+    - Court Status Badges (Available, Reserved, Maintenance, Inactive)
+    - ✅ Court Management UI
+      - Visual Court Cards
+      - Court Photos
+      - Surface Badges
+      - Equipment Badges
+      - Operational Statuses
+      - Reservation Summary
+      - Responsive Grid Layout
   - Booking Calendar
+    - ✅ Interactive Reservation Timeline
+    - Day View
+    - Week View
+    - Click-to-Create Reservation
+    - Click-to-Edit Reservation
+    - Conflict Detection
+    - Live Current Time Indicator
   - Availability Engine
   - Conflict Detection
   - Booking CRUD
@@ -35,11 +66,32 @@ Do not implement multiple unrelated features in a single task.
   - Full Screen Mode
   - Real-time Updates
   - Player Photos & Broadcast Experience
+  - ✅ TV Mode 2.0
+    - Broadcast-style TV layout
+    - 40% Live Matches
+    - 40% Upcoming Matches
+    - 20% Live Standings
+    - Persistent venue/session header
+    - Highlighted "Next on Court"
+    - Full-screen TV optimization
+    - Large-screen responsive design
+  - ✅ TV Mode Layout Optimization
+    - 45/35/20 display ratio
+    - Live Courts panel
+    - Compact Up Next cards
+    - Simplified Standings
+    - Future adaptive layout support
 - [x] Expected Playing Opportunities (Session Duration-Based Estimate)
   - Session Duration input (hours, decimal-friendly) replaces manual Expected Games Per Player entry
   - Configurable Average Match Duration (default 15 minutes)
   - Read-only, auto-computed estimate — never manually editable
   - Live-updates on courts/duration/registered players/match duration changes
+- [x] Player Checkout During Session
+  - Player participation status
+  - Mid-session checkout
+  - Checkout timestamp
+  - Active and Checked Out player sections
+  - Future-ready status model
 - [ ] Progressive Skill Rotation
 - [x] Progressive Skill Rotation automatically falls back to a randomized first round when all registered players belong to the same skill level. Normal Progressive Skill Rotation resumes from Round 2 onward.
 - [ ] Winner Pool Rotation
