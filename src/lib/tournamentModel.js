@@ -284,12 +284,14 @@ export function makeTournament({
   allowManualQualificationOverride = false, // Manual Qualification Override — real behavior: gates both the promote/eliminate/replace/reset actions AND (like non-standard seeding) whether the bracket auto-generates on pool completion. Editable via the Settings tab only, locked once playoffs start.
   placementMatches = "disabled", // Consolation & Placement Brackets — "disabled" | "bronzeOnly" | "consolationBracket" | "fullPlacement". Only "consolationBracket"/"fullPlacement" build tournament.consolationBracket (identical for now — 9th-16th place isn't implemented this milestone); completely independent of bronzeMatchEnabled, which keeps its own pre-existing meaning unchanged.
   bracketFormat = "singleElimination", // Double Elimination Foundation — "singleElimination" (default, existing PlayoffBracketGenerator) | "doubleElimination" (new DoubleEliminationEngine, builds tournament.doubleEliminationBracket instead of tournament.bracket). Picks which engine builds the PLAYOFF bracket after pool qualification — pool play/scheduling (tournament.format) is completely untouched by this setting.
+  venueId = null, // Phase 0: Multi-Tenant Foundation, see lib/venueModel.js — architecture-only, nothing reads this yet. Covers both a plain Tournament and a League Season, since a season is built via this same factory (see lib/leagueModel.js).
 }) {
   const now = Date.now();
   const tournament = {
     id: uid(),
     name: name || `${mode === "doubles" ? "Doubles" : "Singles"} ${format === "roundRobin" ? "Round Robin" : format}`,
     sessionCode,
+    venueId,
     format,
     mode, // 'singles' | 'doubles'
     courtsCount,

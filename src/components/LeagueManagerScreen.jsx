@@ -8,8 +8,10 @@ import { fetchAllPlayers } from "../lib/playerDatabase.js";
 import { fetchAllMembershipPlans } from "../lib/membershipPlans.js";
 import { defaultEligibilityRequirements } from "../engines/TournamentSettings.js";
 import { MembershipService } from "../engines/MembershipService.js";
+import { useActiveVenue } from "../context/ActiveVenueContext.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import LeagueSeasonDashboardView from "./LeagueSeasonDashboardView.jsx";
+import CurrentVenueBadge from "./CurrentVenueBadge.jsx";
 
 const membershipService = new MembershipService();
 
@@ -264,6 +266,7 @@ function NewSeasonForm({ league, allPlayers, membershipPlans, onCancel, onCreate
 // tool an organizer opens from the landing page, same footprint as
 // TournamentTemplatesScreen.
 export default function LeagueManagerScreen({ onBack }) {
+  const { activeVenueId } = useActiveVenue();
   const [leagues, setLeagues] = useState([]);
   const [allPlayers, setAllPlayers] = useState([]);
   const [membershipPlans, setMembershipPlans] = useState([]);
@@ -295,7 +298,7 @@ export default function LeagueManagerScreen({ onBack }) {
 
   const createLeague = async () => {
     if (!newLeagueName.trim()) return;
-    const league = await saveLeague(makeLeague({ name: newLeagueName }));
+    const league = await saveLeague(makeLeague({ name: newLeagueName, venueId: activeVenueId }));
     setLeagues([...leagues, league]);
     setNewLeagueName("");
     setCreatingLeague(false);
@@ -376,6 +379,7 @@ export default function LeagueManagerScreen({ onBack }) {
         Back
       </button>
       <SectionLabel>Leagues</SectionLabel>
+      <CurrentVenueBadge />
       {error && <p style={styles.editWarning}>{error}</p>}
 
       {!creatingLeague ? (

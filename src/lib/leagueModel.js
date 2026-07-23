@@ -20,12 +20,16 @@ import { LEAGUE_PREFIX, LEAGUE_SEASON_PREFIX } from "./constants.js";
 import { makeTournament, makeCourt, computeRoundStatus } from "./tournamentModel.js";
 import { defaultEligibilityRequirements } from "../engines/TournamentSettings.js";
 
-// League = { id, name, clubId, createdAt, updatedAt } — a recurring
-// club-level container; a single League can run many LeagueSeasons over
-// time (e.g. "Tuesday Night League" → Fall 2026, Winter 2027, ...).
-export function makeLeague({ name, clubId = null }) {
+// League = { id, name, clubId, venueId, createdAt, updatedAt } — a
+// recurring club-level container; a single League can run many
+// LeagueSeasons over time (e.g. "Tuesday Night League" → Fall 2026,
+// Winter 2027, ...). `clubId` predates the Venue entity and has never
+// been wired to anything real; `venueId` (Phase 0: Multi-Tenant
+// Foundation, see lib/venueModel.js) is the new, real ownership hook —
+// both are kept, nullable, architecture-only.
+export function makeLeague({ name, clubId = null, venueId = null }) {
   const now = Date.now();
-  return { id: uid(), name: name.trim(), clubId, createdAt: now, updatedAt: now };
+  return { id: uid(), name: name.trim(), clubId, venueId, createdAt: now, updatedAt: now };
 }
 
 export async function fetchAllLeagues() {

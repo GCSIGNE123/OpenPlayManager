@@ -73,6 +73,7 @@ export function emptyPlayerRecord({
   expirationDate = null,
   emergencyContact = null,
   duprId = null,
+  venueId = null, // Phase 0: Multi-Tenant Foundation, see lib/venueModel.js — architecture-only, nothing reads this yet
 }) {
   const now = Date.now();
   return {
@@ -88,6 +89,7 @@ export function emptyPlayerRecord({
     contactNumber: contactNumber ? contactNumber.trim() : null,
     notes: notes ? notes.trim() : null,
     active: true,
+    venueId,
     memberId,
     membershipStatus,
     membershipPlanId,

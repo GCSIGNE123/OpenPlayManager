@@ -37,6 +37,7 @@ export class BookingService {
       numberOfPlayers: fields.numberOfPlayers,
       notes: fields.notes,
       bookingSource: fields.bookingSource,
+      venueId: fields.venueId ?? null, // Phase 0/Multi-Venue Workspace passthrough only — no conflict/availability logic reads this
     });
     return saveBooking(booking);
   }

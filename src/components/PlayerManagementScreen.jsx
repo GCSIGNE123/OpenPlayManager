@@ -5,9 +5,11 @@ import { fetchAllPlayers, savePlayerRecord, filterPlayersByQuery, emptyPlayerRec
 import { fetchAllPlayerRatings, fetchPlayerRating } from "../lib/ratingModel.js";
 import { RatingEngine } from "../engines/RatingEngine.js";
 import { resizeImageToAvatar } from "../lib/utils.js";
+import { useActiveVenue } from "../context/ActiveVenueContext.jsx";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
+import CurrentVenueBadge from "./CurrentVenueBadge.jsx";
 
 const ratingEngine = new RatingEngine();
 
@@ -311,6 +313,7 @@ function PlayerProfile({ player, ratingView, onBack, onSaved }) {
 // model, do not duplicate business logic." Photo is required, matching
 // the same rule Create Session's new-player form already enforces.
 function AddPlayerForm({ onBack, onCreated }) {
+  const { activeVenueId } = useActiveVenue();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [nickname, setNickname] = useState("");
@@ -334,7 +337,7 @@ function AddPlayerForm({ onBack, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      const record = emptyPlayerRecord({ firstName: trimmedFirst, lastName, nickname, photo, skill, contactNumber });
+      const record = emptyPlayerRecord({ firstName: trimmedFirst, lastName, nickname, photo, skill, contactNumber, venueId: activeVenueId });
       await savePlayerRecord(record);
       onCreated(record);
     } catch (e) {
@@ -422,6 +425,7 @@ export default function PlayerManagementScreen({ onBack }) {
         Back
       </button>
       <SectionLabel>Player Management</SectionLabel>
+      <CurrentVenueBadge />
 
       {loading ? (
         <p style={styles.editHint}>Loading players…</p>
