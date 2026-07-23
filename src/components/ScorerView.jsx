@@ -10,6 +10,7 @@ import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
+import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
 
 export default function ScorerView({
   state,
@@ -37,6 +38,7 @@ export default function ScorerView({
   undoLastRound,
   toggleSkipPlayer,
   removePlayer,
+  checkoutPlayer,
   rotationMode,
   expectedGamesPerPlayer,
   setExpectedGamesPerPlayer,
@@ -52,6 +54,11 @@ export default function ScorerView({
   reservedCourtNumbers,
 }) {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  // Player Checkout During Open Play — see PROJECT.md. Confirming a
+  // mid-match checkout from a live court's player chip (courts render
+  // deep via CourtCard -> TeamRow -> PlayerChip, so this state lives here
+  // rather than threading a dialog down through all three).
+  const [confirmingCheckoutId, setConfirmingCheckoutId] = useState(null);
   const nextMatchups = state.nextMatchups || [];
   const reserved = reservedMatchupIds(nextMatchups);
   const manualIds = manuallyReservedIds(state.courts);
@@ -62,7 +69,12 @@ export default function ScorerView({
   // started yet, real-world Open Play organizers need both)
   const unassignedPlayers = state.queueIds
     .map((id) => state.players[id])
-    .filter((p) => p && !reserved.has(p.id) && !manualIds.has(p.id));
+    .filter((p) => p && !reserved.has(p.id) && !manualIds.has(p.id) && p.status !== "CHECKED_OUT");
+  // Player Checkout During Open Play — see PROJECT.md. Rendered as its own
+  // section in WaitingPlayersPanel, separate from the active waiting list.
+  const checkedOutPlayers = Object.values(state.players)
+    .filter((p) => p.status === "CHECKED_OUT")
+    .sort((a, b) => (b.checkedOutAt || 0) - (a.checkedOutAt || 0));
   // live-court substitution AND manual court slot-filling share this same
   // pool — both need "anyone not currently playing and not already spoken
   // for elsewhere," which is exactly what this is (nothing to exclude by
@@ -223,7 +235,13 @@ export default function ScorerView({
         </>
       )}
 
-      <WaitingPlayersPanel players={unassignedPlayers} onToggleSkip={toggleSkipPlayer} onRemove={removePlayer} />
+      <WaitingPlayersPanel
+        players={unassignedPlayers}
+        onToggleSkip={toggleSkipPlayer}
+        onRemove={removePlayer}
+        onCheckout={checkoutPlayer}
+        checkedOutPlayers={checkedOutPlayers}
+      />
 
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
@@ -278,6 +296,7 @@ export default function ScorerView({
                 pairPartnerNumber={pairPartnerNumber}
                 poolingMode={poolingActive}
                 reserved={isReserved}
+                onRequestCheckout={checkoutPlayer ? (id) => setConfirmingCheckoutId(id) : null}
               />
             );
           });
@@ -293,6 +312,17 @@ export default function ScorerView({
           showThresholds={rotationMode === "progressiveSkill"}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
+        />
+      )}
+
+      {confirmingCheckoutId && state.players[confirmingCheckoutId] && (
+        <CheckoutConfirmDialog
+          player={state.players[confirmingCheckoutId]}
+          onCancel={() => setConfirmingCheckoutId(null)}
+          onConfirm={(id) => {
+            checkoutPlayer(id);
+            setConfirmingCheckoutId(null);
+          }}
         />
       )}
     </div>

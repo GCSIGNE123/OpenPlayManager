@@ -245,9 +245,37 @@ export default function HistoryView({ matchHistory, players }) {
     return toggledRounds.has(round) ? !defaultOpen : defaultOpen;
   };
 
+  // Player Checkout During Open Play — see PROJECT.md. Pure derived data
+  // (nothing new persisted): "Players Started" is everyone who ever
+  // checked in this session; "Checked Out Early" is however many of them
+  // have status "CHECKED_OUT"; "Players Finished" is the rest. Reusable
+  // as-is for a future real Session Summary/report — this is the same
+  // read-only aggregation pattern CourtBookingScreen.jsx's DashboardPanel
+  // already uses.
+  const startedPlayers = Object.values(players).filter((p) => p.checkedIn);
+  const checkedOutCount = startedPlayers.filter((p) => p.status === "CHECKED_OUT").length;
+  const finishedCount = startedPlayers.length - checkedOutCount;
+
   return (
     <div>
       <SectionLabel>Game History</SectionLabel>
+
+      {startedPlayers.length > 0 && (
+        <div style={styles.sessionInfoCard}>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Players Started</span>
+            <span style={styles.sessionInfoValue}>{startedPlayers.length}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Players Finished</span>
+            <span style={styles.sessionInfoValue}>{finishedCount}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Checked Out Early</span>
+            <span style={styles.sessionInfoValue}>{checkedOutCount}</span>
+          </div>
+        </div>
+      )}
 
       {matchHistory.length > 0 && (
         <div style={styles.historyToolbar}>

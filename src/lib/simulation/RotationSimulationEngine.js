@@ -54,6 +54,8 @@ function buildPlayers(playerCount, skillSplit) {
       skill,
       checkedIn: true,
       skipped: false,
+      status: "ACTIVE",
+      checkedOutAt: null,
       games: 0,
       wins: 0,
       losses: 0,

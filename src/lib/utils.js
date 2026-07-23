@@ -10,6 +10,26 @@ export function generateRandomCode(length = 6) {
   return code;
 }
 
+// Lists every Open Play/Tournament session record — nothing previously
+// needed to enumerate ALL sessions at once (every other screen loads one
+// session by its own code), but Phase 0's Venue Dashboard does, to count
+// Active Open Play Sessions per venue. Same list+get+JSON.parse pattern as
+// every fetchAll* in this app (lib/playerDatabase.js, lib/courtDatabase.js, ...).
+export async function fetchAllSessions() {
+  const { keys } = await window.storage.list(STORAGE_PREFIX, true);
+  const records = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const res = await window.storage.get(key, true);
+        return JSON.parse(res.value);
+      } catch (e) {
+        return null;
+      }
+    })
+  );
+  return records.filter(Boolean);
+}
+
 // shrink a photo to a small square thumbnail so many player photos stay well
 // under the shared-session storage limit
 export function resizeImageToAvatar(file, size = 128) {
@@ -186,6 +206,17 @@ export function getRotationEngine(rotationMode) {
   return balancedEngine;
 }
 
+// Player Checkout During Open Play — see PROJECT.md. A player is eligible
+// for future match generation only while ACTIVE: not sitting out
+// (skipped, temporary/reversible) and not checked out (status
+// "CHECKED_OUT", permanent for the rest of the session). One shared
+// predicate so refreshNextMatchups/regenerateNextMatchups (and anything
+// else that ever needs this question) can't drift out of sync with each
+// other.
+function isEligibleForMatchmaking(player) {
+  return Boolean(player) && !player.skipped && player.status !== "CHECKED_OUT";
+}
+
 // appends any additional ready-to-play matchups the active rotation engine
 // can build from waiting players not already locked into one (and not
 // sitting out — players[id].skipped) — existing matchups are left
@@ -204,7 +235,7 @@ export function getRotationEngine(rotationMode) {
 // when an organizer deliberately asks for the best match available *right
 // now* with whoever's actually waiting.
 export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
-  const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
+  const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase });
   return [...existingMatchups, ...newMatchups];
 }
@@ -218,7 +249,7 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // something that fires silently after every check-in.
 export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
   const locked = existingMatchups.filter((m) => m.locked);
-  const waitingIds = queueIds.filter((id) => !players[id]?.skipped);
+  const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked, phase }, true);
   return [...locked, ...newMatchups];
 }

@@ -1,8 +1,8 @@
-import { Repeat, Undo2 } from "lucide-react";
+import { LogOut, Repeat, Undo2 } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 
-export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick }) {
+export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick }) {
   if (!player) return null;
   return (
     <div style={styles.playerChip}>
@@ -26,6 +26,21 @@ export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueu
       {onSubClick && (
         <button style={styles.subBtn} onClick={onSubClick} aria-label={`substitute ${player.name}`}>
           <Repeat size={11} strokeWidth={2.5} />
+        </button>
+      )}
+      {onCheckoutClick && (
+        // Player Checkout During Open Play — see PROJECT.md. Lets the
+        // organizer check a player out WHILE they're on a live court: the
+        // current match is left completely untouched (still plays out
+        // normally to completion) — only their eligibility for whatever
+        // comes after this match ends.
+        <button
+          style={styles.subBtn}
+          onClick={onCheckoutClick}
+          aria-label={`check out ${player.name}`}
+          title="Check out — this match continues; no future matches will be generated for them"
+        >
+          <LogOut size={11} strokeWidth={2.5} />
         </button>
       )}
     </div>

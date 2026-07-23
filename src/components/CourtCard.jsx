@@ -25,6 +25,7 @@ export default function CourtCard({
   pairPartnerNumber,
   poolingMode,
   reserved,
+  onRequestCheckout,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
   const isManual = court.assignmentMode === "manual";
@@ -328,6 +329,7 @@ export default function CourtCard({
             leading={court.scoreA > court.scoreB}
             onRequestSub={!readOnly ? startSub : null}
             onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
+            onRequestCheckout={!readOnly ? onRequestCheckout : null}
           />
           <div style={styles.vsLine} />
           <TeamRow
@@ -340,6 +342,7 @@ export default function CourtCard({
             leading={court.scoreB > court.scoreA}
             onRequestSub={!readOnly ? startSub : null}
             onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
+            onRequestCheckout={!readOnly ? onRequestCheckout : null}
           />
           {!readOnly && (
             <div style={styles.courtActionsRow}>

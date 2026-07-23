@@ -15,6 +15,23 @@ export const ACHIEVEMENT_PREFIX = "opl-achievement-"; // one KV record per playe
 export const QUALIFICATION_AUDIT_PREFIX = "opl-qualaudit-"; // one KV record per tournament holding its full Manual Qualification Override audit trail array — see lib/qualificationAuditModel.js
 export const COURT_PREFIX = "opl-court-"; // one KV record per physical club Court, shared — see lib/courtDatabase.js. The first PERSISTENT Court entity in this app: Open Play's state.courts and Tournament's tournament.courts are both still freshly-generated, numbered-only, container-scoped arrays with no identity beyond that one session/tournament — this is deliberately a separate, new registry (Court Booking & Reservations' "master" court list), not a rename/migration of either.
 export const BOOKING_PREFIX = "opl-booking-"; // one KV record per court reservation, shared — see lib/bookingModel.js
+export const VENUE_PREFIX = "opl-venue-"; // one KV record per Venue (a physical pickleball facility), shared — see lib/venueModel.js. Phase 0: Multi-Tenant Foundation — the new top-level entity every other module is being prepared to hang off of (via a venueId field), but nothing is backfilled/migrated onto it yet.
+export const ORGANIZATION_PREFIX = "opl-organization-"; // one KV record per Organization (Pickleball Club / Coach / Academy / Corporate Group / Tournament Organizer), shared — see lib/organizationModel.js. RESERVED ARCHITECTURE ONLY this phase: no screen reads or writes these yet, per explicit direction not to build Organization Management.
+
+// Prepared future roles — see PROJECT.md's Multi-Tenant Foundation section.
+// A plain descriptive catalog, NOT wired into any authorization check —
+// this app's existing PIN-based gates (SCORER_PIN/ADMIN_PIN) are the only
+// real auth today and are completely unchanged by this list. Reserved so a
+// future real auth system has an agreed vocabulary to implement against.
+export const PLATFORM_ROLES = [
+  { value: "platformOwner", label: "Platform Owner" },
+  { value: "venueOwner", label: "Venue Owner" },
+  { value: "venueManager", label: "Venue Manager" },
+  { value: "receptionStaff", label: "Reception Staff" },
+  { value: "coach", label: "Coach" },
+  { value: "organizationAdmin", label: "Organization Admin" },
+  { value: "player", label: "Player" },
+];
 
 export const SKILL_DIVISIONS = ["Beginner", "Intermediate", "Advanced", "Open"]; // default suggested division names — a League Season can use any of these or a custom name; "future divisions configurable" just means any label works, not a separate catalog to maintain
 export const SCORER_PIN = "1234"; // demo-only gate — a real deploy would use real umpire accounts
@@ -81,15 +98,30 @@ export const TOURNAMENT_FORMATS = [
   { value: "doubleElimination", label: "Double Elimination" },
 ];
 
+// Player Checkout During Open Play — see PROJECT.md. A session player's
+// participation status, separate from `skipped` (a temporary, reversible
+// per-round sit-out that still counts as "waiting"). CHECKED_OUT is
+// permanent for the rest of the session: the player is excluded from all
+// future match generation, but their record/stats/history are never
+// touched or deleted. Deliberately a plain array (not hardcoded string
+// literals scattered around) so a future status (AWAY/INJURED/SUSPENDED)
+// is one more entry here, never a data migration — this sprint only
+// implements ACTIVE and CHECKED_OUT, per explicit scope.
+export const PLAYER_STATUSES = ["ACTIVE", "CHECKED_OUT"];
+
 // id -> {
 //   id, name, photo, skill ('beginner' | 'intermediate'), checkedIn, skipped,
+//   status ('ACTIVE' | 'CHECKED_OUT' — see PLAYER_STATUSES above),
+//   checkedOutAt (ms epoch | null — set once, when status becomes
+//   CHECKED_OUT; never cleared, there is no un-checkout this sprint),
 //   games, wins, losses, streak, lastResult, pointsFor, pointsAgainst,
 //   partnerCounts ({ id: count }), recentPartnerIds ([id, id] most-recent-first),
 //   opponentCounts ({ id: count }), lastOpponentIds ([id, id]), recentOpponentIds ([id...]),
 //   courtCounts ({ courtNumber: count }), lastCourt,
 // }
 export const defaultState = {
-  venue: "",
+  venue: "", // the session's own display TITLE (e.g. "Ormoc City Saturday Open Play") — unrelated to the Venue entity below despite the name; kept exactly as-is for backwards compatibility
+  venueId: null, // Phase 0: Multi-Tenant Foundation — nullable link to a Venue record (lib/venueModel.js). Architecture-only: null for every session created before or during this phase, and nothing yet reads it to change behavior
   courts: [],
   players: {},
   queueIds: [],

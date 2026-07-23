@@ -23,6 +23,7 @@ import { fetchAllCourts as fetchAllClubCourts } from "./lib/courtDatabase.js";
 import { fetchAllBookings } from "./lib/bookingModel.js";
 import { getCourtsReservedNow } from "./engines/AvailabilityService.js";
 import { AchievementService } from "./engines/AchievementService.js";
+import { useActiveVenue } from "./context/ActiveVenueContext.jsx";
 import LandingScreen from "./components/LandingScreen.jsx";
 import AccessScreen from "./components/AccessScreen.jsx";
 import AdminLogin from "./components/AdminLogin.jsx";
@@ -43,6 +44,7 @@ import PlayerPortalScreen from "./components/PlayerPortalScreen.jsx";
 import UserManagementScreen from "./components/UserManagementScreen.jsx";
 import LeagueManagerScreen from "./components/LeagueManagerScreen.jsx";
 import PlayerManagementScreen from "./components/PlayerManagementScreen.jsx";
+import VenueManagementScreen from "./components/VenueManagementScreen.jsx";
 import CourtBookingScreen from "./components/CourtBookingScreen.jsx";
 import RatingsScreen from "./components/RatingsScreen.jsx";
 import TournamentHistoryScreen from "./components/TournamentHistoryScreen.jsx";
@@ -70,7 +72,8 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
 }
 
 export default function PickleballOpenPlay() {
-  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | courtBooking | ratings
+  const { activeVenueId } = useActiveVenue();
+  const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | venueManagement | courtBooking | ratings
   const [sessionCode, setSessionCode] = useState(null);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
@@ -325,6 +328,8 @@ export default function PickleballOpenPlay() {
           skill: p.skill === "intermediate" ? "intermediate" : "beginner",
           checkedIn: false,
           skipped: false,
+          status: "ACTIVE", // Player Checkout — see PLAYER_STATUSES in lib/constants.js
+          checkedOutAt: null,
           games: 0,
           wins: 0,
           losses: 0,
@@ -344,6 +349,7 @@ export default function PickleballOpenPlay() {
       const courts = Array.from({ length: courtsCount }, (_, i) => emptyCourt(i + 1));
       const initial = {
         venue,
+        venueId: activeVenueId, // Multi-Venue Workspace Architecture — see PROJECT.md; a plain passthrough of the active venue context, nothing yet reads it to change behavior
         courts,
         players,
         queueIds: [],
@@ -579,6 +585,8 @@ export default function PickleballOpenPlay() {
         skill: skillInput === "intermediate" ? "intermediate" : "beginner",
         checkedIn: true,
         skipped: false,
+        status: "ACTIVE",
+        checkedOutAt: null,
         games: 0,
         wins: 0,
         losses: 0,
@@ -1068,6 +1076,28 @@ export default function PickleballOpenPlay() {
     save({ ...state, players });
   };
 
+  // Player Checkout During Open Play — see PROJECT.md. Unlike
+  // removePlayer below, this NEVER deletes the player record: history,
+  // stats (games/wins/losses/rating), and court/partner/opponent history
+  // all stay exactly as they are — only future participation ends. Safe
+  // to call whether the player is currently waiting, in an upcoming
+  // matchup, or on a live court (mid-match): if they're on a live court,
+  // this deliberately does NOT touch that court/teamA/teamB — the match
+  // finishes normally, and the player simply won't be requeued into
+  // eligibility once it ends (see isEligibleForMatchmaking in
+  // lib/utils.js, and the checked-in/waiting render filters below).
+  const checkoutPlayer = (id) => {
+    const p = state.players[id];
+    if (!p || p.status === "CHECKED_OUT") return;
+    const players = { ...state.players, [id]: { ...p, status: "CHECKED_OUT", checkedOutAt: Date.now() } };
+    const queueIds = state.queueIds.filter((qid) => qid !== id);
+    const nextMatchups = (state.nextMatchups || []).filter(
+      (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
+    );
+    clearOneShotSnapshots();
+    save({ ...state, players, queueIds, nextMatchups });
+  };
+
   // permanently removes a waiting (not currently on a live court) player
   // from the session — substitute them off a court first if needed
   const removePlayer = (id) => {
@@ -1131,6 +1161,7 @@ export default function PickleballOpenPlay() {
           onPlayerPortal={() => setScreen("portal")}
           onLeagues={() => setScreen("leagues")}
           onPlayerManagement={() => setScreen("playerManagement")}
+          onVenueManagement={() => setScreen("venueManagement")}
           onCourtBooking={() => setScreen("courtBooking")}
           onRatings={() => setScreen("ratings")}
           onTournamentHistory={() => setScreen("tournamentHistory")}
@@ -1153,6 +1184,8 @@ export default function PickleballOpenPlay() {
       {screen === "leagues" && <LeagueManagerScreen onBack={goToLanding} />}
 
       {screen === "playerManagement" && <PlayerManagementScreen onBack={goToLanding} />}
+
+      {screen === "venueManagement" && <VenueManagementScreen onBack={goToLanding} />}
 
       {screen === "courtBooking" && <CourtBookingScreen onBack={goToLanding} />}
 
@@ -1227,7 +1260,16 @@ export default function PickleballOpenPlay() {
       )}
 
       {screen === "app" && (() => {
-        const waitingPlayers = state.queueIds.map((id) => state.players[id]).filter(Boolean);
+        // Checked-out players must never appear in the Waiting Queue —
+        // filtered here (not just at the matchmaking level) so this holds
+        // even right after a mid-match checkout's court finishes and the
+        // existing requeue logic pushes them back into queueIds.
+        const waitingPlayers = state.queueIds
+          .map((id) => state.players[id])
+          .filter((p) => p && p.status !== "CHECKED_OUT");
+        const checkedOutPlayers = Object.values(state.players)
+          .filter((p) => p.status === "CHECKED_OUT")
+          .sort((a, b) => (b.checkedOutAt || 0) - (a.checkedOutAt || 0));
         const registeredNotHere = Object.values(state.players).filter((p) => !p.checkedIn);
         const openCourtsCount = state.courts.filter((c) => c.status === "open").length;
 
@@ -1382,6 +1424,7 @@ export default function PickleballOpenPlay() {
                   undoLastRound={undoLastRound}
                   toggleSkipPlayer={toggleSkipPlayer}
                   removePlayer={removePlayer}
+                  checkoutPlayer={checkoutPlayer}
                   rotationMode={state.rotationMode || "continuous"}
                   expectedGamesPerPlayer={state.expectedGamesPerPlayer || 6}
                   setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
