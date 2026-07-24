@@ -81,6 +81,17 @@ Do not implement multiple unrelated features in a single task.
     - Compact Up Next cards
     - Simplified Standings
     - Future adaptive layout support
+  - ✅ TV Mode Layout Rebalancing
+    - 45/20/35 display ratio (Live Courts unchanged, Up Next narrowed, Standings widened)
+    - Up Next typography/spacing rescaled for the narrower column
+    - Standings gains more room for names before truncation
+  - ✅ TV Mode - Up Next Card Optimization
+    - Layout ratio (45/20/35) unchanged
+    - Smaller avatars (~12%) and tighter avatar/name/VS spacing
+    - Smaller, less dominant "NEXT ON COURT" badge
+    - Slightly smaller player-name font so more characters show before truncating
+    - Non-highlighted cards get their own more compact padding
+    - First upcoming match still visually emphasized (accent border/background/badge)
 - [x] Expected Playing Opportunities (Session Duration-Based Estimate)
   - Session Duration input (hours, decimal-friendly) replaces manual Expected Games Per Player entry
   - Configurable Average Match Duration (default 15 minutes)
@@ -92,6 +103,11 @@ Do not implement multiple unrelated features in a single task.
   - Checkout timestamp
   - Active and Checked Out player sections
   - Future-ready status model
+- [x] Guaranteed Upcoming Match Queue
+  - Upcoming matches are always generated automatically whenever complete matches can be formed from waiting players (no manual "Regenerate matchups" needed)
+  - Skill balancing is preferred but never blocks play — same-skill pairings are used automatically when a balanced mix isn't available
+  - Existing fairness rules (waiting time, fewest games played, avoid repeat teammates/opponents) remain the primary pairing algorithm throughout
+  - The Upcoming Match Queue never sits empty while 4+ waiting players could form a complete match
 - [ ] Progressive Skill Rotation
 - [x] Progressive Skill Rotation automatically falls back to a randomized first round when all registered players belong to the same skill level. Normal Progressive Skill Rotation resumes from Round 2 onward.
 - [ ] Winner Pool Rotation

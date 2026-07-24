@@ -85,6 +85,45 @@ Verified 2026-07-23 against a live session (4 registered players, 1 court initia
 
 Automated: `node scripts/run-acceptance-test.mjs` re-run after this feature's changes to `lib/utils.js`'s matchup-generation filters — still 42/42 passed, confirming no regression to existing rotation/matchmaking logic.
 
+### Guaranteed Upcoming Match Queue
+Verified 2026-07-23 via a standalone script calling `refreshNextMatchups` directly with synthetic waiting pools (same approach `scripts/run-acceptance-test.mjs` uses for pure-function testing) — **not** through the live browser UI. Live UI verification was attempted first but blocked: this build's walk-in check-in path requires a player photo (`quickAddCheckIn` in `PickleballOpenPlay.jsx`, an unrelated pre-existing rule from Player Photos & Broadcast Experience), and the browser automation environment has no file-upload capability (a previously-documented limitation — see Player Registration section above). The built-in "Developer: Rotation Simulator" was also not usable for this because it exclusively drives Progressive Skill Rotation, not the Continuous-queue `BalancedRotationEngine` this sprint changes. A human tester with real file-upload access should still do one live pass checking in an all-beginner group and confirming Up Next populates without clicking Regenerate.
+- [x] **4 waiting (all beginner).** 1 complete match generated, 0 remain.
+- [x] **6 waiting (all beginner).** 1 complete match generated, 2 remain (can't form a 2nd complete match).
+- [x] **8 waiting (all beginner).** 2 complete matches generated, 0 remain.
+- [x] **9 waiting (all beginner).** 2 complete matches generated, 1 remains.
+- [x] **12 waiting (all beginner).** 3 complete matches generated, 0 remain.
+- [x] **13 waiting (all beginner).** 3 complete matches generated, 1 remains.
+- [x] **17 waiting (all beginner).** 4 complete matches generated, 1 remains.
+- [x] **9 waiting (all intermediate).** Same as all-beginner — 2 matches, 1 remains; confirms the fallback isn't beginner-specific.
+- [x] **Mixed 4 beginner / 4 intermediate.** 2 matches generated, and every team is still a balanced beginner+intermediate pair — confirms skill balancing is still attempted first and used whenever possible, not skipped outright.
+- [x] **Below the 4-player threshold.** 3 waiting (any skill mix) produces 0 matches, all 3 remain waiting — confirms the guarantee only applies once a complete match (4 players) is actually possible.
+- [x] **Existing fairness algorithm unchanged.** `pairLeftovers`/`scorePartner`/`scoreOpponents` (waiting-time-via-partner-recency, fewest-games-via-partner-count, repeat-teammate/opponent avoidance) were not modified — code-reviewed to confirm the only change is `allowSameSkillFallback` flipping from `false` to `true` in `refreshNextMatchups`'s call to the engine; the scoring/selection logic inside the fallback itself is identical to what "Regenerate matchups" already used.
+- [x] **No regression to existing behavior.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed (none of the existing assertions depended on the old strict-skill-blocking behavior).
+
+### TV Mode Layout Rebalancing
+Verified 2026-07-24 against a live session (14 players, 4 courts, Continuous queue) with 1 live court, 2 queued Up Next matchups, and 8 completed-game standings rows — driven through the real Scorer flow (check-in, Fill all open courts, End match) rather than synthetic data.
+- [x] **Grid ratio is exactly 45/20/35.** Measured via direct `getComputedStyle(...).gridTemplateColumns` on the three-column grid, both at the browser pane's default viewport and at 1920×1080 — `842.391px / 374.391px / 655.188px` = 45.0% / 20.0% / 35.0% in both cases (confirms the ratio doesn't drift with viewport size).
+- [x] **Live Courts unchanged.** Court cards, sizing tiers, and grid breakpoints were not touched by this sprint; visually identical to the prior TV Mode Layout Optimization sprint.
+- [x] **Up Next renders correctly with 2 queued cards at the new 20% width.** Both cards fully visible, the first correctly shows the "NEXT ON COURT" badge + accent glow, team names truncate via the existing ellipsis (`teamInlineNames`) rather than overflowing or breaking the card layout.
+- [x] **Standings uses the extra width.** At 1920×1080, direct DOM measurement (`scrollWidth` vs `clientWidth` on the standings list) confirmed **no horizontal overflow** — the widened 35% column gives `standingsName`'s `flex:1` more room, reducing truncation versus the old 20% column.
+- [ ] **Standings row truncation at smaller/narrower browser windows.** At the browser automation tool's cramped default viewport (~711px total), a horizontal scrollbar briefly appeared under Standings — traced to the narrow test viewport itself (a fixed-px inner element becoming wider than the visible pane), not a real layout bug: re-measured directly at the actual target resolution (1920×1080, what a real TV runs) and confirmed zero overflow there. Not re-tested at in-between browser-window widths (e.g. a laptop preview at 1366px) — worth a spot-check by a human tester, though nothing in the changed styles is viewport-width-dependent (the grid uses fixed percentages, not breakpoints).
+- [x] **No matchmaking/queue/scoring logic touched.** Verified by code diff (only `tvOpenPlayStyles.js` and comments in `OpenPlayTVModePage.jsx` changed) and by this session's own matchmaking behaving identically to prior sprints (14 waiting → 3 auto-generated matchups, 2 remained, per the Guaranteed Upcoming Match Queue sprint's own rules — unaffected).
+- [x] **No regression.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed.
+
+### TV Mode - Up Next Card Optimization
+Verified 2026-07-24 against the same live session as TV Mode Layout Rebalancing above (14 players, 1 live court, 2 queued Up Next matchups), reused rather than rebuilt so the comparison is apples-to-apples.
+- [x] **Layout ratio unchanged.** Re-measured via `getComputedStyle(...).gridTemplateColumns` at 1920×1080 after this sprint's changes — still exactly 45.0% / 20.0% / 35.0%, confirming no drift from the Up Next-only styling changes.
+- [x] **No horizontal overflow.** `scrollWidth` vs `clientWidth` on the Up Next column at 1920×1080 — no overflow.
+- [x] **Smaller avatars.** Photo sizes dropped from 30/26/22px to 26/23/19px per tier (~13% reduction, within the requested 10-15% range).
+- [x] **Smaller, less dominant "NEXT ON COURT" badge.** Padding reduced `3px 9px` → `2px 6px`, font size reduced; visually confirmed via screenshot — the badge no longer competes with the team names for attention.
+- [x] **Tighter avatar/name/VS spacing.** `teamInlineRow` gap 8px → 5px, avatar overlap -10px → -8px, `upNextVs` padding tightened with `lineHeight: 1` added.
+- [x] **Player names prioritized.** `upNextPosition` ("#1") and `upNextCourt` de-emphasized (smaller, unchanged faint color); name font size is the largest text element in the card.
+- [x] **First upcoming match still visually emphasized.** Accent border, tinted background, and the (now-smaller) badge all preserved on the first card only — confirmed via screenshot, clearly distinguishable from the second card.
+- [x] **Additional matches are more compact.** `upNextCard`'s padding is now conditional on `isNext` — non-first cards get noticeably less padding; confirmed via screenshot the second card renders visibly shorter than the first.
+- [x] **No logic changes.** Verified by diff — only `tvOpenPlayStyles.js` changed (styling constants only); the session's matchmaking/queue/scoring behavior (2 matchups from the same waiting pool) was unaffected.
+- [x] **No regression.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed.
+- [ ] **Readability from several meters away.** Not independently verifiable in this environment (no physical distance/display) — same limitation as every prior TV Mode sprint's own testing note. Font sizes were reduced by a deliberately small, code-reviewed margin (1-2px) and stay well above the smallest tier already shipped and accepted in earlier sprints, but a human tester on real hardware should confirm.
+
 ### Manual Court Assignment
 - [x] Toggling a court to "Manual" (only available while it's still open) reveals 4 empty slots across Team A / Team B.
 - [x] A slot can be filled from either the Waiting Queue or Upcoming Matchups (pulling from Upcoming Matchups dissolves that matchup, freeing its other 3 players).
