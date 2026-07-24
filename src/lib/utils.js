@@ -225,18 +225,20 @@ function isEligibleForMatchmaking(player) {
 // call after every state change; it's a no-op unless the engine finds a
 // newly-possible matchup.
 //
-// Deliberately strict (no same-skill fallback): this runs after every
-// single state change, including each individual check-in, so players
-// almost never arrive in perfectly even beginner/intermediate batches. If a
-// same-skill fallback ran here, the first 2 beginners to check in would get
-// permanently paired together (matchups are immutable once built) before
-// the next intermediate to check in ever got a chance at a proper mixed
-// match. The fallback is opt-in — see regenerateNextMatchups below, for
-// when an organizer deliberately asks for the best match available *right
-// now* with whoever's actually waiting.
+// Guaranteed Upcoming Match Queue — see PROJECT.md/FEATURES.md. Skill
+// balancing is a preference, not a blocker: same-skill fallback is always
+// allowed here (not just in regenerateNextMatchups below) so the queue
+// never sits empty just because the waiting pool isn't an even
+// beginner/intermediate mix. This supersedes the queue's earlier
+// strict-skill-only behavior. The fairness algorithm itself is unchanged —
+// the engine still tries every balanced pairing first and only falls back
+// to same-skill pairing for players a balanced pairing couldn't use, still
+// scored by the same waiting-time/games-played/repeat-partner-avoidance
+// rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
+// only removes skill as a hard requirement, it doesn't make pairing random.
 export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase });
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
   return [...existingMatchups, ...newMatchups];
 }
 
@@ -244,9 +246,12 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // reruns the engine over the full eligible pool (their players simply
 // become available again, since queueIds already contains everyone waiting
 // regardless of matchup membership). Locked matchups are left exactly as
-// they are. Unlike refreshNextMatchups, this allows the same-skill fallback
-// — it's a deliberate, one-off "match up whoever's here now" action, not
-// something that fires silently after every check-in.
+// they are. Same same-skill fallback as refreshNextMatchups above now that
+// the queue is always-guaranteed — this is still useful as a deliberate,
+// one-off "reshuffle everyone waiting right now" action (e.g. after a
+// scorer manually dissolves a matchup), it just no longer differs from
+// refreshNextMatchups in fallback behavior, only in dissolving unlocked
+// matchups first.
 export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
   const locked = existingMatchups.filter((m) => m.locked);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));

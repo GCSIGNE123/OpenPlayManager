@@ -21,16 +21,15 @@ import { shuffle, uid } from "../lib/random.js";
 // algorithm) — see PROJECT.md if that ever needs revisiting at larger scale.
 export class BalancedRotationEngine extends RotationEngine {
   // `allowSameSkillFallback` gates the last-resort same-skill pairing
-  // described above. It defaults to OFF on purpose: this method runs after
-  // every single state change (every check-in, every match ending), and
-  // players almost always arrive one at a time rather than in perfectly
-  // balanced batches. If a same-skill fallback ran eagerly here, the first 2
-  // beginners to check in would get instantly (and permanently — matchups
-  // are immutable once built) paired together before the intermediates who
-  // check in moments later ever got a chance to be matched with them. The
-  // fallback is only meant to kick in when someone deliberately asks "give
-  // me the best match you can make right now" (e.g. the "Regenerate
-  // matchups" control) — see regenerateNextMatchups in lib/utils.js.
+  // described above. Guaranteed Upcoming Match Queue — see PROJECT.md/
+  // FEATURES.md: both callers in lib/utils.js (refreshNextMatchups and
+  // regenerateNextMatchups) now pass true, so the queue never sits empty
+  // just because the waiting pool isn't an even beginner/intermediate mix.
+  // Skill balancing is a preference, not a blocker. The fallback only ever
+  // pairs players a balanced pairing couldn't use (see buildTeamsOnce
+  // below) and still scores those pairings by the same partner-recency
+  // rules as everything else (see pairLeftovers/scorePartner) — it's a
+  // relaxed constraint, not a random assignment.
   generateMatchups({ waitingIds, players, existingMatchups }, allowSameSkillFallback = false) {
     const reserved = new Set(existingMatchups.flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = waitingIds.filter((id) => !reserved.has(id) && players[id]);
