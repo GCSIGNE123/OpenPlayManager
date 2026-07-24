@@ -78,18 +78,19 @@ export function courtGridDimensions(count) {
 }
 
 // Adaptive Layout presets — see PROJECT.md's TV Mode Layout Optimization
-// section. "standard" (45/35/20) is the default and only preset actually
-// USED this sprint — a small/2-court venue has more players waiting than
-// playing, so a future "compact" preset flips more space to Up Next.
-// Neither OpenPlayTVModePage.jsx nor anything else calls
-// selectLayoutPreset yet (explicit direction: prepare the seam, don't
-// wire dynamic switching on). Keyed off ACTIVE court count (how many
-// courts currently have a live match), not total courts or venue
-// size/court capacity — a 6-court venue running only 2 live matches right
-// now is the same "more waiting than playing" situation a genuine
-// 2-court venue is in.
+// section. "standard" (45/20/35, rebalanced from 45/35/20 — TV Mode
+// Layout Rebalancing sprint, giving Standings more room and Up Next less)
+// is the default and only preset actually USED this sprint — a small/
+// 2-court venue has more players waiting than playing, so a future
+// "compact" preset flips more space to Up Next. Neither
+// OpenPlayTVModePage.jsx nor anything else calls selectLayoutPreset yet
+// (explicit direction: prepare the seam, don't wire dynamic switching
+// on). Keyed off ACTIVE court count (how many courts currently have a
+// live match), not total courts or venue size/court capacity — a
+// 6-court venue running only 2 live matches right now is the same "more
+// waiting than playing" situation a genuine 2-court venue is in.
 export const TV_LAYOUT_PRESETS = {
-  standard: { liveCourts: 45, upNext: 35, standings: 20 }, // 3+ active courts — more simultaneous matches happening
+  standard: { liveCourts: 45, upNext: 20, standings: 35 }, // 3+ active courts — more simultaneous matches happening
   compact: { liveCourts: 35, upNext: 45, standings: 20 }, // <=2 active courts — more players waiting than playing
 };
 
@@ -122,17 +123,29 @@ export function courtSizeTier(columns) {
 // Up Next card sizing — TV Mode Layout Optimization (Sprint 3.1): cards
 // compressed to a single horizontal row per team (see TeamInline in
 // OpenPlayTVModePage.jsx) instead of the old stacked photo-over-name
-// block, specifically so 4-5 cards fit in the 35% column on a 1080p
-// display without scrolling — real-world field-testing feedback that the
-// old cards were "too tall with unnecessary empty space." Still scales
-// with how many of the (max 4) upcoming matches are queued, and the
+// block, specifically so 4-5 cards fit in the column on a 1080p display
+// without scrolling — real-world field-testing feedback that the old
+// cards were "too tall with unnecessary empty space." Still scales with
+// how many of the (max 4) upcoming matches are queued, and the
 // first/highlighted card still renders one notch larger.
+// TV Mode Layout Rebalancing: the column shrank from 35% to 20% width
+// (a ~0.57x ratio), so the vw-based mid/max sizing here is scaled down by
+// the same ratio to keep font/photo size proportionate to the narrower
+// column instead of relying on `teamInlineNames`'s ellipsis truncation to
+// paper over an oversized layout. The px floors are left alone — they're
+// a legibility minimum, not a width-proportional value.
+// Up Next Card Optimization: photo sizes trimmed ~12% (avatars are
+// decorative next to the name, per this sprint's "prioritize player names"
+// direction) and the team name floor/ceiling both dropped ~1px so a
+// couple more characters fit before `teamInlineNames`'s ellipsis kicks in
+// — still well above a legible minimum for cross-venue viewing, just no
+// longer sized as if the column were still 35% wide.
 export function upNextSizeTier(count, isNext) {
   const bump = isNext ? 1 : 0;
   const tiers = [
-    { team: "clamp(13px, 1.05vw, 17px)", photo: 34 },
-    { team: "clamp(12px, 0.95vw, 15px)", photo: 30 },
-    { team: "clamp(11px, 0.85vw, 13px)", photo: 26 },
+    { team: "clamp(12px, 0.56vw, 14px)", photo: 26 },
+    { team: "clamp(11px, 0.5vw, 13px)", photo: 23 },
+    { team: "clamp(10px, 0.44vw, 11px)", photo: 19 },
   ];
   const base = count <= 1 ? 0 : count <= 2 ? 1 : 2;
   return tiers[Math.max(0, base - bump)];
@@ -278,7 +291,7 @@ export const tvStyles = {
   },
   // The three-column split — driven by a layout preset (see
   // TV_LAYOUT_PRESETS/selectLayoutPreset above), defaulting to
-  // TV_LAYOUT_PRESETS.standard (45% Live Courts / 35% Up Next / 20%
+  // TV_LAYOUT_PRESETS.standard (45% Live Courts / 20% Up Next / 35%
   // Standings) — adaptive sizing changes what's INSIDE each column, never
   // the split itself, per the spec's explicit layout.
   body: (preset = TV_LAYOUT_PRESETS.standard) => ({
@@ -453,16 +466,24 @@ export const tvStyles = {
     fontSize: "clamp(12px, 1vw, 15px)",
     fontStyle: "italic",
   },
-  // ---- Up Next (center, 35%) ----
+  // ---- Up Next (center, 20%) ----
   // TV Mode Layout Optimization (Sprint 3.1): compressed from the old
   // stacked-team-photo-rows card to a compact 2-row card (position/badge
   // header + one horizontal line per team via TeamInline in
   // OpenPlayTVModePage.jsx) so 4-5 cards fit in the column on a 1080p
   // display without scrolling, per real-world field-testing feedback.
+  // TV Mode Layout Rebalancing: column narrowed 35% -> 20%, so the vw
+  // coefficients below (gap/padding) are scaled down ~0.57x alongside
+  // upNextSizeTier, keeping spacing proportionate to the new width.
+  // Up Next Card Optimization: non-first cards get their own, tighter
+  // padding — player names are the priority at this width, so the
+  // highlighted card keeps its full padding/emphasis while the rest
+  // shrink further (less empty padding = more of the 20% column actually
+  // used for information).
   upNextList: {
     display: "flex",
     flexDirection: "column",
-    gap: "clamp(6px, 0.7vw, 10px)",
+    gap: "clamp(5px, 0.3vw, 7px)",
     flex: 1,
     minHeight: 0,
     overflowY: "auto",
@@ -472,10 +493,10 @@ export const tvStyles = {
     background: isNext ? "rgba(37, 99, 235, 0.14)" : CARD,
     border: `2px solid ${isNext ? ACCENT : CARD_BORDER}`,
     borderRadius: 12,
-    padding: "clamp(6px, 0.8vw, 12px) clamp(8px, 1vw, 14px)",
+    padding: isNext ? "clamp(6px, 0.46vw, 10px) clamp(8px, 0.57vw, 12px)" : "clamp(4px, 0.3vw, 7px) clamp(6px, 0.44vw, 9px)",
     display: "flex",
     flexDirection: "column",
-    gap: "clamp(3px, 0.4vw, 6px)",
+    gap: "clamp(2px, 0.16vw, 3px)",
     flexShrink: 0,
   }),
   upNextHeadRow: {
@@ -483,11 +504,13 @@ export const tvStyles = {
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    gap: 8,
+    gap: 6,
   },
+  // Decorative position marker ("#1") — kept small and faint per this
+  // sprint's "prioritize player names over decorative elements" direction.
   upNextPosition: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(10px, 0.82vw, 13px)",
+    fontSize: "clamp(9px, 0.38vw, 10px)",
     fontWeight: 700,
     color: TEXT_FAINT,
     letterSpacing: "0.05em",
@@ -495,15 +518,17 @@ export const tvStyles = {
   },
   // "⭐ NEXT ON COURT" badge — the visual-emphasis mechanism the spec asks
   // for (accent border already handled by upNextCard itself; this badge
-  // is the second, explicit cue).
+  // is the second, explicit cue). Up Next Card Optimization: shrunk
+  // (smaller font/padding) so it reads as a secondary cue next to the
+  // teams, not the dominant element in the card.
   nextBadge: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(9px, 0.75vw, 12px)",
+    fontSize: "clamp(8px, 0.34vw, 9px)",
     fontWeight: 800,
-    letterSpacing: "0.06em",
+    letterSpacing: "0.05em",
     color: BG,
     background: ACCENT,
-    padding: "3px 9px",
+    padding: "2px 6px",
     borderRadius: 999,
     whiteSpace: "nowrap",
   },
@@ -513,7 +538,7 @@ export const tvStyles = {
   // direction. Style kept ready for when that data exists.
   upNextCourt: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(9px, 0.78vw, 12px)",
+    fontSize: "clamp(9px, 0.44vw, 11px)",
     color: ACCENT,
     fontWeight: 700,
     letterSpacing: "0.05em",
@@ -523,10 +548,13 @@ export const tvStyles = {
   // One team, one line: a small overlapping photo pair + "John / Mike" —
   // replaces the old stacked photo-above-name-per-player block, per
   // explicit direction to compress team display to a single line.
+  // Up Next Card Optimization: avatar-to-name gap tightened (8 -> 5) —
+  // names are the priority, the avatars just need to stay legible, not
+  // spaced out.
   teamInlineRow: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
     minWidth: 0,
   },
   teamInlinePhotos: {
@@ -535,8 +563,10 @@ export const tvStyles = {
   },
   // Each photo after the first overlaps the previous one — a compact
   // "stacked avatar pair" instead of two full-width photos side by side.
+  // Up Next Card Optimization: overlap deepened (-10 -> -8, proportionate
+  // to the ~12% smaller avatars) to reclaim a little more width for names.
   teamInlinePhotoWrap: (index) => ({
-    marginLeft: index === 0 ? 0 : -10,
+    marginLeft: index === 0 ? 0 : -8,
     border: `2px solid ${CARD}`,
     borderRadius: "50%",
     lineHeight: 0,
@@ -552,16 +582,21 @@ export const tvStyles = {
   }),
   upNextVs: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(9px, 0.72vw, 11px)",
+    fontSize: "clamp(8px, 0.36vw, 9px)",
     color: TEXT_FAINT,
-    padding: "0 2px",
+    padding: "0 1px",
+    lineHeight: 1,
   },
-  // ---- Standings (right, 20%) ----
+  // ---- Standings (right, 35%) ----
   // TV Mode Layout Optimization (Sprint 3.1): simplified further — Rank,
   // Photo, Name, and SPR only (the previous "W-L · SPR" readout dropped
   // the W-L half). Per explicit direction: "avoid displaying too many
   // statistics... this panel is intended to provide awareness, not
   // detailed analytics."
+  // TV Mode Layout Rebalancing: column widened 20% -> 35% — font sizes are
+  // left unchanged (still calibrated for cross-venue legibility), but the
+  // extra width now goes straight to standingsName's flex:1 space, so
+  // names truncate (via its existing ellipsis) far less often than before.
   standingsList: {
     display: "flex",
     flexDirection: "column",
@@ -604,7 +639,7 @@ export const tvStyles = {
     minWidth: 0,
   },
   // Compact "62 SPR" trailing readout — a single number, not a grid of
-  // separate stat columns, to stay legible at 20% width from across a venue.
+  // separate stat columns, to stay legible at 35% width from across a venue.
   standingsCompactStat: {
     fontFamily: "'Space Mono', monospace",
     fontSize: "clamp(10px, 0.82vw, 13px)",

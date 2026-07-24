@@ -18,8 +18,9 @@ import Avatar from "./Avatar.jsx";
 // duplicated match/standings logic (standings reuse buildStandingsRows,
 // the exact function StandingsView.jsx already calls).
 //
-// Three fixed columns — Live Courts 45% / Up Next 35% / Standings 20%
-// (TV Mode Layout Optimization, Sprint 3.1 — tuned from TV Mode 2.0's
+// Three fixed columns — Live Courts 45% / Up Next 20% / Standings 35%
+// (TV Mode Layout Rebalancing, rebalanced from TV Mode Layout
+// Optimization's 45/35/20, which itself was tuned from TV Mode 2.0's
 // original 40/40/20 after real-world field-testing showed players spend
 // far more time looking for "who's playing now/next" than at standings).
 // The read-only architecture and animation mechanisms (score pulse,
@@ -238,7 +239,7 @@ function LiveCourtsColumn({ courts, players }) {
   );
 }
 
-// Center column, 35% — Up Next. Up to 4 upcoming matchups; the first
+// Center column, 20% — Up Next. Up to 4 upcoming matchups; the first
 // gets an accent border/glow + "⭐ NEXT ON COURT" badge so waiting
 // players instantly recognize who's up. Cards compressed (Sprint 3.1,
 // real-world field-testing feedback) to a compact position/badge header
@@ -280,7 +281,7 @@ function UpNextColumn({ nextMatchups, players }) {
   );
 }
 
-// Right column, 20% — Standings. Simplified further in Sprint 3.1 (Rank,
+// Right column, 35% — Standings. Simplified further in Sprint 3.1 (Rank,
 // Photo, Name, SPR only — the W-L readout dropped) — see PROJECT.md:
 // "avoid displaying too many statistics... this panel is intended to
 // provide awareness, not detailed analytics." "SPR" (Session Performance
