@@ -21,6 +21,7 @@ const FINISHED = "#6B7280";
 const GOLD = "#FBBF24";
 const SILVER = "#CBD5E1";
 const BRONZE = "#D97706";
+const LOSS = "#F87171"; // Standings' W/L columns only — a loss-count color, distinct from STATUS_COLOR's court-state palette
 
 const STATUS_COLOR = { live: LIVE, waiting: WAITING, finished: FINISHED };
 
@@ -78,9 +79,10 @@ export function courtGridDimensions(count) {
 }
 
 // Adaptive Layout presets — see PROJECT.md's TV Mode Layout Optimization
-// section. "standard" (45/20/35, rebalanced from 45/35/20 — TV Mode
-// Layout Rebalancing sprint, giving Standings more room and Up Next less)
-// is the default and only preset actually USED this sprint — a small/
+// section. "standard" (40/30/30, rebalanced again from 45/20/35 — TV
+// Mode Standings Expansion sprint, giving Standings room for a full W/L/
+// SPR table and Up Next more breathing room, at Live Courts' expense) is
+// the default and only preset actually USED this sprint — a small/
 // 2-court venue has more players waiting than playing, so a future
 // "compact" preset flips more space to Up Next. Neither
 // OpenPlayTVModePage.jsx nor anything else calls selectLayoutPreset yet
@@ -90,7 +92,7 @@ export function courtGridDimensions(count) {
 // 6-court venue running only 2 live matches right now is the same "more
 // waiting than playing" situation a genuine 2-court venue is in.
 export const TV_LAYOUT_PRESETS = {
-  standard: { liveCourts: 45, upNext: 20, standings: 35 }, // 3+ active courts — more simultaneous matches happening
+  standard: { liveCourts: 40, upNext: 30, standings: 30 }, // 3+ active courts — more simultaneous matches happening
   compact: { liveCourts: 35, upNext: 45, standings: 20 }, // <=2 active courts — more players waiting than playing
 };
 
@@ -140,12 +142,18 @@ export function courtSizeTier(columns) {
 // couple more characters fit before `teamInlineNames`'s ellipsis kicks in
 // — still well above a legible minimum for cross-venue viewing, just no
 // longer sized as if the column were still 35% wide.
+// TV Mode Up Next Enlargement: the 30% column still had unused
+// whitespace next to each name after the Standings Expansion sprint's
+// rescale, per direct visual feedback — sized up further (now the
+// largest these have ever been, exceeding even the original 35%-column
+// baseline) since names/avatars, not empty padding, should fill the
+// available width.
 export function upNextSizeTier(count, isNext) {
   const bump = isNext ? 1 : 0;
   const tiers = [
-    { team: "clamp(12px, 0.56vw, 14px)", photo: 26 },
-    { team: "clamp(11px, 0.5vw, 13px)", photo: 23 },
-    { team: "clamp(10px, 0.44vw, 11px)", photo: 19 },
+    { team: "clamp(15px, 1.15vw, 18px)", photo: 40 },
+    { team: "clamp(14px, 1vw, 16px)", photo: 35 },
+    { team: "clamp(13px, 0.9vw, 14px)", photo: 30 },
   ];
   const base = count <= 1 ? 0 : count <= 2 ? 1 : 2;
   return tiers[Math.max(0, base - bump)];
@@ -291,7 +299,7 @@ export const tvStyles = {
   },
   // The three-column split — driven by a layout preset (see
   // TV_LAYOUT_PRESETS/selectLayoutPreset above), defaulting to
-  // TV_LAYOUT_PRESETS.standard (45% Live Courts / 20% Up Next / 35%
+  // TV_LAYOUT_PRESETS.standard (40% Live Courts / 30% Up Next / 30%
   // Standings) — adaptive sizing changes what's INSIDE each column, never
   // the split itself, per the spec's explicit layout.
   body: (preset = TV_LAYOUT_PRESETS.standard) => ({
@@ -466,24 +474,27 @@ export const tvStyles = {
     fontSize: "clamp(12px, 1vw, 15px)",
     fontStyle: "italic",
   },
-  // ---- Up Next (center, 20%) ----
+  // ---- Up Next (center, 30%) ----
   // TV Mode Layout Optimization (Sprint 3.1): compressed from the old
   // stacked-team-photo-rows card to a compact 2-row card (position/badge
   // header + one horizontal line per team via TeamInline in
   // OpenPlayTVModePage.jsx) so 4-5 cards fit in the column on a 1080p
   // display without scrolling, per real-world field-testing feedback.
-  // TV Mode Layout Rebalancing: column narrowed 35% -> 20%, so the vw
-  // coefficients below (gap/padding) are scaled down ~0.57x alongside
-  // upNextSizeTier, keeping spacing proportionate to the new width.
   // Up Next Card Optimization: non-first cards get their own, tighter
-  // padding — player names are the priority at this width, so the
-  // highlighted card keeps its full padding/emphasis while the rest
-  // shrink further (less empty padding = more of the 20% column actually
-  // used for information).
+  // padding — player names are the priority, so the highlighted card
+  // keeps its full padding/emphasis while the rest stay more compact.
+  // TV Mode Standings Expansion: column widened 20% -> 30%, so the gap/
+  // padding coefficients below are scaled back up alongside
+  // upNextSizeTier — the highlighted-vs-compact padding DIFFERENCE from
+  // Card Optimization is preserved, just no longer sized for the
+  // narrowest version of this column.
+  // TV Mode Up Next Enlargement: padding/gaps enlarged again alongside
+  // the bigger avatars/names above, so cards use more of the column's
+  // vertical space instead of just widening their text.
   upNextList: {
     display: "flex",
     flexDirection: "column",
-    gap: "clamp(5px, 0.3vw, 7px)",
+    gap: "clamp(9px, 0.65vw, 13px)",
     flex: 1,
     minHeight: 0,
     overflowY: "auto",
@@ -493,10 +504,10 @@ export const tvStyles = {
     background: isNext ? "rgba(37, 99, 235, 0.14)" : CARD,
     border: `2px solid ${isNext ? ACCENT : CARD_BORDER}`,
     borderRadius: 12,
-    padding: isNext ? "clamp(6px, 0.46vw, 10px) clamp(8px, 0.57vw, 12px)" : "clamp(4px, 0.3vw, 7px) clamp(6px, 0.44vw, 9px)",
+    padding: isNext ? "clamp(10px, 1vw, 16px) clamp(12px, 1.1vw, 18px)" : "clamp(7px, 0.65vw, 12px) clamp(9px, 0.85vw, 14px)",
     display: "flex",
     flexDirection: "column",
-    gap: "clamp(2px, 0.16vw, 3px)",
+    gap: "clamp(5px, 0.4vw, 7px)",
     flexShrink: 0,
   }),
   upNextHeadRow: {
@@ -510,7 +521,7 @@ export const tvStyles = {
   // sprint's "prioritize player names over decorative elements" direction.
   upNextPosition: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(9px, 0.38vw, 10px)",
+    fontSize: "clamp(10px, 0.42vw, 11px)",
     fontWeight: 700,
     color: TEXT_FAINT,
     letterSpacing: "0.05em",
@@ -551,10 +562,13 @@ export const tvStyles = {
   // Up Next Card Optimization: avatar-to-name gap tightened (8 -> 5) —
   // names are the priority, the avatars just need to stay legible, not
   // spaced out.
+  // TV Mode Up Next Enlargement: loosened back up (5 -> 8) now that the
+  // avatars/names themselves grew — the tight gap was calibrated for
+  // smaller elements and started looking cramped next to bigger ones.
   teamInlineRow: {
     display: "flex",
     alignItems: "center",
-    gap: 5,
+    gap: 8,
     minWidth: 0,
   },
   teamInlinePhotos: {
@@ -582,35 +596,78 @@ export const tvStyles = {
   }),
   upNextVs: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(8px, 0.36vw, 9px)",
+    fontSize: "clamp(10px, 0.5vw, 12px)",
     color: TEXT_FAINT,
     padding: "0 1px",
     lineHeight: 1,
   },
-  // ---- Standings (right, 35%) ----
-  // TV Mode Layout Optimization (Sprint 3.1): simplified further — Rank,
-  // Photo, Name, and SPR only (the previous "W-L · SPR" readout dropped
-  // the W-L half). Per explicit direction: "avoid displaying too many
-  // statistics... this panel is intended to provide awareness, not
-  // detailed analytics."
-  // TV Mode Layout Rebalancing: column widened 20% -> 35% — font sizes are
-  // left unchanged (still calibrated for cross-venue legibility), but the
-  // extra width now goes straight to standingsName's flex:1 space, so
-  // names truncate (via its existing ellipsis) far less often than before.
+  // ---- Standings (right, 30%) ----
+  // TV Mode Layout Optimization (Sprint 3.1): simplified to Rank, Photo,
+  // Name, and SPR only (W-L dropped) per explicit direction at the time:
+  // "avoid displaying too many statistics... this panel is intended to
+  // provide awareness, not detailed analytics."
+  // TV Mode Standings Expansion: that direction is explicitly reversed
+  // this sprint — W and L are back as their own columns, plus a real
+  // header row labeling every column, per this sprint's own explicit
+  // requirement. SPR itself is untouched — still `row.performance.rating`
+  // from calculatePerformanceRating (lib/performanceRating.js), just
+  // displayed as its own aligned column instead of an inline "N SPR"
+  // suffix. Column widths are fixed (not vw-based) so Rank/W/L/SPR stay
+  // aligned row-to-row and every remaining pixel goes to standingsName's
+  // flex:1 — this is the "reduce unused whitespace, favor longer names"
+  // requirement in practice.
+  // TV Mode Scoreboard Redesign: every element sized up again — rows get
+  // more padding/gap, the avatar grew from 30px to 40px, and every font
+  // size increased — a deliberate "fully use the 30% column, read like a
+  // scoreboard from across the room" pass, not just a fit-more-in
+  // exercise. Stat column widths grew alongside their larger fonts so
+  // wide values (e.g. "100") never risk crowding their neighbor.
   standingsList: {
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: 6,
     flex: 1,
     minHeight: 0,
     overflowY: "auto",
   },
+  // Column labels — same horizontal rhythm as standingsRow below (rank
+  // width, photo-slot width, flexible name, fixed stat columns) so labels
+  // land directly above their values.
+  standingsHeaderRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "0 10px 6px 10px",
+    borderBottom: `1px solid ${CARD_BORDER}`,
+    marginBottom: 4,
+    flexShrink: 0,
+  },
+  standingsHeaderRank: {
+    width: "1.8em",
+    flexShrink: 0,
+  },
+  standingsHeaderPhotoSlot: {
+    width: 40,
+    flexShrink: 0,
+  },
+  standingsHeaderLabel: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: "clamp(11px, 0.68vw, 13px)",
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: TEXT_FAINT,
+  },
+  standingsHeaderName: {
+    flex: 1,
+    minWidth: 0,
+  },
   standingsRow: (rank) => ({
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    padding: "6px 6px",
-    borderRadius: 8,
+    gap: 12,
+    padding: "10px",
+    borderRadius: 10,
     borderLeft: `4px solid ${rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : "transparent"}`,
     background: rank <= 3 ? "rgba(255,255,255,0.05)" : "transparent",
     transition: "transform 400ms ease, background 400ms ease",
@@ -618,8 +675,8 @@ export const tvStyles = {
   standingsRank: {
     fontFamily: "'Space Mono', monospace",
     fontWeight: 800,
-    fontSize: "clamp(12px, 0.95vw, 15px)",
-    width: "1.6em",
+    fontSize: "clamp(15px, 1.15vw, 19px)",
+    width: "1.8em",
     flexShrink: 0,
   },
   standingsPhotoRing: (rank) => ({
@@ -630,7 +687,7 @@ export const tvStyles = {
     flexShrink: 0,
   }),
   standingsName: {
-    fontSize: "clamp(12px, 1vw, 15px)",
+    fontSize: "clamp(15px, 1.2vw, 19px)",
     fontWeight: 700,
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -638,15 +695,37 @@ export const tvStyles = {
     flex: 1,
     minWidth: 0,
   },
-  // Compact "62 SPR" trailing readout — a single number, not a grid of
-  // separate stat columns, to stay legible at 35% width from across a venue.
+  // W/L/SPR — three fixed-width, right-aligned columns so digits line up
+  // down the column regardless of value width. W/L are color-coded
+  // (win green / loss red-ish) for at-a-glance scanning from a distance;
+  // SPR stays the existing faint/neutral color, matching its prior style.
+  standingsStatWin: {
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    fontSize: "clamp(14px, 1vw, 17px)",
+    color: LIVE,
+    textAlign: "right",
+    width: "1.8em",
+    flexShrink: 0,
+  },
+  standingsStatLoss: {
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    fontSize: "clamp(14px, 1vw, 17px)",
+    color: LOSS,
+    textAlign: "right",
+    width: "1.8em",
+    flexShrink: 0,
+  },
   standingsCompactStat: {
     fontFamily: "'Space Mono', monospace",
-    fontSize: "clamp(10px, 0.82vw, 13px)",
+    fontSize: "clamp(13px, 1.05vw, 17px)",
+    fontWeight: 700,
     color: TEXT_FAINT,
     textAlign: "right",
     flexShrink: 0,
     whiteSpace: "nowrap",
+    width: "3.8em",
   },
   // ---- Footer ----
   // Reserved ticker/announcement strip — see Future Compatibility in

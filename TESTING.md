@@ -124,6 +124,25 @@ Verified 2026-07-24 against the same live session as TV Mode Layout Rebalancing 
 - [x] **No regression.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed.
 - [ ] **Readability from several meters away.** Not independently verifiable in this environment (no physical distance/display) — same limitation as every prior TV Mode sprint's own testing note. Font sizes were reduced by a deliberately small, code-reviewed margin (1-2px) and stay well above the smallest tier already shipped and accepted in earlier sprints, but a human tester on real hardware should confirm.
 
+### TV Mode - Standings Expansion
+Verified 2026-07-24 against the same live session as the two prior TV Mode sprints (14 players, 3 live courts, 8 standings rows from completed matches), reused for an apples-to-apples comparison.
+- [x] **Layout ratio is exactly 40/30/30.** Re-measured via `getComputedStyle(...).gridTemplateColumns` at 1920×1080 — `40.0% / 30.0% / 30.0%`, matching this sprint's explicit requirement.
+- [x] **No horizontal overflow.** Checked `scrollWidth` vs `clientWidth` on both the Standings and Up Next columns at 1920×1080 — neither overflows.
+- [x] **Standings header row.** A new labeled header ("Player / W / L / SPR") renders above the list, aligned to the same column widths as the data rows below it.
+- [x] **W/L columns restored.** Each row now shows wins (green) and losses (red) as their own right-aligned columns, alongside the existing SPR value — confirmed via screenshot against a session with real win/loss history.
+- [x] **SPR value unchanged.** Code-reviewed: `row.performance.rating` (from `calculatePerformanceRating` in `lib/performanceRating.js`) is displayed as-is — no new calculation was introduced, per this sprint's explicit "reuse the existing SPR value" requirement.
+- [x] **Longer names before truncation.** `standingsName` still uses `flex: 1` with ellipsis, and W/L/SPR are now fixed-width columns rather than a single variable-width trailing string, so the name gets a more predictable (and generally larger) share of the row.
+- [x] **Up Next rescaled for the wider column.** Photo/font/padding values scaled back up from the 20%-column Up Next Card Optimization sizing to fit the new 30% width without leaving unused whitespace — confirmed via screenshot.
+- [x] **Live Courts unaffected.** Only its grid-column percentage changed (45% → 40%); no styling inside the column was touched.
+- [x] **No logic changes.** Verified by diff — only `tvOpenPlayStyles.js` (styling) and `OpenPlayTVModePage.jsx` (adds `row.wins`/`row.losses` to existing JSX, no new computation) changed. Matchmaking/scoring/rotation/standings-calculation code is untouched.
+- [x] **No regression.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed.
+
+### TV Mode - Live Courts Clipping Fix
+Bug reported 2026-07-24: with 3-4 live courts (the 2x2 grid breakpoint in `courtGridDimensions`), the second team's player row was clipped and invisible. Root cause: `courtSizeTier` was keyed only on grid COLUMN count, so a 2x2 grid (2 columns, 2 rows — each card getting only half the column's height) still used the "2 columns, 1 row" tier's larger avatar/font sizing, sized for a card with the FULL column height. `courtCard`'s `overflow: hidden` then silently clipped whatever didn't fit. Fixed by having `CourtCard` bump to the next-smaller tier whenever `rows >= 2 && columns === 2` (the same tier already used for 5-6 courts' 3x2 grid, confirmed to fit).
+- [x] **All 4 players visible on every live court.** Verified against the same live session (3 live courts, 2x2 grid) that originally showed the bug — direct DOM measurement (`scrollHeight` vs `clientHeight`) on every court card at 1920×1080 confirms zero overflow (previously ~176-180px of clipped content per card); confirmed visually via screenshot too.
+- [x] **1-2 and 5+ court layouts unaffected.** The fix only changes sizing for the specific `columns === 2 && rows >= 2` case (3-4 live courts) — all other court counts use the exact tier they used before.
+- [x] **No regression.** `node scripts/run-acceptance-test.mjs` re-run after this change — still 42/42 passed.
+
 ### Manual Court Assignment
 - [x] Toggling a court to "Manual" (only available while it's still open) reveals 4 empty slots across Team A / Team B.
 - [x] A slot can be filled from either the Waiting Queue or Upcoming Matchups (pulling from Upcoming Matchups dissolves that matchup, freeing its other 3 players).

@@ -18,11 +18,12 @@ import Avatar from "./Avatar.jsx";
 // duplicated match/standings logic (standings reuse buildStandingsRows,
 // the exact function StandingsView.jsx already calls).
 //
-// Three fixed columns — Live Courts 45% / Up Next 20% / Standings 35%
-// (TV Mode Layout Rebalancing, rebalanced from TV Mode Layout
-// Optimization's 45/35/20, which itself was tuned from TV Mode 2.0's
-// original 40/40/20 after real-world field-testing showed players spend
-// far more time looking for "who's playing now/next" than at standings).
+// Three fixed columns — Live Courts 40% / Up Next 30% / Standings 30%
+// (TV Mode Standings Expansion, rebalanced from TV Mode Layout
+// Rebalancing's 45/20/35, which itself was rebalanced from TV Mode
+// Layout Optimization's 45/35/20, tuned from TV Mode 2.0's original
+// 40/40/20 after real-world field-testing showed players spend far more
+// time looking for "who's playing now/next" than at standings).
 // The read-only architecture and animation mechanisms (score pulse,
 // winner overlay) are reused unchanged.
 function deriveCourtStatus(court) {
@@ -145,7 +146,20 @@ function TVHeader({ session, venue, playerCount, activeCourtCount, totalCourtCou
 // to know WHEN to play an animation — the values themselves are still
 // 100% derived from the live court prop, nothing here is a separate
 // source of truth.
-function CourtCard({ court, players, columns }) {
+// Bug fix: courtSizeTier was keyed only on grid COLUMN count, but
+// courtGridDimensions' own breakpoint table (see tvOpenPlayStyles.js)
+// gives 3-4 live courts a 2x2 grid (2 columns, 2 ROWS) while still using
+// the "2 columns, 1 row" tier's much larger avatar/font sizing — that
+// tier assumes a card gets the column's FULL height, but a 2-row grid
+// only gives each card HALF of it. The result: the second team's photo
+// row rendered past the card's fixed height and `courtCard`'s
+// `overflow: hidden` silently clipped it — "bottom players cannot be
+// seen." Bumping to the next tier down (the one already used for 5-6
+// courts' 3x2 grid) whenever a card only gets a fraction of the column's
+// height fixes this without touching the 1-row cases (1-2 courts),
+// which were never affected.
+function CourtCard({ court, players, columns, rows }) {
+  const sizeColumns = rows >= 2 && columns === 2 ? 3 : columns;
   const status = deriveCourtStatus(court);
   const prevRef = useRef({ scoreA: court.scoreA, scoreB: court.scoreB, status });
   const [pulseSide, setPulseSide] = useState(null);
@@ -182,10 +196,10 @@ function CourtCard({ court, players, columns }) {
   const leadingA = scoreKnown ? court.scoreA > court.scoreB : undefined;
   const leadingB = scoreKnown ? court.scoreB > court.scoreA : undefined;
   const winningIds = leadingA ? court.teamA : leadingB ? court.teamB : [];
-  const tier = courtSizeTier(columns);
+  const tier = courtSizeTier(sizeColumns);
 
   return (
-    <div style={ts.courtCard(status, columns)}>
+    <div style={ts.courtCard(status, sizeColumns)}>
       {showWinner && winningIds.length > 0 && (
         <div style={ts.winnerOverlay} className="tv-winner-pop">
           <span style={ts.winnerText}>🏆 WINNERS</span>
@@ -193,8 +207,8 @@ function CourtCard({ court, players, columns }) {
         </div>
       )}
       <div style={ts.courtHead}>
-        <span style={ts.courtName(columns)}>Court {court.number}</span>
-        <span style={ts.statusBadge(status, columns)}>{status.toUpperCase()}</span>
+        <span style={ts.courtName(sizeColumns)}>Court {court.number}</span>
+        <span style={ts.statusBadge(status, sizeColumns)}>{status.toUpperCase()}</span>
       </div>
       <div style={ts.matchupBlock}>
         <TeamPhotoRow ids={court.teamA} players={players} size={tier.photo} nameFontSize={tier.team} leading={leadingA} />
@@ -213,7 +227,7 @@ function CourtCard({ court, players, columns }) {
   );
 }
 
-// Left column, 45% — Live Courts (renamed from "Live Matches", Sprint
+// Left column, 40% — Live Courts (renamed from "Live Matches", Sprint
 // 3.1). Only courts CURRENTLY live/finished render as cards (no
 // empty-court placeholders, per explicit direction); an empty state
 // covers "nothing live right now."
@@ -231,7 +245,7 @@ function LiveCourtsColumn({ courts, players }) {
       ) : (
         <div style={ts.courtsGrid(columns, rows)}>
           {liveCourts.map((court) => (
-            <CourtCard key={court.number} court={court} players={players} columns={columns} />
+            <CourtCard key={court.number} court={court} players={players} columns={columns} rows={rows} />
           ))}
         </div>
       )}
@@ -239,7 +253,7 @@ function LiveCourtsColumn({ courts, players }) {
   );
 }
 
-// Center column, 20% — Up Next. Up to 4 upcoming matchups; the first
+// Center column, 30% — Up Next. Up to 4 upcoming matchups; the first
 // gets an accent border/glow + "⭐ NEXT ON COURT" badge so waiting
 // players instantly recognize who's up. Cards compressed (Sprint 3.1,
 // real-world field-testing feedback) to a compact position/badge header
@@ -281,12 +295,17 @@ function UpNextColumn({ nextMatchups, players }) {
   );
 }
 
-// Right column, 35% — Standings. Simplified further in Sprint 3.1 (Rank,
-// Photo, Name, SPR only — the W-L readout dropped) — see PROJECT.md:
-// "avoid displaying too many statistics... this panel is intended to
-// provide awareness, not detailed analytics." "SPR" (Session Performance
-// Rating) is this app's existing session-only Performance Rating
-// (lib/performanceRating.js), just labeled SPR rather than "RTG".
+// Right column, 30% — Standings. Rank, Photo, Name, W, L, SPR, with a
+// labeled header row — TV Mode Standings Expansion reverses Sprint 3.1's
+// "W-L dropped, awareness not analytics" simplification per this sprint's
+// own explicit requirement. "SPR" (Session Performance Rating) is still
+// exactly this app's existing session-only Performance Rating
+// (lib/performanceRating.js, calculatePerformanceRating's `rating` field)
+// — reused verbatim, not recalculated; only the display gained its own
+// column instead of an inline "N SPR" suffix. TV Mode Scoreboard Redesign
+// then sized everything up (avatar 30->40px, every font size increased)
+// for a cleaner, more readable-from-a-distance scoreboard feel — visual
+// only, same data/columns as Standings Expansion introduced.
 const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 function StandingsColumn({ players }) {
@@ -297,22 +316,34 @@ function StandingsColumn({ players }) {
       {rows.length === 0 ? (
         <EmptyState title="Standings" body="Standings will appear after the first completed match." />
       ) : (
-        <div style={ts.standingsList}>
-          {rows.map((row, i) => {
-            const rank = i + 1;
-            const spr = row.performance.rating ?? "—";
-            return (
-              <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
-                <span style={ts.standingsRank}>{MEDALS[rank] ?? rank}</span>
-                <div style={ts.standingsPhotoRing(rank)}>
-                  <Avatar player={row} size={30} />
+        <>
+          <div style={ts.standingsHeaderRow}>
+            <span style={{ ...ts.standingsHeaderLabel, ...ts.standingsHeaderRank }} />
+            <span style={{ ...ts.standingsHeaderLabel, ...ts.standingsHeaderPhotoSlot }} />
+            <span style={{ ...ts.standingsHeaderLabel, ...ts.standingsHeaderName }}>Player</span>
+            <span style={{ ...ts.standingsHeaderLabel, width: "1.8em", textAlign: "right", flexShrink: 0 }}>W</span>
+            <span style={{ ...ts.standingsHeaderLabel, width: "1.8em", textAlign: "right", flexShrink: 0 }}>L</span>
+            <span style={{ ...ts.standingsHeaderLabel, width: "3.8em", textAlign: "right", flexShrink: 0 }}>SPR</span>
+          </div>
+          <div style={ts.standingsList}>
+            {rows.map((row, i) => {
+              const rank = i + 1;
+              const spr = row.performance.rating ?? "—";
+              return (
+                <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
+                  <span style={ts.standingsRank}>{MEDALS[rank] ?? rank}</span>
+                  <div style={ts.standingsPhotoRing(rank)}>
+                    <Avatar player={row} size={40} />
+                  </div>
+                  <span style={ts.standingsName}>{row.name}</span>
+                  <span style={ts.standingsStatWin}>{row.wins}</span>
+                  <span style={ts.standingsStatLoss}>{row.losses}</span>
+                  <span style={ts.standingsCompactStat}>{spr}</span>
                 </div>
-                <span style={ts.standingsName}>{row.name}</span>
-                <span style={ts.standingsCompactStat}>{spr} SPR</span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

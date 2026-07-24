@@ -92,6 +92,11 @@ Do not implement multiple unrelated features in a single task.
     - Slightly smaller player-name font so more characters show before truncating
     - Non-highlighted cards get their own more compact padding
     - First upcoming match still visually emphasized (accent border/background/badge)
+  - ✅ TV Mode - Standings Expansion
+    - 40/30/30 display ratio (Live Courts narrowed, Up Next widened, Standings resized for a fuller table)
+    - Standings gains a labeled header row and W/L columns alongside the existing SPR value (reused as-is, not recalculated)
+    - Up Next sizing rescaled back up for the wider 30% column
+    - More room for longer player names before truncation
 - [x] Expected Playing Opportunities (Session Duration-Based Estimate)
   - Session Duration input (hours, decimal-friendly) replaces manual Expected Games Per Player entry
   - Configurable Average Match Duration (default 15 minutes)
