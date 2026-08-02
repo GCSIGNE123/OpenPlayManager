@@ -4,7 +4,6 @@ import { styles } from "../styles.js";
 import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
-import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import WaitingTimer from "./WaitingTimer.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
@@ -45,13 +44,13 @@ export default function WaitingPlayersPanel({
         <>
           <SectionLabel>Active players ({players.length})</SectionLabel>
           <ul style={styles.rosterList}>
-            {players.map((p) => {
+            {players.map((p, i) => {
               const performance = calculatePerformanceRating(p);
               const queueStatus = getPlayerQueueStatus(p, state);
               return (
                 <li key={p.id} style={styles.rosterItem}>
-                  <Avatar player={p} size={26} />
-                  <span style={styles.queueName}>{p.name}</span>
+                  <span style={styles.playerChipIndex}>{i + 1}</span>
+                  <span style={{ ...styles.queueName, ...styles.teamNameProminent }}>{p.name}</span>
                   <span style={styles.queueStatusTag(queueStatus)}>{queueStatus}</span>
                   <span style={styles.waitingTimerText}>
                     <WaitingTimer player={p} />
@@ -116,9 +115,9 @@ export default function WaitingPlayersPanel({
         <>
           <SectionLabel>Checked out players ({checkedOutPlayers.length})</SectionLabel>
           <ul style={styles.rosterList}>
-            {checkedOutPlayers.map((p) => (
+            {checkedOutPlayers.map((p, i) => (
               <li key={p.id} style={{ ...styles.rosterItem, opacity: 0.5 }}>
-                <Avatar player={p} size={26} />
+                <span style={styles.playerChipIndex}>{i + 1}</span>
                 <span style={styles.queueName}>{p.name}</span>
                 <span style={styles.resultTag("loss")}>{QUEUE_STATUSES.CHECKED_OUT}</span>
                 <span style={styles.editHint}>{formatCheckoutTime(p.checkedOutAt)}</span>

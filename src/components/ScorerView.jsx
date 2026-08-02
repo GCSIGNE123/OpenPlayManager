@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Minus, PauseCircle, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Minus, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
@@ -25,6 +25,43 @@ const QUEUE_ACTIVITY_KIND_META = {
   announcementMuted: { title: "Announcement Muted" },
   announcementSkipped: { title: "Announcement Skipped" },
 };
+
+// Collapsed-state "Latest:" compact summary — one readable line per kind,
+// so a facilitator glancing at a collapsed log still knows something just
+// happened without expanding the whole list. Presentation-only, reads the
+// exact same entry data the expanded card already shows.
+function queueActivitySummaryText(entry) {
+  const kind = entry.kind || "heldMatchDissolved";
+  const court = typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber} ` : "";
+  switch (kind) {
+    case "courtDispatched":
+      return `${court}automatically dispatched`;
+    case "announcementCompleted":
+      return `${court}voice announcement completed`;
+    case "announcementRepeated":
+      return `${court}voice announcement repeated`;
+    case "announcementMuted":
+      return `${court}announcement muted`;
+    case "announcementSkipped":
+      return `${court}announcement skipped`;
+    case "heldMatchDissolved":
+    default:
+      return "Held Match removed";
+  }
+}
+
+// Compact single-line row text for the expanded log (Redesign Scorer Tab for
+// Clarity sprint) — the badge already conveys the kind, so this line packs
+// in only what the badge doesn't: court + matchup for dispatch/announcement
+// entries, or the dissolution reason for a held-match removal (its one bit
+// of detail the teams alone don't explain).
+function queueActivityRowText(entry) {
+  const kind = entry.kind || "heldMatchDissolved";
+  const teamsPart = `${(entry.teamA || []).join(" / ")} vs ${(entry.teamB || []).join(" / ")}`;
+  if (kind === "heldMatchDissolved") return `${teamsPart} — ${entry.reason}`;
+  const courtPart = typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber}: ` : "";
+  return `${courtPart}${teamsPart}`;
+}
 
 export default function ScorerView({
   state,
@@ -63,6 +100,8 @@ export default function ScorerView({
   skillChangeMsg,
   skillChangeLog,
   queueActivityLog,
+  queueActivityLogExpanded,
+  setQueueActivityLogExpanded,
   startDispatchedMatch,
   repeatAnnouncement,
   courtDispatchSettings,
@@ -87,6 +126,10 @@ export default function ScorerView({
   // deep via CourtCard -> TeamRow -> PlayerChip, so this state lives here
   // rather than threading a dialog down through all three).
   const [confirmingCheckoutId, setConfirmingCheckoutId] = useState(null);
+  // Redesign Scorer Tab for Clarity — expanded log defaults to only the
+  // latest 5 entries ("Showing latest N of M"); "View full log" reveals the
+  // rest without changing the collapsed/expanded state itself.
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const nextMatchups = state.nextMatchups || [];
   const reserved = reservedMatchupIds(nextMatchups);
   const manualIds = manuallyReservedIds(state.courts);
@@ -148,7 +191,29 @@ export default function ScorerView({
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Courts</span>
-          <span style={styles.sessionInfoValue}>{state.courts.length}</span>
+          <span style={styles.sessionInfoValue}>
+            <span style={styles.courtStepper}>
+              <button
+                style={{ ...styles.scoreBtn, ...(!canRemoveCourt ? styles.btnDisabled : {}) }}
+                onClick={removeCourt}
+                disabled={!canRemoveCourt}
+                aria-label="remove a court"
+                title={canRemoveCourt ? "Remove last court" : "Can't remove a court that's in use"}
+              >
+                <Minus size={12} strokeWidth={3} />
+              </button>
+              {state.courts.length}
+              <button
+                style={{ ...styles.scoreBtn, ...(!canAddCourt ? styles.btnDisabled : {}) }}
+                onClick={addCourt}
+                disabled={!canAddCourt}
+                aria-label="add a court"
+                title="Add a court"
+              >
+                <Plus size={12} strokeWidth={3} />
+              </button>
+            </span>
+          </span>
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Players</span>
@@ -177,7 +242,7 @@ export default function ScorerView({
         <div style={styles.toolbarText}>
           <strong>{waitingCount}</strong> players waiting
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt ? styles.btnDisabled : {}) }}
             onClick={generateRemainingCourts}
@@ -195,35 +260,49 @@ export default function ScorerView({
             <Shuffle size={16} strokeWidth={2.5} />
             Fill all open courts
           </button>
-        </div>
-      </div>
-      <div style={styles.scorerToolbar}>
-        <div style={styles.courtStepper}>
-          <button
-            style={{ ...styles.scoreBtn, ...(!canRemoveCourt ? styles.btnDisabled : {}) }}
-            onClick={removeCourt}
-            disabled={!canRemoveCourt}
-            aria-label="remove a court"
-            title={canRemoveCourt ? "Remove last court" : "Can't remove a court that's in use"}
-          >
-            <Minus size={14} strokeWidth={3} />
-          </button>
-          <span style={styles.toolbarText}>{state.courts.length} court{state.courts.length === 1 ? "" : "s"}</span>
-          <button
-            style={{ ...styles.scoreBtn, ...(!canAddCourt ? styles.btnDisabled : {}) }}
-            onClick={addCourt}
-            disabled={!canAddCourt}
-            aria-label="add a court"
-            title="Add a court"
-          >
-            <Plus size={14} strokeWidth={3} />
+          <button style={styles.dangerBtn} onClick={endSession}>
+            <X size={14} strokeWidth={2.5} />
+            End session
           </button>
         </div>
-        <button style={styles.dangerBtn} onClick={endSession}>
-          <X size={14} strokeWidth={2.5} />
-          End session
-        </button>
       </div>
+
+      {skillChangeMsg && (
+        <div style={styles.confirmMsg}>{skillChangeMsg}</div>
+      )}
+      {queueMsg && (
+        <div style={styles.confirmMsg}>{queueMsg}</div>
+      )}
+
+      <WaitingPlayersPanel
+        players={unassignedPlayers}
+        state={state}
+        onHoldPlayer={holdPlayer}
+        onResumePlayer={resumePlayer}
+        onSkipPlayer={skipPlayer}
+        onRemove={removePlayer}
+        onCheckout={checkoutPlayer}
+        onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
+        checkedOutPlayers={checkedOutPlayers}
+      />
+
+      {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
+        <>
+          <SectionLabel>Skill Change Activity Log</SectionLabel>
+          <ul style={styles.rosterList}>
+            {skillChangeLog.map((entry) => (
+              <li key={entry.id} style={styles.rosterItem}>
+                <span style={styles.queueName}>
+                  {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                  {" — "}
+                  {entry.playerName}: {entry.previousSkill === "intermediate" ? "Intermediate" : "Beginner"} →{" "}
+                  {entry.newSkill === "intermediate" ? "Intermediate" : "Beginner"} ({entry.reason})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {nextMatchups.length > 0 && (
         <>
@@ -267,79 +346,6 @@ export default function ScorerView({
               onCancel={() => cancelMatch(m.id)}
             />
           ))}
-        </>
-      )}
-
-      {skillChangeMsg && (
-        <div style={styles.confirmMsg}>{skillChangeMsg}</div>
-      )}
-      {queueMsg && (
-        <div style={styles.confirmMsg}>{queueMsg}</div>
-      )}
-
-      <WaitingPlayersPanel
-        players={unassignedPlayers}
-        state={state}
-        onHoldPlayer={holdPlayer}
-        onResumePlayer={resumePlayer}
-        onSkipPlayer={skipPlayer}
-        onRemove={removePlayer}
-        onCheckout={checkoutPlayer}
-        onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
-        checkedOutPlayers={checkedOutPlayers}
-      />
-
-      {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
-        <>
-          <SectionLabel>Skill Change Activity Log</SectionLabel>
-          <ul style={styles.rosterList}>
-            {skillChangeLog.map((entry) => (
-              <li key={entry.id} style={styles.rosterItem}>
-                <span style={styles.queueName}>
-                  {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                  {" — "}
-                  {entry.playerName}: {entry.previousSkill === "intermediate" ? "Intermediate" : "Beginner"} →{" "}
-                  {entry.newSkill === "intermediate" ? "Intermediate" : "Beginner"} ({entry.reason})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {queueActivityLog && queueActivityLog.length > 0 && (
-        <>
-          <SectionLabel>Queue Activity Log</SectionLabel>
-          <div style={styles.queueActivityList}>
-            {queueActivityLog.map((entry) => {
-              // "heldMatchDissolved" is the default for any pre-Sprint-3
-              // entry that predates the `kind` field — see
-              // lib/queueManagement.js's noteDissolvedHeldMatchups.
-              const kind = entry.kind || "heldMatchDissolved";
-              const meta = QUEUE_ACTIVITY_KIND_META[kind] || QUEUE_ACTIVITY_KIND_META.heldMatchDissolved;
-              return (
-                <div key={entry.id} style={styles.queueActivityCard}>
-                  <div style={styles.queueActivityTitle}>
-                    <PauseCircle size={13} strokeWidth={2.5} />
-                    {meta.title}
-                  </div>
-                  {typeof entry.courtNumber === "number" && (
-                    <div style={styles.queueActivityCourt}>Court {entry.courtNumber}</div>
-                  )}
-                  <div style={styles.queueActivityTeams}>
-                    <span>{(entry.teamA || []).join(" / ")}</span>
-                    <span style={styles.queueActivityVs}>vs</span>
-                    <span>{(entry.teamB || []).join(" / ")}</span>
-                  </div>
-                  <div style={styles.queueActivityReasonLabel}>Reason:</div>
-                  <div style={styles.queueActivityReason}>{entry.reason}.</div>
-                  <div style={styles.queueActivityTime}>
-                    {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </>
       )}
 
@@ -399,11 +405,87 @@ export default function ScorerView({
                 onRequestCheckout={checkoutPlayer ? (id) => setConfirmingCheckoutId(id) : null}
                 onStartMatch={() => startDispatchedMatch(court.number)}
                 onRepeatAnnouncement={() => repeatAnnouncement(court.number)}
+                hideAvatar
               />
             );
           });
         })()}
       </div>
+
+      {/* Scorer Layout — Courts always have visual priority over the Queue
+          Activity Log (see PROJECT.md/FEATURES.md): the log renders here,
+          after Courts, and defaults to collapsed so it never competes for
+          attention with the court controls facilitators spend nearly all
+          their time on. Presentation-only — every entry, kind, and field
+          below is identical to before; only where and how it's shown
+          changed. */}
+      {queueActivityLog && queueActivityLog.length > 0 && (
+        <div style={styles.queueActivitySection}>
+          <button
+            style={styles.queueActivityToggle}
+            onClick={() => setQueueActivityLogExpanded((v) => !v)}
+            aria-expanded={queueActivityLogExpanded}
+          >
+            <span>Queue Activity Log ({queueActivityLog.length})</span>
+            <span style={styles.queueActivityToggleLabel}>
+              {queueActivityLogExpanded ? (
+                <>
+                  <ChevronUp size={13} strokeWidth={2.5} />
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={13} strokeWidth={2.5} />
+                  Expand
+                </>
+              )}
+            </span>
+          </button>
+
+          {queueActivityLogExpanded ? (
+            <div style={styles.queueActivityList}>
+              {(showAllActivity ? queueActivityLog : queueActivityLog.slice(0, 5)).map((entry) => {
+                // "heldMatchDissolved" is the default for any pre-Sprint-3
+                // entry that predates the `kind` field — see
+                // lib/queueManagement.js's noteDissolvedHeldMatchups.
+                const kind = entry.kind || "heldMatchDissolved";
+                const meta = QUEUE_ACTIVITY_KIND_META[kind] || QUEUE_ACTIVITY_KIND_META.heldMatchDissolved;
+                return (
+                  <div key={entry.id} style={styles.queueActivityRow}>
+                    <span style={styles.queueActivityPill(kind)}>{meta.title}</span>
+                    <span style={styles.queueActivityRowText}>{queueActivityRowText(entry)}</span>
+                    <span style={styles.queueActivityRowTime}>
+                      {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </div>
+                );
+              })}
+              {queueActivityLog.length > 5 && (
+                <div style={styles.queueActivityFooter}>
+                  <span>
+                    Showing latest {Math.min(showAllActivity ? queueActivityLog.length : 5, queueActivityLog.length)} of{" "}
+                    {queueActivityLog.length} activities
+                  </span>
+                  <button
+                    style={styles.queueActivityViewAllBtn}
+                    onClick={() => setShowAllActivity((v) => !v)}
+                  >
+                    {showAllActivity ? "Show less" : "View full log"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={styles.queueActivityLatest}>
+              <span style={styles.queueActivityLatestLabel}>Latest:</span>
+              <span style={styles.queueActivityLatestText}>{queueActivitySummaryText(queueActivityLog[0])}</span>
+              <span style={styles.queueActivityTime}>
+                {new Date(queueActivityLog[0].timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {settingsDialogOpen && (
         <SessionSettingsDialog

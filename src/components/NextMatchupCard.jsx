@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Check, Lock, Pause, Play, Repeat, Shuffle, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
-import Avatar from "./Avatar.jsx";
 import PlayerChip from "./PlayerChip.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
 
@@ -126,7 +125,6 @@ export default function NextMatchupCard({
                 }}
                 onClick={() => toggleSide(id)}
               >
-                <Avatar player={players[id]} size={22} />
                 <span style={styles.editChipName}>{players[id]?.name}</span>
                 <span style={styles.editChipSide}>{draft[id]}</span>
               </button>
@@ -177,23 +175,27 @@ export default function NextMatchupCard({
         <div>
           <div style={styles.matchupTeams}>
             <div style={styles.matchupTeam}>
-              {matchup.teamA.map((id) => (
+              {matchup.teamA.map((id, i) => (
                 <PlayerChip
                   key={id}
                   player={players[id]}
                   onSubClick={() => startSub(id)}
                   onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
+                  hideAvatar
+                  index={i}
                 />
               ))}
             </div>
             <span style={styles.matchupVs}>VS</span>
             <div style={styles.matchupTeam}>
-              {matchup.teamB.map((id) => (
+              {matchup.teamB.map((id, i) => (
                 <PlayerChip
                   key={id}
                   player={players[id]}
                   onSubClick={() => startSub(id)}
                   onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
+                  hideAvatar
+                  index={matchup.teamA.length + i}
                 />
               ))}
             </div>

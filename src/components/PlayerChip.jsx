@@ -2,12 +2,16 @@ import { LogOut, Repeat, Undo2 } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 
-export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick }) {
+export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick, hideAvatar, index }) {
   if (!player) return null;
   return (
     <div style={styles.playerChip}>
-      <Avatar player={player} />
-      <span style={{ ...styles.teamName, ...(highlight ? { color: "var(--ink)" } : {}) }}>
+      {hideAvatar ? (
+        typeof index === "number" && <span style={styles.playerChipIndex}>{index + 1}</span>
+      ) : (
+        <Avatar player={player} />
+      )}
+      <span style={{ ...styles.teamName, ...(hideAvatar ? styles.teamNameProminent : {}), ...(highlight ? { color: "var(--ink)" } : {}) }}>
         {player.name}
       </span>
       {player.skill && (

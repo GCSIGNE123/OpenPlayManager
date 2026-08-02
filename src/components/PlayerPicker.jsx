@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { styles } from "../styles.js";
-import Avatar from "./Avatar.jsx";
 
 // Searchable, alphabetically-sorted list of replacement candidates — used
 // wherever a scorer swaps a player in (live-court substitution, next-matchup
@@ -50,7 +49,6 @@ export default function PlayerPicker({ candidates, selectedId, onSelect, emptyMe
                     style={{ ...styles.editChip, ...(selectedId === p.id ? styles.editChipA : {}) }}
                     onClick={() => onSelect(p.id)}
                   >
-                    <Avatar player={p} size={22} />
                     <span style={styles.editChipName}>{p.name}</span>
                   </button>
                 ))}
@@ -67,7 +65,6 @@ export default function PlayerPicker({ candidates, selectedId, onSelect, emptyMe
                     style={{ ...styles.editChip, ...(selectedId === p.id ? styles.editChipA : {}) }}
                     onClick={() => onSelect(p.id)}
                   >
-                    <Avatar player={p} size={22} />
                     <span style={styles.editChipName}>
                       {p.name}
                       <span style={styles.pickerScheduledTag}>{p.scheduledLabel}</span>

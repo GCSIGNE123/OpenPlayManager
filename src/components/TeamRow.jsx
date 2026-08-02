@@ -2,17 +2,19 @@ import { Minus, Plus, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 
-export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout }) {
+export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout, hideAvatar, startIndex }) {
   return (
     <div style={styles.teamRow}>
       <div style={styles.teamPlayers}>
-        {ids.map((id) => (
+        {ids.map((id, i) => (
           <PlayerChip
             key={id}
             player={players[id]}
             highlight={leading}
             onSubClick={onRequestSub ? () => onRequestSub(id) : null}
             onCheckoutClick={onRequestCheckout ? () => onRequestCheckout(id) : null}
+            hideAvatar={hideAvatar}
+            index={typeof startIndex === "number" ? startIndex + i : undefined}
           />
         ))}
       </div>

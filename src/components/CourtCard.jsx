@@ -28,6 +28,7 @@ export default function CourtCard({
   onRequestCheckout,
   onStartMatch,
   onRepeatAnnouncement,
+  hideAvatar,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
   // Smart Court Dispatch — "dispatching" is its own dedicated court state
@@ -117,35 +118,38 @@ export default function CourtCard({
         )}
       </div>
 
-      {!isLive && !isDispatching && !readOnly && (
-        <div style={styles.assignmentToggleRow}>
-          <button
-            style={styles.assignmentToggleBtn(!isManual)}
-            onClick={() => onSetAssignmentMode && onSetAssignmentMode("automatic")}
-          >
-            Automatic
-          </button>
-          <button
-            style={styles.assignmentToggleBtn(isManual)}
-            onClick={() => onSetAssignmentMode && onSetAssignmentMode("manual")}
-          >
-            Manual
-          </button>
-        </div>
-      )}
-
-      {!isLive && !isDispatching && !isManual && (
-        <div style={styles.openCourtBody}>
-          <p style={styles.openCourtText}>{reserved ? "Reserved via Court Booking" : "Court is free"}</p>
+      {!isLive && !isDispatching && (
+        <div style={styles.courtOpenRow}>
           {!readOnly && (
-            <button
-              style={{ ...styles.secondaryBtn, ...(!canFill ? styles.btnDisabled : {}) }}
-              onClick={onFill}
-              disabled={!canFill}
-            >
-              <Shuffle size={14} strokeWidth={2.5} />
-              Assign match
-            </button>
+            <div style={styles.assignmentToggleRow}>
+              <button
+                style={styles.assignmentToggleBtn(!isManual)}
+                onClick={() => onSetAssignmentMode && onSetAssignmentMode("automatic")}
+              >
+                Automatic
+              </button>
+              <button
+                style={styles.assignmentToggleBtn(isManual)}
+                onClick={() => onSetAssignmentMode && onSetAssignmentMode("manual")}
+              >
+                Manual
+              </button>
+            </div>
+          )}
+          {!isManual && (
+            <>
+              <span style={styles.openCourtText}>{reserved ? "Reserved via Court Booking" : "Court is free"}</span>
+              {!readOnly && (
+                <button
+                  style={{ ...styles.secondaryBtn, ...(!canFill ? styles.btnDisabled : {}) }}
+                  onClick={onFill}
+                  disabled={!canFill}
+                >
+                  <Shuffle size={14} strokeWidth={2.5} />
+                  Assign match
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -180,8 +184,8 @@ export default function CourtCard({
                 return id ? (
                   <div key={slotIndex} style={styles.manualSlotFilled}>
                     <div style={styles.playerChip}>
-                      <Avatar player={players[id]} size={20} />
-                      <span>{players[id]?.name}</span>
+                      {!hideAvatar && <Avatar player={players[id]} size={20} />}
+                      <span style={hideAvatar ? styles.teamNameProminent : undefined}>{players[id]?.name}</span>
                     </div>
                     {!readOnly && (
                       <button
@@ -208,8 +212,8 @@ export default function CourtCard({
                 return id ? (
                   <div key={slotIndex} style={styles.manualSlotFilled}>
                     <div style={styles.playerChip}>
-                      <Avatar player={players[id]} size={20} />
-                      <span>{players[id]?.name}</span>
+                      {!hideAvatar && <Avatar player={players[id]} size={20} />}
+                      <span style={hideAvatar ? styles.teamNameProminent : undefined}>{players[id]?.name}</span>
                     </div>
                     {!readOnly && (
                       <button
@@ -249,9 +253,17 @@ export default function CourtCard({
 
       {isDispatching && (
         <div>
-          <TeamRow ids={court.teamA} players={players} score={0} readOnly />
-          <div style={styles.vsLine} />
-          <TeamRow ids={court.teamB} players={players} score={0} readOnly />
+          <div style={styles.courtLiveRow}>
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team A</span>
+              <TeamRow ids={court.teamA} players={players} score={0} readOnly hideAvatar={hideAvatar} startIndex={0} />
+            </div>
+            <div style={styles.courtVerticalDivider} />
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team B</span>
+              <TeamRow ids={court.teamB} players={players} score={0} readOnly hideAvatar={hideAvatar} startIndex={court.teamA.length} />
+            </div>
+          </div>
           <p style={styles.awaitingPairText}>
             <PhoneCall size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
             Calling players to Court {court.number}…
@@ -288,7 +300,7 @@ export default function CourtCard({
                 }}
                 onClick={() => toggleSide(id)}
               >
-                <Avatar player={players[id]} size={22} />
+                {!hideAvatar && <Avatar player={players[id]} size={22} />}
                 <span style={styles.editChipName}>{players[id]?.name}</span>
                 <span style={styles.editChipSide}>{draft[id]}</span>
               </button>
@@ -341,9 +353,17 @@ export default function CourtCard({
 
       {isLive && court.awaitingPair && (
         <div>
-          <TeamRow ids={court.teamA} players={players} score={court.scoreA} readOnly leading={court.scoreA > court.scoreB} />
-          <div style={styles.vsLine} />
-          <TeamRow ids={court.teamB} players={players} score={court.scoreB} readOnly leading={court.scoreB > court.scoreA} />
+          <div style={styles.courtLiveRow}>
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team A</span>
+              <TeamRow ids={court.teamA} players={players} score={court.scoreA} readOnly leading={court.scoreA > court.scoreB} hideAvatar={hideAvatar} startIndex={0} />
+            </div>
+            <div style={styles.courtVerticalDivider} />
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team B</span>
+              <TeamRow ids={court.teamB} players={players} score={court.scoreB} readOnly leading={court.scoreB > court.scoreA} hideAvatar={hideAvatar} startIndex={court.teamA.length} />
+            </div>
+          </div>
           <p style={styles.awaitingPairText}>
             <Clock size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
             {pairPartnerNumber
@@ -354,34 +374,44 @@ export default function CourtCard({
       )}
 
       {isLive && !court.awaitingPair && !editing && !subbingId && (
-        <div>
-          <TeamRow
-            ids={court.teamA}
-            players={players}
-            score={court.scoreA}
-            onMinus={() => onScore && onScore("A", -1)}
-            onPlus={() => onScore && onScore("A", 1)}
-            readOnly={readOnly}
-            leading={court.scoreA > court.scoreB}
-            onRequestSub={!readOnly ? startSub : null}
-            onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
-            onRequestCheckout={!readOnly ? onRequestCheckout : null}
-          />
-          <div style={styles.vsLine} />
-          <TeamRow
-            ids={court.teamB}
-            players={players}
-            score={court.scoreB}
-            onMinus={() => onScore && onScore("B", -1)}
-            onPlus={() => onScore && onScore("B", 1)}
-            readOnly={readOnly}
-            leading={court.scoreB > court.scoreA}
-            onRequestSub={!readOnly ? startSub : null}
-            onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
-            onRequestCheckout={!readOnly ? onRequestCheckout : null}
-          />
+        <div style={styles.courtLiveRow}>
+          <div style={styles.courtTeamHalf}>
+            <span style={styles.courtTeamBadge}>Team A</span>
+            <TeamRow
+              ids={court.teamA}
+              players={players}
+              score={court.scoreA}
+              onMinus={() => onScore && onScore("A", -1)}
+              onPlus={() => onScore && onScore("A", 1)}
+              readOnly={readOnly}
+              leading={court.scoreA > court.scoreB}
+              onRequestSub={!readOnly ? startSub : null}
+              onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
+              onRequestCheckout={!readOnly ? onRequestCheckout : null}
+              hideAvatar={hideAvatar}
+              startIndex={0}
+            />
+          </div>
+          <div style={styles.courtVerticalDivider} />
+          <div style={styles.courtTeamHalf}>
+            <span style={styles.courtTeamBadge}>Team B</span>
+            <TeamRow
+              ids={court.teamB}
+              players={players}
+              score={court.scoreB}
+              onMinus={() => onScore && onScore("B", -1)}
+              onPlus={() => onScore && onScore("B", 1)}
+              readOnly={readOnly}
+              leading={court.scoreB > court.scoreA}
+              onRequestSub={!readOnly ? startSub : null}
+              onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
+              onRequestCheckout={!readOnly ? onRequestCheckout : null}
+              hideAvatar={hideAvatar}
+              startIndex={court.teamA.length}
+            />
+          </div>
           {!readOnly && (
-            <div style={styles.courtActionsRow}>
+            <div style={styles.courtActionsInline}>
               <button style={styles.fixTeamsBtn} onClick={startEdit}>
                 <Shuffle size={12} strokeWidth={2.5} />
                 Fix teams

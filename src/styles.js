@@ -421,10 +421,57 @@ export const styles = {
     margin: "22px 0 10px 0",
     textTransform: "uppercase",
   },
+  // One Court Per Row (Operational Layout) — each court now spans the full
+  // page width, stacked vertically, instead of a multi-column card grid —
+  // see PROJECT.md/FEATURES.md. Facilitators run 20-40+ player sessions and
+  // need every court's names/score/actions readable without squinting.
   courtGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  courtOpenRow: {
+    display: "flex",
+    alignItems: "center",
     gap: 14,
+    flexWrap: "wrap",
+  },
+  courtLiveRow: {
+    display: "flex",
+    alignItems: "stretch",
+    gap: 20,
+    flexWrap: "wrap",
+  },
+  courtTeamHalf: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flex: "1 1 360px",
+    minWidth: 300,
+  },
+  courtTeamBadge: {
+    flexShrink: 0,
+    fontSize: 10.5,
+    fontWeight: 800,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: "var(--color-text-faint)",
+    background: "var(--color-bg)",
+    border: "1px solid var(--line)",
+    borderRadius: 5,
+    padding: "3px 6px",
+  },
+  courtVerticalDivider: {
+    width: 1,
+    background: "var(--line)",
+    flexShrink: 0,
+  },
+  courtActionsInline: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    flexShrink: 0,
   },
   courtCard: (status) => ({
     background: "var(--color-surface)",
@@ -462,14 +509,10 @@ export const styles = {
             ? "var(--color-secondary-text)"
             : "var(--court)",
   }),
-  openCourtBody: {
-    textAlign: "center",
-    padding: "14px 0 6px 0",
-  },
   openCourtText: {
     color: "var(--color-text-faint)",
     fontSize: 13,
-    margin: "0 0 12px 0",
+    margin: 0,
   },
   assignmentToggleRow: {
     display: "flex",
@@ -554,6 +597,7 @@ export const styles = {
     flexDirection: "column",
     gap: 4,
     minWidth: 0,
+    flex: "1 1 auto",
   },
   playerChip: {
     display: "flex",
@@ -1262,6 +1306,127 @@ export const styles = {
     fontSize: 10.5,
     color: "var(--color-text-faint)",
     marginTop: 6,
+  },
+  // Scorer Layout — Prioritize Courts sprint. The Queue Activity Log now
+  // renders below Courts and defaults to collapsed; this wraps the whole
+  // section so it reads as one distinct block regardless of expand state.
+  queueActivitySection: {
+    marginTop: 18,
+  },
+  queueActivityToggle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 8,
+    padding: "10px 12px",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "var(--ink)",
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  queueActivityToggleLabel: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+  },
+  // Collapsed-state compact summary — "Latest: <what happened> <time>",
+  // so a facilitator glancing at a collapsed log still sees something
+  // happened without expanding the whole list.
+  queueActivityLatest: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    padding: "8px 12px 0 12px",
+    fontSize: 12.5,
+  },
+  queueActivityLatestLabel: {
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+  },
+  queueActivityLatestText: {
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+  },
+  // Redesign Scorer Tab for Clarity — compact single-line rows replace the
+  // multi-line cards once the log is expanded, matching the target mockup's
+  // denser, more scannable list. Same underlying entry data, just laid out
+  // on one line instead of stacked.
+  queueActivityRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 10px",
+    borderBottom: "1px solid var(--line)",
+    fontSize: 12.5,
+  },
+  queueActivityPill: (kind) => ({
+    flexShrink: 0,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    color: "var(--color-secondary-text)",
+    background: "var(--color-secondary)",
+    borderRadius: 5,
+    padding: "3px 7px",
+    whiteSpace: "nowrap",
+  }),
+  queueActivityRowText: {
+    flex: 1,
+    minWidth: 0,
+    color: "var(--ink)",
+    fontWeight: 600,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  queueActivityRowTime: {
+    flexShrink: 0,
+    fontSize: 10.5,
+    color: "var(--color-text-faint)",
+    whiteSpace: "nowrap",
+  },
+  queueActivityFooter: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "8px 12px 0 12px",
+    fontSize: 11.5,
+    color: "var(--color-text-faint)",
+  },
+  queueActivityViewAllBtn: {
+    background: "none",
+    border: "none",
+    color: "var(--court)",
+    fontWeight: 700,
+    fontSize: 11.5,
+    cursor: "pointer",
+    padding: 0,
+    fontFamily: "'Inter', sans-serif",
+  },
+  // Redesign Scorer Tab for Clarity — names-first player display: a plain
+  // numbered index replaces the avatar photo wherever hideAvatar is set.
+  playerChipIndex: {
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+    minWidth: 14,
+    textAlign: "right",
+  },
+  teamNameProminent: {
+    fontSize: 14.5,
+    fontWeight: 700,
+    flex: "1 1 auto",
+    minWidth: 40,
   },
   skillToggle: {
     display: "flex",

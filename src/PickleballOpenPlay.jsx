@@ -214,6 +214,18 @@ export default function PickleballOpenPlay() {
   const [checkinMsg, setCheckinMsg] = useState("");
   const [skillChangeMsg, setSkillChangeMsg] = useState(""); // Adaptive Skill Rotation — facilitator toast for promotion/relegation/manual override, see endMatch/changePlayerSkill
   const [queueMsg, setQueueMsg] = useState(""); // Smart Queue Management — facilitator toast for Skip Player, see skipPlayer below
+  // Scorer layout — Queue Activity Log collapse state. Deliberately lifted
+  // up here (not local to ScorerView) since ScorerView unmounts/remounts
+  // every time the facilitator switches tabs and back (view !== "scorer"
+  // renders something else entirely) — a local useState would silently
+  // reset to collapsed on every tab switch, breaking "remember the choice
+  // for the remainder of the session." Living here means it survives tab
+  // switches for as long as this app instance stays open, and naturally
+  // resets to the default (collapsed) on a real page reload/new session —
+  // never persisted to the session record itself, since a collapse
+  // preference is a per-device UI choice, not something to sync to every
+  // other connected scorer device.
+  const [queueActivityLogExpanded, setQueueActivityLogExpanded] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -1828,6 +1840,8 @@ export default function PickleballOpenPlay() {
                   skillChangeMsg={skillChangeMsg}
                   skillChangeLog={state.skillChangeLog || []}
                   queueActivityLog={state.queueActivityLog || []}
+                  queueActivityLogExpanded={queueActivityLogExpanded}
+                  setQueueActivityLogExpanded={setQueueActivityLogExpanded}
                   startDispatchedMatch={startDispatchedMatch}
                   repeatAnnouncement={repeatAnnouncement}
                   courtDispatchSettings={state.courtDispatchSettings || defaultState.courtDispatchSettings}
