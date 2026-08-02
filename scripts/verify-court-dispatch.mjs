@@ -18,6 +18,7 @@ import {
   logDispatchEvent,
 } from "../src/lib/courtDispatch.js";
 import { buildAnnouncementText } from "../src/lib/announcer.js";
+import { maxUpcomingMatchups, refreshNextMatchups, getRotationEngine } from "../src/lib/utils.js";
 
 let pass = 0, fail = 0;
 function assert(desc, cond) {
@@ -229,6 +230,66 @@ console.log("\n10. Manual dispatch reuses the exact same selection logic as auto
   });
   assert("manual selection picks 'good', skipping 'bad'", manual.matchup.id === "good");
   assert("automatic dispatch picks the identical matchup", auto.dispatched[0].matchupId === "good");
+}
+
+console.log("\n11. Bug fix regression — 3 open automatic courts all get populated, not just Court 1");
+{
+  // Reproduces the reported bug end to end: maxUpcomingMatchups +
+  // refreshNextMatchups (lib/utils.js) feeding dispatchAvailableCourts
+  // (lib/courtDispatch.js) — the exact real save() pipeline, not a
+  // simplified stand-in. Previously, dispatching Court 1 alone bumped
+  // occupiedCount to 1, which collapsed the queue-depth cap to 0 for every
+  // later save() — so Courts 2 and 3 could never receive a matchup no
+  // matter how many more players checked in. This exercises that same
+  // "players trickle in one save() at a time" sequence.
+  const players = {};
+  for (let i = 0; i < 12; i++) {
+    const id = `p${i}`;
+    players[id] = { id, name: `Player${i}`, skill: "beginner", games: 0, held: false, status: "ACTIVE" };
+  }
+  const engine = getRotationEngine("continuous");
+  let courts = [emptyCourt(1), emptyCourt(2), emptyCourt(3)];
+  let nextMatchups = [];
+  let queueIds = [];
+
+  // Simulate the real save() pipeline for a batch of players checking in,
+  // one save() per batch (mirroring one save() per action in the real app).
+  function saveWithPlayers(checkedInIds) {
+    queueIds = checkedInIds;
+    const cap = maxUpcomingMatchups(courts);
+    nextMatchups = refreshNextMatchups(queueIds, players, nextMatchups, engine, null, cap);
+    const result = dispatchAvailableCourts({
+      courts,
+      nextMatchups,
+      queueIds,
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+    });
+    courts = result.courts;
+    nextMatchups = result.nextMatchups;
+    queueIds = result.queueIds;
+    return result.dispatched;
+  }
+
+  // 4 players check in first — only enough for one matchup.
+  const firstDispatch = saveWithPlayers(["p0", "p1", "p2", "p3"]);
+  assert("first save(): exactly Court 1 dispatched (only 4 players so far)", (
+    firstDispatch.length === 1 && firstDispatch[0].courtNumber === 1
+  ));
+  assert("Courts 2 and 3 still open after the first save()", courts[1].status === "open" && courts[2].status === "open");
+
+  // The remaining 8 players check in on a LATER save() — Court 1 is now
+  // occupied ("dispatching"), so this is exactly the previously-broken
+  // scenario.
+  const secondDispatch = saveWithPlayers([...queueIds, "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11"]);
+  assert("second save(): both remaining open courts (2 and 3) get dispatched", (
+    secondDispatch.length === 2 &&
+    secondDispatch.some((d) => d.courtNumber === 2) &&
+    secondDispatch.some((d) => d.courtNumber === 3)
+  ));
+  assert("all 3 courts are now dispatching/live — none left open", courts.every((c) => c.status === "dispatching"));
+  assert("all 12 players (exactly 3 courts' worth) consumed — none stranded in the queue", queueIds.length === 0 && nextMatchups.length === 0);
 }
 
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);

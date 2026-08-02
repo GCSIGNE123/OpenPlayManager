@@ -61,6 +61,20 @@ export function selectNextDispatchableMatchup(nextMatchups, players) {
 // exists for a given open court — that court is simply left open; nothing
 // is created or regenerated.
 //
+// Bug fix — this is deliberately an ITERATIVE loop over every open,
+// automatic, not-reserved court (not a single pass that only considers the
+// first one): each iteration selects and removes the next dispatchable
+// matchup, so court 2's dispatch never "sees" the matchup court 1 already
+// took. The loop keeps going until either no automatic court remains open,
+// or selectNextDispatchableMatchup can't find another eligible matchup
+// (insufficient players/none left) — never regenerating or reordering
+// anything itself. (The root cause of "only Court 1 gets dispatched" was
+// actually one level up, in maxUpcomingMatchups — the queue's depth cap
+// was collapsing to 0 the moment even one court became occupied, starving
+// this loop of matchups to hand out to the other open courts. That's fixed
+// there; this loop was already correctly structured to drain multiple
+// matchups per call once given enough of them.)
+//
 // Each dispatched court is set to "dispatching" — a dedicated court status
 // (see constants.js's emptyCourt), never "live" yet — so it stays visible
 // as "Calling Players..." until the caller later confirms it (see
@@ -75,11 +89,16 @@ export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, player
   let remainingMatchups = nextMatchups || [];
   let remainingIds = queueIds || [];
   const dispatched = [];
-  const nextCourts = (courts || []).map((c) => {
-    if (c.status !== "open" || c.assignmentMode === "manual") return c;
-    if (isCourtReserved && isCourtReserved(c.number)) return c;
+  const nextCourts = [...(courts || [])];
+
+  for (let i = 0; i < nextCourts.length; i++) {
+    const c = nextCourts[i];
+    if (c.status !== "open" || c.assignmentMode === "manual") continue;
+    if (isCourtReserved && isCourtReserved(c.number)) continue;
+
     const { matchup, rest } = selectNextDispatchableMatchup(remainingMatchups, players);
-    if (!matchup) return c;
+    if (!matchup) continue; // no eligible matchup right now — leave this (and any later) open court alone, try again next save()
+
     remainingMatchups = rest;
     const consumed = new Set([...matchup.teamA, ...matchup.teamB]);
     remainingIds = remainingIds.filter((id) => !consumed.has(id));
@@ -93,7 +112,7 @@ export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, player
       teamANames: matchup.teamA.map((id) => players[id]?.name || "Unknown player"),
       teamBNames: matchup.teamB.map((id) => players[id]?.name || "Unknown player"),
     });
-    return {
+    nextCourts[i] = {
       ...c,
       status: "dispatching",
       teamA: matchup.teamA,
@@ -102,7 +121,8 @@ export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, player
       scoreB: 0,
       dispatchedAt: Date.now(),
     };
-  });
+  }
+
   return { courts: nextCourts, nextMatchups: remainingMatchups, queueIds: remainingIds, dispatched };
 }
 

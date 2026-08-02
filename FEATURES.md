@@ -155,6 +155,7 @@ Do not implement multiple unrelated features in a single task.
   - TV Mode Integration — plain browser CustomEvents (`CourtAssigned`, `AnnouncementStarted`, `AnnouncementCompleted`) are fired on every dispatch/announcement so TV Mode can subscribe later; no visual redesign in this sprint
   - Dispatch never depends on a successful voice announcement — court assignment is always persisted first, before any announcement is even attempted
   - Zero rotation-specific code: nothing in Smart Court Dispatch reads `rotationMode` or any engine file, so it works identically under Continuous, Progressive Skill, Adaptive Skill, Winner Pool, or any future rotation mode
+  - ✅ Bug fix — multiple open courts now all get populated in one pass (previously only Court 1 dispatched; Courts 2/3 stayed open forever once Court 1 became occupied, because the queue-depth cap collapsed to 0 the moment any court was occupied, regardless of how many others were still open). `dispatchAvailableCourts` is now an explicit iterative loop over every open automatic court, and `maxUpcomingMatchups` never caps the queue below the number of courts still open right now
   - Adaptive Skill Rotation, the Winner vs Winner preference, the fairness engine, TV Mode, and the payment system are all untouched by this sprint
 - [ ] Winner Pool Rotation
 - [ ] Game History

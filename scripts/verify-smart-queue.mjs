@@ -45,7 +45,15 @@ console.log("\n1. Limit Upcoming Match Queue — maxUpcomingMatchups");
     emptyCourt(3),
     emptyCourt(4),
   ];
-  assert("2 live courts -> cap == 1 (Live Courts - 1)", maxUpcomingMatchups(twoLive) === 1);
+  // Bug fix (Smart Court Dispatch, see PROJECT.md): with 2 courts occupied
+  // and 2 STILL OPEN, the plain "Live Courts - 1" formula used to give a
+  // cap of 1 — enough for only ONE of the two open courts, so the other
+  // could never be dispatched no matter how many players checked in
+  // afterward. The cap must never drop below the number of courts still
+  // open right now; it only reduces to the original literal
+  // "Live Courts - 1" once every court is occupied (see the fourLive/
+  // oneLive cases below, both unchanged).
+  assert("2 occupied + 2 still-open courts -> cap == 2 (enough to fill both open courts)", maxUpcomingMatchups(twoLive) === 2);
 
   const threeLive = [
     { ...emptyCourt(1), status: "live" },

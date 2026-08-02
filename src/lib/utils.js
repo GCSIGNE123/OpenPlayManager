@@ -307,9 +307,22 @@ function isEligibleForMatchmaking(player) {
 // 1 rule on its own — no separate "has the session started" flag to track.
 export function maxUpcomingMatchups(courts) {
   const automaticCourts = (courts || []).filter((c) => c.assignmentMode !== "manual");
-  const occupiedCount = automaticCourts.filter((c) => c.status !== "open").length;
+  const openCount = automaticCourts.filter((c) => c.status === "open").length;
+  const occupiedCount = automaticCourts.length - openCount;
   if (occupiedCount === 0) return automaticCourts.length;
-  return Math.max(0, occupiedCount - 1);
+  // Bug fix (Smart Court Dispatch) — the plain "Live Courts − 1" steady-
+  // state formula collapses toward 0 the moment even ONE court becomes
+  // occupied, regardless of how many OTHER automatic courts are still
+  // sitting open waiting to be filled (e.g. 1 occupied + 2 still-open
+  // courts used to cap the queue at 0, so those 2 open courts could never
+  // get a matchup no matter how many players checked in afterward — only
+  // Court 1 ever got dispatched, and it never recovered). The cap must
+  // never drop below the number of courts that are still open right now,
+  // since Smart Court Dispatch needs one matchup per open court to fill
+  // them all in a single pass. Once every court is occupied (openCount
+  // === 0), this reduces back to the original literal "Live Courts − 1"
+  // steady-state spare, unchanged.
+  return Math.max(openCount, occupiedCount - 1);
 }
 
 // appends any additional ready-to-play matchups the active rotation engine
