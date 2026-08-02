@@ -53,7 +53,7 @@ function buildPlayers(playerCount, skillSplit) {
       name: `Player ${i + 1}`,
       skill,
       checkedIn: true,
-      skipped: false,
+      held: false, // Smart Queue Management (renamed from the old "skipped")
       status: "ACTIVE",
       checkedOutAt: null,
       games: 0,
