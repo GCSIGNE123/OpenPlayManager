@@ -84,7 +84,7 @@ export default function StandingsView({ players, onChangeSkill }) {
                 )}
                 {onChangeSkill && (
                   <button
-                    style={styles.skillToggleBtn}
+                    style={styles.skillOverrideBtn}
                     onClick={() => onChangeSkill(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")}
                     title={`Move ${p.name} to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"}`}
                   >

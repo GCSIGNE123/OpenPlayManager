@@ -255,8 +255,14 @@ export const styles = {
   }),
   // Adaptive Skill Rotation manual override — see WaitingPlayersPanel.jsx/
   // StandingsView.jsx. Same shape/sizing as skipToggleBtn, just a neutral
-  // (not skipped-red) palette since this isn't a warning state.
-  skillToggleBtn: {
+  // (not skipped-red) palette since this isn't a warning state. Named
+  // distinctly from the pre-existing `skillToggleBtn(active)` function
+  // (used pervasively elsewhere for Singles/Doubles-style two-way toggles)
+  // — reusing that name here previously caused this object to be silently
+  // shadowed by the later function definition in this same file, which
+  // made the Adaptive Skill Rotation override button crash on render
+  // (a function passed as a `style` prop instead of a plain object).
+  skillOverrideBtn: {
     display: "flex",
     alignItems: "center",
     gap: 4,
