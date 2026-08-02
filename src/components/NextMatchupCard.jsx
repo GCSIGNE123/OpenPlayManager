@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Lock, Repeat, Shuffle, Unlock } from "lucide-react";
+import { Check, Lock, Pause, Play, Repeat, Shuffle, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerChip from "./PlayerChip.jsx";
@@ -17,6 +17,9 @@ export default function NextMatchupCard({
   onSubstitute,
   onToggleLock,
   onMoveToQueue,
+  onHold,
+  onResume,
+  onCancel,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -67,19 +70,47 @@ export default function NextMatchupCard({
     <div style={styles.matchupCard(label === "Next up")}>
       <div style={styles.matchupHeadRow}>
         <div style={styles.matchupHeader(label === "Next up")}>{label}</div>
-        <button
-          style={styles.lockToggleBtn(!!matchup.locked)}
-          onClick={() => onToggleLock(matchup.id)}
-          aria-label={matchup.locked ? "unlock this matchup" : "lock this matchup"}
-          title={
-            matchup.locked
-              ? "Locked — won't be touched by Regenerate matchups"
-              : "Lock so Regenerate matchups leaves this one alone"
-          }
-        >
-          {matchup.locked ? <Lock size={12} strokeWidth={2.5} /> : <Unlock size={12} strokeWidth={2.5} />}
-          {matchup.locked ? "Locked" : "Lock"}
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            style={styles.lockToggleBtn(!!matchup.locked)}
+            onClick={() => onToggleLock(matchup.id)}
+            aria-label={matchup.locked ? "unlock this matchup" : "lock this matchup"}
+            title={
+              matchup.locked
+                ? "Locked — won't be touched by Regenerate matchups"
+                : "Lock so Regenerate matchups leaves this one alone"
+            }
+          >
+            {matchup.locked ? <Lock size={12} strokeWidth={2.5} /> : <Unlock size={12} strokeWidth={2.5} />}
+            {matchup.locked ? "Locked" : "Lock"}
+          </button>
+          {(onHold || onResume) && (
+            <button
+              style={styles.lockToggleBtn(!!matchup.held)}
+              onClick={() => (matchup.held ? onResume() : onHold())}
+              aria-label={matchup.held ? "resume this matchup" : "hold this matchup"}
+              title={
+                matchup.held
+                  ? "Held — reserved but skipped by automatic court assignment. Resume to return it to normal deployment (same position, not sent to the back)"
+                  : "Hold — reserve this matchup but skip it for automatic court assignment until Resumed"
+              }
+            >
+              {matchup.held ? <Play size={12} strokeWidth={2.5} /> : <Pause size={12} strokeWidth={2.5} />}
+              {matchup.held ? "Held" : "Hold"}
+            </button>
+          )}
+          {onCancel && (
+            <button
+              style={styles.lockToggleBtn(false)}
+              onClick={onCancel}
+              aria-label="cancel this matchup"
+              title="Cancel — dissolve this matchup and return all 4 players to the waiting queue"
+            >
+              <X size={12} strokeWidth={2.5} />
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {editing ? (

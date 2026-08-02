@@ -15,7 +15,7 @@ const SORT_COLUMNS = [
   { key: "rating", label: "RTG", getValue: (p) => p.performance.rating ?? 0 },
 ];
 
-export default function StandingsView({ players }) {
+export default function StandingsView({ players, onChangeSkill }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(null); // "asc" | "desc" | null
 
@@ -79,6 +79,18 @@ export default function StandingsView({ players }) {
               <span style={styles.standingsNameCol}>
                 <Avatar player={p} size={24} />
                 <span style={styles.standingsName}>{p.name}</span>
+                {onChangeSkill && p.skill && (
+                  <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
+                )}
+                {onChangeSkill && (
+                  <button
+                    style={styles.skillToggleBtn}
+                    onClick={() => onChangeSkill(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")}
+                    title={`Move ${p.name} to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"}`}
+                  >
+                    {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
+                  </button>
+                )}
                 {p.streak >= 3 && (
                   <Flame
                     size={14}

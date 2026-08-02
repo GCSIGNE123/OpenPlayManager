@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Minus, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
+import { Minus, PauseCircle, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
@@ -11,6 +11,20 @@ import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
+
+// Queue Activity Log — see PROJECT.md/FEATURES.md. One shared, generic log
+// (state.queueActivityLog) holds every kind of entry Queue Management and
+// Smart Court Dispatch both write; this just maps each `kind` to its card
+// title so the log stays one list with a small, easily-scannable header
+// per entry rather than needing separate sections per feature.
+const QUEUE_ACTIVITY_KIND_META = {
+  heldMatchDissolved: { title: "Held Match Removed" },
+  courtDispatched: { title: "Court Automatically Dispatched" },
+  announcementCompleted: { title: "Voice Announcement Completed" },
+  announcementRepeated: { title: "Voice Announcement Repeated" },
+  announcementMuted: { title: "Announcement Muted" },
+  announcementSkipped: { title: "Announcement Skipped" },
+};
 
 export default function ScorerView({
   state,
@@ -36,14 +50,28 @@ export default function ScorerView({
   undoRegenerate,
   canUndoLastRound,
   undoLastRound,
-  toggleSkipPlayer,
+  holdPlayer,
+  resumePlayer,
+  skipPlayer,
+  holdMatch,
+  resumeMatch,
+  cancelMatch,
+  queueMsg,
   removePlayer,
   checkoutPlayer,
+  changePlayerSkill,
+  skillChangeMsg,
+  skillChangeLog,
+  queueActivityLog,
+  startDispatchedMatch,
+  repeatAnnouncement,
+  courtDispatchSettings,
   rotationMode,
   expectedGamesPerPlayer,
   setExpectedGamesPerPlayer,
   progressiveSkillThresholds,
   setProgressiveSkillThresholds,
+  adaptiveSkillThresholds,
   progressiveSkillPhase,
   matchHistory,
   waitingCount,
@@ -80,8 +108,12 @@ export default function ScorerView({
   // for elsewhere," which is exactly what this is (nothing to exclude by
   // matchup here — a live court's players aren't in nextMatchups at all)
   const courtCandidates = buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players);
-  const canFillCourt = nextMatchups.length > 0;
-  const canRegenerate = nextMatchups.some((m) => !m.locked);
+  // Smart Queue Management — a held matchup is reserved but must never be
+  // auto-deployed or counted as protecting it from "Regenerate" the same
+  // way a locked one is (see PickleballOpenPlay.jsx's
+  // takeNextDeployableMatchup/regenerateNextMatchups).
+  const canFillCourt = nextMatchups.some((m) => !m.held);
+  const canRegenerate = nextMatchups.some((m) => !m.locked && !m.held);
   const lastCourt = state.courts[state.courts.length - 1];
   const canAddCourt = state.courts.length < 8;
   const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
@@ -230,18 +262,86 @@ export default function ScorerView({
               onSubstitute={substituteInMatchup}
               onToggleLock={toggleLockMatchup}
               onMoveToQueue={moveToQueue}
+              onHold={() => holdMatch(m.id)}
+              onResume={() => resumeMatch(m.id)}
+              onCancel={() => cancelMatch(m.id)}
             />
           ))}
         </>
       )}
 
+      {skillChangeMsg && (
+        <div style={styles.confirmMsg}>{skillChangeMsg}</div>
+      )}
+      {queueMsg && (
+        <div style={styles.confirmMsg}>{queueMsg}</div>
+      )}
+
       <WaitingPlayersPanel
         players={unassignedPlayers}
-        onToggleSkip={toggleSkipPlayer}
+        state={state}
+        onHoldPlayer={holdPlayer}
+        onResumePlayer={resumePlayer}
+        onSkipPlayer={skipPlayer}
         onRemove={removePlayer}
         onCheckout={checkoutPlayer}
+        onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
         checkedOutPlayers={checkedOutPlayers}
       />
+
+      {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
+        <>
+          <SectionLabel>Skill Change Activity Log</SectionLabel>
+          <ul style={styles.rosterList}>
+            {skillChangeLog.map((entry) => (
+              <li key={entry.id} style={styles.rosterItem}>
+                <span style={styles.queueName}>
+                  {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                  {" — "}
+                  {entry.playerName}: {entry.previousSkill === "intermediate" ? "Intermediate" : "Beginner"} →{" "}
+                  {entry.newSkill === "intermediate" ? "Intermediate" : "Beginner"} ({entry.reason})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {queueActivityLog && queueActivityLog.length > 0 && (
+        <>
+          <SectionLabel>Queue Activity Log</SectionLabel>
+          <div style={styles.queueActivityList}>
+            {queueActivityLog.map((entry) => {
+              // "heldMatchDissolved" is the default for any pre-Sprint-3
+              // entry that predates the `kind` field — see
+              // lib/queueManagement.js's noteDissolvedHeldMatchups.
+              const kind = entry.kind || "heldMatchDissolved";
+              const meta = QUEUE_ACTIVITY_KIND_META[kind] || QUEUE_ACTIVITY_KIND_META.heldMatchDissolved;
+              return (
+                <div key={entry.id} style={styles.queueActivityCard}>
+                  <div style={styles.queueActivityTitle}>
+                    <PauseCircle size={13} strokeWidth={2.5} />
+                    {meta.title}
+                  </div>
+                  {typeof entry.courtNumber === "number" && (
+                    <div style={styles.queueActivityCourt}>Court {entry.courtNumber}</div>
+                  )}
+                  <div style={styles.queueActivityTeams}>
+                    <span>{(entry.teamA || []).join(" / ")}</span>
+                    <span style={styles.queueActivityVs}>vs</span>
+                    <span>{(entry.teamB || []).join(" / ")}</span>
+                  </div>
+                  <div style={styles.queueActivityReasonLabel}>Reason:</div>
+                  <div style={styles.queueActivityReason}>{entry.reason}.</div>
+                  <div style={styles.queueActivityTime}>
+                    {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
@@ -297,6 +397,8 @@ export default function ScorerView({
                 poolingMode={poolingActive}
                 reserved={isReserved}
                 onRequestCheckout={checkoutPlayer ? (id) => setConfirmingCheckoutId(id) : null}
+                onStartMatch={() => startDispatchedMatch(court.number)}
+                onRepeatAnnouncement={() => repeatAnnouncement(court.number)}
               />
             );
           });
@@ -310,6 +412,9 @@ export default function ScorerView({
           expectedGamesPerPlayer={expectedGamesPerPlayer}
           progressiveSkillThresholds={progressiveSkillThresholds}
           showThresholds={rotationMode === "progressiveSkill"}
+          adaptiveSkillThresholds={adaptiveSkillThresholds}
+          showAdaptiveThresholds={rotationMode === "adaptiveSkill"}
+          courtDispatchSettings={courtDispatchSettings}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

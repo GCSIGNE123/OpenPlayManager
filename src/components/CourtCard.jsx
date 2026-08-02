@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Clock, Lock, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
+import { Check, Clock, Lock, Megaphone, PhoneCall, Play, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -26,8 +26,14 @@ export default function CourtCard({
   poolingMode,
   reserved,
   onRequestCheckout,
+  onStartMatch,
+  onRepeatAnnouncement,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
+  // Smart Court Dispatch — "dispatching" is its own dedicated court state
+  // (see constants.js's emptyCourt): the matchup is already assigned, but
+  // scoring hasn't started — the court reads "Calling Players..." instead.
+  const isDispatching = court.status === "dispatching";
   const isManual = court.assignmentMode === "manual";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -102,14 +108,16 @@ export default function CourtCard({
               ? "WAITING"
               : court.status === "open"
                 ? "OPEN"
-                : court.status === "finished"
-                  ? "MATCH POINT"
-                  : "LIVE"}
+                : court.status === "dispatching"
+                  ? "CALLING PLAYERS..."
+                  : court.status === "finished"
+                    ? "MATCH POINT"
+                    : "LIVE"}
           </span>
         )}
       </div>
 
-      {!isLive && !readOnly && (
+      {!isLive && !isDispatching && !readOnly && (
         <div style={styles.assignmentToggleRow}>
           <button
             style={styles.assignmentToggleBtn(!isManual)}
@@ -126,7 +134,7 @@ export default function CourtCard({
         </div>
       )}
 
-      {!isLive && !isManual && (
+      {!isLive && !isDispatching && !isManual && (
         <div style={styles.openCourtBody}>
           <p style={styles.openCourtText}>{reserved ? "Reserved via Court Booking" : "Court is free"}</p>
           {!readOnly && (
@@ -233,6 +241,34 @@ export default function CourtCard({
                     Lock court
                   </button>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isDispatching && (
+        <div>
+          <TeamRow ids={court.teamA} players={players} score={0} readOnly />
+          <div style={styles.vsLine} />
+          <TeamRow ids={court.teamB} players={players} score={0} readOnly />
+          <p style={styles.awaitingPairText}>
+            <PhoneCall size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
+            Calling players to Court {court.number}…
+          </p>
+          {!readOnly && (
+            <div style={styles.courtActionsRow}>
+              {onStartMatch && (
+                <button style={styles.fixTeamsBtn} onClick={onStartMatch}>
+                  <Play size={12} strokeWidth={2.5} />
+                  Start Match
+                </button>
+              )}
+              {onRepeatAnnouncement && (
+                <button style={styles.fixTeamsBtn} onClick={onRepeatAnnouncement}>
+                  <Megaphone size={12} strokeWidth={2.5} />
+                  Repeat Announcement
+                </button>
               )}
             </div>
           )}
@@ -350,6 +386,12 @@ export default function CourtCard({
                 <Shuffle size={12} strokeWidth={2.5} />
                 Fix teams
               </button>
+              {onRepeatAnnouncement && (
+                <button style={styles.fixTeamsBtn} onClick={onRepeatAnnouncement}>
+                  <Megaphone size={12} strokeWidth={2.5} />
+                  Repeat Announcement
+                </button>
+              )}
               {court.manualLocked && court.status !== "finished" && (
                 <button style={styles.fixTeamsBtn} onClick={onUnlock}>
                   <Unlock size={12} strokeWidth={2.5} />

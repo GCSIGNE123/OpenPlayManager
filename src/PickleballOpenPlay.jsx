@@ -12,9 +12,29 @@ import {
   regenerateNextMatchups,
   dissolveMatchupIfReserved,
   manuallyReservedIds,
+  maxUpcomingMatchups,
+  getPlayerQueueStatus,
+  changePlayerSkill as changePlayerSkillAction,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
+import {
+  holdPlayer as holdPlayerAction,
+  resumePlayer as resumePlayerAction,
+  skipPlayer as skipPlayerAction,
+  holdMatch as holdMatchAction,
+  resumeMatch as resumeMatchAction,
+  cancelMatch as cancelMatchAction,
+  regenerate as regenerateQueue,
+  noteDissolvedHeldMatchups,
+} from "./lib/queueManagement.js";
+import {
+  selectNextDispatchableMatchup,
+  dispatchAvailableCourts,
+  confirmCourtLive as confirmCourtLiveAction,
+  logDispatchEvent,
+} from "./lib/courtDispatch.js";
+import { buildAnnouncementText, speakAnnouncement, emitDispatchEvent, DISPATCH_EVENTS } from "./lib/announcer.js";
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
@@ -162,6 +182,10 @@ export default function PickleballOpenPlay() {
   // isCourtReserved() check a no-op, so a club that's never set up Court
   // Booking sees zero behavior change.
   const [reservedCourtNumbers, setReservedCourtNumbers] = useState(new Set());
+  const isCourtReserved = useCallback(
+    (courtNumber) => reservedCourtNumbers.has(courtNumber),
+    [reservedCourtNumbers]
+  );
   useEffect(() => {
     if (screen !== "app" || !loaded || state.sessionType === "tournament") return undefined;
     let cancelled = false;
@@ -188,6 +212,8 @@ export default function PickleballOpenPlay() {
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [checkinMsg, setCheckinMsg] = useState("");
+  const [skillChangeMsg, setSkillChangeMsg] = useState(""); // Adaptive Skill Rotation — facilitator toast for promotion/relegation/manual override, see endMatch/changePlayerSkill
+  const [queueMsg, setQueueMsg] = useState(""); // Smart Queue Management — facilitator toast for Skip Player, see skipPlayer below
   const [saveError, setSaveError] = useState("");
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -212,6 +238,13 @@ export default function PickleballOpenPlay() {
   };
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Smart Court Dispatch — breaks the circular dependency between save()
+  // (which needs to trigger scheduling once a dispatch has been
+  // persisted) and scheduleAnnouncements (which needs to call save() again
+  // later, to log the announcement result / confirm the court live). A
+  // ref avoids adding a function to save()'s own useCallback dependency
+  // array that would otherwise have to be defined before save() itself.
+  const scheduleAnnouncementsRef = useRef(() => {});
 
   const load = useCallback(async () => {
     if (!sessionCode) return;
@@ -252,11 +285,59 @@ export default function PickleballOpenPlay() {
       );
       const manualIds = manuallyReservedIds(next.courts);
       const autoQueueIds = manualIds.size > 0 ? next.queueIds.filter((id) => !manualIds.has(id)) : next.queueIds;
+      // Smart Queue Management — see PROJECT.md/FEATURES.md. Caps how many
+      // upcoming matchups are kept queued at once (Live Courts − 1 in
+      // steady state; see maxUpcomingMatchups for the pre-session-start
+      // special case) — this is what makes "Queue Regeneration" automatic
+      // for every listed event (check-in, checkout, resume, skip, held-
+      // player-resume, matchup-cancelled): they all flow through this same
+      // save(), so every one of them re-evaluates the cap for free.
       const withMatchups = {
         ...next,
-        nextMatchups: refreshNextMatchups(autoQueueIds, next.players, next.nextMatchups || [], engine, phase),
+        nextMatchups: refreshNextMatchups(
+          autoQueueIds,
+          next.players,
+          next.nextMatchups || [],
+          engine,
+          phase,
+          maxUpcomingMatchups(next.courts)
+        ),
       };
-      const withStamp = { ...withMatchups, updatedAt: Date.now() };
+      // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
+      // service that reacts here, in the single save() write path, to "a
+      // court is open and there's an eligible upcoming matchup" — NOT to
+      // any one specific action. This means any action that frees a court
+      // (a completed match, an unlocked manual court, an undone round,
+      // ...) triggers dispatch consideration automatically, the same way
+      // refreshNextMatchups above already re-evaluates on every save().
+      // Court assignment (this call) always happens synchronously, before
+      // any voice announcement is ever attempted — see the announcement
+      // scheduling right after this function, which never affects what
+      // gets persisted here.
+      const dispatchResult = dispatchAvailableCourts({
+        courts: withMatchups.courts,
+        nextMatchups: withMatchups.nextMatchups,
+        queueIds: withMatchups.queueIds,
+        players: withMatchups.players,
+        autoFillCourts: withMatchups.courtDispatchSettings?.autoFillCourts !== false,
+        isCourtReserved,
+      });
+      let withDispatch = {
+        ...withMatchups,
+        courts: dispatchResult.courts,
+        nextMatchups: dispatchResult.nextMatchups,
+        queueIds: dispatchResult.queueIds,
+      };
+      dispatchResult.dispatched.forEach((d) => {
+        withDispatch = logDispatchEvent(withDispatch, {
+          kind: "courtDispatched",
+          courtNumber: d.courtNumber,
+          teamANames: d.teamANames,
+          teamBNames: d.teamBNames,
+          reason: "Court automatically dispatched",
+        });
+      });
+      const withStamp = { ...withDispatch, updatedAt: Date.now() };
       setState(withStamp);
       try {
         await window.storage.set(`${STORAGE_PREFIX}${sessionCode}`, JSON.stringify(withStamp), true);
@@ -264,9 +345,106 @@ export default function PickleballOpenPlay() {
       } catch (e) {
         setSaveError("Couldn't sync — check your connection.");
       }
+      if (dispatchResult.dispatched.length > 0) {
+        scheduleAnnouncementsRef.current(dispatchResult.dispatched, withStamp.courtDispatchSettings);
+      }
     },
-    [sessionCode]
+    [sessionCode, isCourtReserved]
   );
+
+  // Smart Court Dispatch — Voice Announcements. Schedules the
+  // announcement pipeline for every court dispatchAvailableCourts just
+  // assigned this save() cycle. Runs entirely client/device-local (the
+  // Web Speech API only exists in a browser, and only the device that
+  // happened to be present when the court became available can speak) —
+  // same precedent as this app's other client-local timers (toasts,
+  // undo snapshots). Reads stateRef.current (not a captured `state`) so a
+  // multi-second delay never acts on stale data. Dispatch itself (court
+  // assignment, already persisted by the time this runs) never depends on
+  // any of this succeeding — a muted or unsupported browser still logs
+  // the event and, if Auto Start Match is on, still starts the match.
+  const scheduleAnnouncements = useCallback(
+    (dispatchedList, settings) => {
+      const cfg = settings || defaultState.courtDispatchSettings;
+      dispatchedList.forEach(({ courtNumber, teamANames, teamBNames }) => {
+        setTimeout(() => {
+          const text = buildAnnouncementText(courtNumber, teamANames, teamBNames);
+          const finish = (kind, reason) => {
+            let updated = logDispatchEvent(stateRef.current, { kind, courtNumber, teamANames, teamBNames, reason });
+            if (cfg.autoStartMatch !== false) {
+              updated = confirmCourtLiveAction(updated, courtNumber);
+            }
+            save(updated);
+          };
+          if (!cfg.voiceEnabled) {
+            finish("announcementMuted", "Announcement muted");
+            return;
+          }
+          emitDispatchEvent(DISPATCH_EVENTS.ANNOUNCEMENT_STARTED, { courtNumber });
+          speakAnnouncement(text, cfg, (result) => {
+            if (result === "completed") {
+              emitDispatchEvent(DISPATCH_EVENTS.ANNOUNCEMENT_COMPLETED, { courtNumber });
+              finish("announcementCompleted", "Voice announcement completed");
+            } else {
+              // "skipped" (unsupported/errored) or any other non-"completed"
+              // result — either way, dispatch already happened; this only
+              // affects logging and the auto-start timing.
+              finish("announcementSkipped", "Announcement skipped");
+            }
+          });
+        }, cfg.announcementDelayMs ?? 2000);
+      });
+    },
+    [save]
+  );
+  useEffect(() => {
+    scheduleAnnouncementsRef.current = scheduleAnnouncements;
+  }, [scheduleAnnouncements]);
+
+  // Manually starts a dispatched ("Calling Players...") court — for when
+  // Auto Start Match is off, or a facilitator wants to start early instead
+  // of waiting for the announcement/delay to finish on its own. A no-op
+  // if the court isn't currently "dispatching".
+  const startDispatchedMatch = (courtNumber) => {
+    save(confirmCourtLiveAction(state, courtNumber));
+  };
+
+  // Repeat Announcement — available on both "dispatching" (Calling
+  // Players...) and live/finished (Playing) courts, per explicit
+  // direction. Recomputes the announcement text from the court's CURRENT
+  // team assignment (never regenerates anything, never touches court
+  // status) and always logs the repeat; the actual speech is skipped if
+  // Voice Announcements is off, same as automatic dispatch.
+  const repeatAnnouncement = (courtNumber) => {
+    const court = state.courts.find((c) => c.number === courtNumber);
+    if (!court || court.status === "open") return;
+    const teamANames = court.teamA.map((id) => state.players[id]?.name || "Unknown player");
+    const teamBNames = court.teamB.map((id) => state.players[id]?.name || "Unknown player");
+    const text = buildAnnouncementText(courtNumber, teamANames, teamBNames);
+    const cfg = state.courtDispatchSettings || defaultState.courtDispatchSettings;
+    const logRepeat = () => {
+      save(
+        logDispatchEvent(stateRef.current, {
+          kind: "announcementRepeated",
+          courtNumber,
+          teamANames,
+          teamBNames,
+          reason: "Voice announcement repeated",
+        })
+      );
+    };
+    if (!cfg.voiceEnabled) {
+      logRepeat();
+      return;
+    }
+    emitDispatchEvent(DISPATCH_EVENTS.ANNOUNCEMENT_STARTED, { courtNumber, repeat: true });
+    speakAnnouncement(text, cfg, (result) => {
+      if (result === "completed") {
+        emitDispatchEvent(DISPATCH_EVENTS.ANNOUNCEMENT_COMPLETED, { courtNumber, repeat: true });
+      }
+      logRepeat();
+    });
+  };
 
   useEffect(() => {
     if (screen !== "app" || !sessionCode) return;
@@ -327,13 +505,16 @@ export default function PickleballOpenPlay() {
           photo: p.photo,
           skill: p.skill === "intermediate" ? "intermediate" : "beginner",
           checkedIn: false,
-          skipped: false,
+          checkedInAt: null, // Smart Queue Management — see PickleballOpenPlay.jsx's checkInExisting/quickAddCheckIn; the Waiting Queue Timer's fallback when a player has never played yet
+          held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
           status: "ACTIVE", // Player Checkout — see PLAYER_STATUSES in lib/constants.js
           checkedOutAt: null,
           games: 0,
           wins: 0,
           losses: 0,
           streak: 0,
+          lossStreak: 0, // Adaptive Skill Rotation only — consecutive-loss counter, mirrors `streak` (consecutive-win counter) but reset the opposite way, see endMatch
+          lastMatchEndAt: null, // Smart Queue Management — see PickleballOpenPlay.jsx's endMatch; the Waiting Queue Timer's primary source once a player has played at least one match
           lastResult: null,
           pointsFor: 0,
           pointsAgainst: 0,
@@ -360,6 +541,10 @@ export default function PickleballOpenPlay() {
         tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
         expectedGamesPerPlayer,
+        adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
+        skillChangeLog: [],
+        queueActivityLog: [],
+        courtDispatchSettings: { ...defaultState.courtDispatchSettings },
         pendingTournamentTemplate: templateConfig, // see lib/constants.js/TournamentTemplateService.js — read once by TournamentScheduleView to pre-fill its defaults, never touched again after that
         updatedAt: Date.now(),
       };
@@ -558,7 +743,7 @@ export default function PickleballOpenPlay() {
   const checkInExisting = (id) => {
     const p = state.players[id];
     if (!p || p.checkedIn) return;
-    const players = { ...state.players, [id]: { ...p, checkedIn: true } };
+    const players = { ...state.players, [id]: { ...p, checkedIn: true, checkedInAt: Date.now() } };
     const queueIds = [...state.queueIds, id];
     clearOneShotSnapshots(); // a snapshot from before this check-in would silently un-check them
     save({ ...state, players, queueIds });
@@ -584,13 +769,16 @@ export default function PickleballOpenPlay() {
         name,
         skill: skillInput === "intermediate" ? "intermediate" : "beginner",
         checkedIn: true,
-        skipped: false,
+        checkedInAt: Date.now(), // Smart Queue Management — see the Waiting Queue Timer
+        held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
         status: "ACTIVE",
         checkedOutAt: null,
         games: 0,
         wins: 0,
         losses: 0,
         streak: 0,
+        lossStreak: 0, // Adaptive Skill Rotation only — see PickleballOpenPlay.jsx's endMatch
+        lastMatchEndAt: null, // Smart Queue Management — see the Waiting Queue Timer
         lastResult: null,
         pointsFor: 0,
         pointsAgainst: 0,
@@ -613,29 +801,21 @@ export default function PickleballOpenPlay() {
     setTimeout(() => setCheckinMsg(""), 2500);
   };
 
-  // Court Booking & Reservations integration — see PROJECT.md. A court
-  // NUMBER currently inside an active Court Booking reservation is
-  // excluded from automatic fill, the same way an "open" check already
-  // gates a court that's mid-match — matched by number since that's the
-  // only identity Open Play's own state.courts has ever had (see
-  // lib/courtDatabase.js's header comment). `reservedCourtNumbers` is
-  // refreshed on a light interval (courtBookingRefresh below) rather than
-  // a live realtime subscription — reservations changing mid-session is a
-  // rare event, and this keeps the integration simple and low-risk rather
-  // than wiring a second subscribeToKey stream into every Open Play
-  // session. Entirely a no-op (empty Set) for any club that hasn't set up
-  // Court Booking at all, so existing Open Play behavior is unaffected.
-  const isCourtReserved = (courtNumber) => reservedCourtNumbers.has(courtNumber);
-
   // courts are filled from the front of nextMatchups — pre-built (and
   // possibly scorer-edited) upcoming matchups — rather than recomputed on
-  // the spot, so what the scorer reviewed is exactly what gets deployed
+  // the spot, so what the scorer reviewed is exactly what gets deployed.
+  // selectNextDispatchableMatchup (lib/courtDispatch.js) is the same
+  // selection logic Smart Court Dispatch's automatic path uses — one
+  // shared definition of "what's next," so manual and automatic dispatch
+  // can never disagree. Manual dispatch always goes straight to "live"
+  // (no "Calling Players..."/announcement pipeline — that's specific to
+  // automatic dispatch).
   const fillCourt = (courtIdx) => {
     const court = state.courts[courtIdx];
     // manual courts are filled by lockManualCourt (the organizer's own
     // picks), never by deploying a pre-built rotation-engine matchup
     if (court.status !== "open" || court.assignmentMode === "manual" || isCourtReserved(court.number)) return;
-    const [nextMatch, ...restMatchups] = state.nextMatchups || [];
+    const { matchup: nextMatch, rest: restMatchups } = selectNextDispatchableMatchup(state.nextMatchups, state.players);
     if (!nextMatch) return;
 
     const { teamA, teamB } = nextMatch;
@@ -653,7 +833,7 @@ export default function PickleballOpenPlay() {
     let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
       if (c.status !== "open" || c.assignmentMode === "manual" || isCourtReserved(c.number)) return c;
-      const [nextMatch, ...rest] = remainingMatchups;
+      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players);
       if (!nextMatch) return c;
       remainingMatchups = rest;
       const { teamA, teamB } = nextMatch;
@@ -695,7 +875,8 @@ export default function PickleballOpenPlay() {
   const setManualCourtPlayer = (courtIdx, side, slotIndex, playerId) => {
     const court = state.courts[courtIdx];
     if (court.status !== "open" || court.assignmentMode !== "manual") return;
-    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
+    const before = state.nextMatchups;
+    const nextMatchups = dissolveMatchupIfReserved(before, playerId);
     const courts = state.courts.map((c, i) => {
       if (i !== courtIdx) return c;
       const nextSide = [...c[side]];
@@ -703,7 +884,14 @@ export default function PickleballOpenPlay() {
       return { ...c, [side]: nextSide };
     });
     clearOneShotSnapshots();
-    save({ ...state, courts, nextMatchups });
+    const name = state.players[playerId]?.name || "A player";
+    const reason = `${name} was assigned to a manual court`;
+    const next = noteDissolvedHeldMatchups({ ...state, courts, nextMatchups }, before, nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: name,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   const clearManualCourtPlayer = (courtIdx, side, slotIndex) => {
@@ -768,7 +956,10 @@ export default function PickleballOpenPlay() {
   const generateRemainingCourts = () => {
     const manualIds = manuallyReservedIds(state.courts);
     const queueIds = state.queueIds.filter((id) => !manualIds.has(id));
-    const locked = (state.nextMatchups || []).filter((m) => m.locked);
+    // Smart Queue Management — a held matchup (like a locked one) must
+    // survive this rebuild untouched, not get silently dissolved just
+    // because it's not explicitly locked.
+    const protectedMatchups = (state.nextMatchups || []).filter((m) => m.locked || m.held);
     const engine = getRotationEngine(state.rotationMode);
     const phase = progressiveSkillPhaseFor(
       state.rotationMode,
@@ -776,13 +967,20 @@ export default function PickleballOpenPlay() {
       state.expectedGamesPerPlayer,
       state.progressiveSkillThresholds
     );
-    const generated = regenerateNextMatchups(queueIds, state.players, locked, engine, phase);
+    const generated = regenerateNextMatchups(
+      queueIds,
+      state.players,
+      protectedMatchups,
+      engine,
+      phase,
+      maxUpcomingMatchups(state.courts)
+    );
 
     let remainingIds = [...state.queueIds];
     let remainingMatchups = [...generated];
     const courts = state.courts.map((c) => {
       if (c.status !== "open" || c.assignmentMode === "manual") return c;
-      const [nextMatch, ...rest] = remainingMatchups;
+      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players);
       if (!nextMatch) return c;
       remainingMatchups = rest;
       const consumed = new Set([...nextMatch.teamA, ...nextMatch.teamB]);
@@ -833,6 +1031,7 @@ export default function PickleballOpenPlay() {
     let players = { ...state.players };
     const aWon = scoreA > scoreB;
     const bWon = scoreB > scoreA;
+    const matchEndedAt = Date.now(); // Smart Queue Management — Waiting Queue Timer's source once a player has played
     teamA.forEach((id) => {
       if (!players[id]) return;
       const p = players[id];
@@ -842,7 +1041,9 @@ export default function PickleballOpenPlay() {
         wins: (p.wins || 0) + (aWon ? 1 : 0),
         losses: (p.losses || 0) + (bWon ? 1 : 0),
         streak: aWon ? (p.streak || 0) + 1 : 0,
+        lossStreak: bWon ? (p.lossStreak || 0) + 1 : 0,
         lastResult: aWon ? "win" : bWon ? "loss" : p.lastResult,
+        lastMatchEndAt: matchEndedAt,
         pointsFor: (p.pointsFor || 0) + scoreA,
         pointsAgainst: (p.pointsAgainst || 0) + scoreB,
       };
@@ -856,7 +1057,9 @@ export default function PickleballOpenPlay() {
         wins: (p.wins || 0) + (bWon ? 1 : 0),
         losses: (p.losses || 0) + (aWon ? 1 : 0),
         streak: bWon ? (p.streak || 0) + 1 : 0,
+        lossStreak: aWon ? (p.lossStreak || 0) + 1 : 0,
         lastResult: bWon ? "win" : aWon ? "loss" : p.lastResult,
+        lastMatchEndAt: matchEndedAt,
         pointsFor: (p.pointsFor || 0) + scoreB,
         pointsAgainst: (p.pointsAgainst || 0) + scoreA,
       };
@@ -864,6 +1067,64 @@ export default function PickleballOpenPlay() {
     // partner/opponent/court history feeds the rotation engine's recency
     // scoring for the next round — see recordRotationHistory
     players = recordRotationHistory(players, teamA, teamB, court.number);
+
+    // Adaptive Skill Rotation — automatic promotion/relegation. Runs only
+    // here, AFTER every stat/streak update above has already landed in
+    // `players` — so this always reads the freshly-updated streak, and
+    // since the court itself isn't touched until further below (or not at
+    // all, in the pooling branch, until resolveWinnerPoolMatch runs), a
+    // live match is never interrupted by a skill change. Thresholds are
+    // organizer-configurable (state.adaptiveSkillThresholds, see Session
+    // Settings) rather than hardcoded. A manual override
+    // (changePlayerSkill) always wins going forward, since it resets both
+    // streaks to 0 the moment it runs, so this check simply won't have a
+    // streak to act on again until enough new consecutive results pile up
+    // under the overridden skill.
+    const skillChangeEntries = [];
+    if (state.rotationMode === "adaptiveSkill") {
+      const { promotionWins = 3, relegationLosses = 3 } = state.adaptiveSkillThresholds || {};
+      playedIds.forEach((id) => {
+        const p = players[id];
+        if (!p) return;
+        if (p.skill !== "intermediate" && (p.streak || 0) >= promotionWins) {
+          players[id] = { ...p, skill: "intermediate", streak: 0 };
+          skillChangeEntries.push({
+            id: uid(),
+            playerId: id,
+            playerName: p.name,
+            previousSkill: "beginner",
+            newSkill: "intermediate",
+            reason: `${promotionWins} consecutive wins`,
+            timestamp: Date.now(),
+          });
+        } else if (p.skill === "intermediate" && (p.lossStreak || 0) >= relegationLosses) {
+          players[id] = { ...p, skill: "beginner", lossStreak: 0 };
+          skillChangeEntries.push({
+            id: uid(),
+            playerId: id,
+            playerName: p.name,
+            previousSkill: "intermediate",
+            newSkill: "beginner",
+            reason: `${relegationLosses} consecutive losses`,
+            timestamp: Date.now(),
+          });
+        }
+      });
+    }
+    const skillChangeLog = skillChangeEntries.length
+      ? [...skillChangeEntries, ...(state.skillChangeLog || [])].slice(0, 50)
+      : state.skillChangeLog;
+    if (skillChangeEntries.length) {
+      const msg = skillChangeEntries
+        .map((e) =>
+          e.newSkill === "intermediate"
+            ? `${e.playerName} has been promoted to Intermediate.`
+            : `${e.playerName} has been moved to Beginner.`
+        )
+        .join(" ");
+      setSkillChangeMsg(msg);
+      setTimeout(() => setSkillChangeMsg(""), 4000);
+    }
 
     // the phase this match was actually played under — computed from
     // pre-match progress, since games/wins only increment above, after the
@@ -911,7 +1172,7 @@ export default function PickleballOpenPlay() {
       const nextMatchups = [...(state.nextMatchups || []), ...newMatchups];
       setRegenerateSnapshot(null); // stale after this round's requeue/repool
       setLastRoundSnapshot(preMatchState);
-      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory });
+      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory, skillChangeLog });
       return;
     }
 
@@ -919,7 +1180,7 @@ export default function PickleballOpenPlay() {
     const courts = state.courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
     setRegenerateSnapshot(null); // stale after this round's requeue
     setLastRoundSnapshot(preMatchState);
-    save({ ...state, courts, players, queueIds, matchHistory });
+    save({ ...state, courts, players, queueIds, matchHistory, skillChangeLog });
   };
 
   // restores the full app state from right before the last "End match"
@@ -975,14 +1236,22 @@ export default function PickleballOpenPlay() {
   // they were already unassigned. The outgoing player goes back to the
   // waiting queue either way.
   const substitutePlayer = (courtIdx, outgoingId, incomingId) => {
-    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, incomingId);
+    const before = state.nextMatchups;
+    const nextMatchups = dissolveMatchupIfReserved(before, incomingId);
     const court = state.courts[courtIdx];
     const teamA = court.teamA.map((id) => (id === outgoingId ? incomingId : id));
     const teamB = court.teamB.map((id) => (id === outgoingId ? incomingId : id));
     const courts = state.courts.map((c, i) => (i === courtIdx ? { ...c, teamA, teamB } : c));
     const queueIds = [...state.queueIds.filter((id) => id !== incomingId), outgoingId];
     clearOneShotSnapshots();
-    save({ ...state, courts, queueIds, nextMatchups });
+    const incomingName = state.players[incomingId]?.name || "A player";
+    const reason = `${incomingName} was substituted onto Court ${court.number}`;
+    const next = noteDissolvedHeldMatchups({ ...state, courts, queueIds, nextMatchups }, before, nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: incomingName,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   // ---- next-matchup editing (before a matchup is assigned to a court) ----
@@ -1002,7 +1271,8 @@ export default function PickleballOpenPlay() {
   // matchup being edited). Either way both players stay in queueIds the
   // whole time, since neither one leaves the waiting pool.
   const substituteInMatchup = (matchupId, outgoingId, incomingId) => {
-    const dissolved = dissolveMatchupIfReserved(state.nextMatchups, incomingId, matchupId);
+    const before = state.nextMatchups;
+    const dissolved = dissolveMatchupIfReserved(before, incomingId, matchupId);
     const nextMatchups = dissolved.map((m) => {
       if (m.id !== matchupId) return m;
       const teamA = m.teamA.map((id) => (id === outgoingId ? incomingId : id));
@@ -1010,7 +1280,14 @@ export default function PickleballOpenPlay() {
       return { ...m, teamA, teamB };
     });
     clearOneShotSnapshots();
-    save({ ...state, nextMatchups });
+    const incomingName = state.players[incomingId]?.name || "A player";
+    const reason = `${incomingName} was moved into another matchup`;
+    const next = noteDissolvedHeldMatchups({ ...state, nextMatchups }, before, dissolved, reason, {
+      players: state.players,
+      affectedPlayer: incomingName,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   // Organizer-initiated "Move to Queue": pulls a player out of an upcoming
@@ -1026,9 +1303,17 @@ export default function PickleballOpenPlay() {
   // so Progressive Skill Rotation's pairing logic still decides who plays
   // whom next — this doesn't bypass or duplicate it.
   const moveToQueue = (playerId) => {
-    const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
+    const before = state.nextMatchups;
+    const nextMatchups = dissolveMatchupIfReserved(before, playerId);
     clearOneShotSnapshots();
-    save({ ...state, nextMatchups });
+    const name = state.players[playerId]?.name || "A player";
+    const reason = `${name} was moved to the queue`;
+    const next = noteDissolvedHeldMatchups({ ...state, nextMatchups }, before, nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: name,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   // locking a matchup protects it from "Regenerate matchups" — everything
@@ -1040,22 +1325,17 @@ export default function PickleballOpenPlay() {
     save({ ...state, nextMatchups });
   };
 
-  // dissolves every not-locked upcoming matchup and reruns the rotation
-  // engine over the full eligible pool — same players, fresh pairings.
-  // Remembers what nextMatchups looked like beforehand (this device only)
-  // so "Undo regenerate" can put it back.
+  // dissolves every not-locked-and-not-held upcoming matchup and reruns the
+  // rotation engine over the full eligible pool — same players, fresh
+  // pairings. Remembers what nextMatchups looked like beforehand (this
+  // device only) so "Undo regenerate" can put it back. Smart Queue
+  // Management's reusable regenerate() (lib/queueManagement.js) does the
+  // actual work — this is just its thin UI wrapper (snapshot bookkeeping +
+  // save).
   const regenerateMatchups = () => {
     const before = state.nextMatchups || [];
-    const engine = getRotationEngine(state.rotationMode);
-    const phase = progressiveSkillPhaseFor(
-      state.rotationMode,
-      state.players,
-      state.expectedGamesPerPlayer,
-      state.progressiveSkillThresholds
-    );
-    const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, before, engine, phase);
     setRegenerateSnapshot(before);
-    save({ ...state, nextMatchups });
+    save(regenerateQueue(state));
   };
 
   // restores nextMatchups to how it looked right before the last
@@ -1066,14 +1346,85 @@ export default function PickleballOpenPlay() {
     setRegenerateSnapshot(null);
   };
 
-  // sitting a waiting player out: they stay visible in the waiting list but
-  // the rotation engine skips them when building new matchups
-  const toggleSkipPlayer = (id) => {
-    const p = state.players[id];
-    if (!p) return;
-    const players = { ...state.players, [id]: { ...p, skipped: !p.skipped } };
+  // Smart Queue Management — see PROJECT.md/FEATURES.md. Every handler
+  // below is a thin wrapper: the actual logic is a reusable, UI-agnostic
+  // function in lib/queueManagement.js (so any future feature — Smart
+  // Court Dispatch, voice announcements — can call the exact same
+  // functions directly); this layer only adds save() + a facilitator
+  // toast, same pattern as changePlayerSkill's wrapper in Sprint 1.
+
+  // Held Match dissolution notice — see PROJECT.md/FEATURES.md. If holding
+  // one player, checking them out, changing their skill division,
+  // substituting them, moving them to queue, or removing them turns out to
+  // have dissolved a matchup that was HELD (a facilitator's deliberate
+  // reservation), noteDissolvedHeldMatchups (lib/queueManagement.js) has
+  // already recorded it in queueActivityLog by the time `next` gets here —
+  // this only handles the UI-specific toast half. Detected by reference
+  // equality (a new queueActivityLog array only exists if something was
+  // actually logged), so this is a no-op the vast majority of the time
+  // (dissolving an ordinary, not-held matchup is expected and silent).
+  const notifyIfHeldMatchDissolved = (next, reason) => {
+    if (next.queueActivityLog !== state.queueActivityLog) {
+      setQueueMsg(`Held Match dissolved: ${reason}.`);
+      setTimeout(() => setQueueMsg(""), 4000);
+    }
+  };
+
+  // Hold Player — temporarily excludes a player from matchmaking. Preserves
+  // stats/streaks/payment status; player stays checked in.
+  const holdPlayer = (id) => {
+    const before = state.nextMatchups;
+    let next = holdPlayerAction(state, id);
+    if (next === state) return;
     clearOneShotSnapshots();
-    save({ ...state, players });
+    const name = state.players[id]?.name || "A player";
+    next = noteDissolvedHeldMatchups(next, before, next.nextMatchups, `${name} was held`, {
+      players: state.players,
+      affectedPlayer: name,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, `${name} was held`);
+  };
+
+  // Resume Player — returns a held player to the waiting queue.
+  const resumePlayer = (id) => {
+    const next = resumePlayerAction(state, id);
+    if (next === state) return;
+    save(next);
+  };
+
+  // Skip Player — a brief "let others go first" nudge (restroom, water,
+  // stepping away): moves the player to the back of the waiting queue but
+  // they stay fully eligible for matchmaking the whole time — unlike Hold,
+  // this never excludes them.
+  const skipPlayer = (id) => {
+    const p = state.players[id];
+    const next = skipPlayerAction(state, id);
+    if (next === state) return;
+    save(next);
+    if (p) {
+      setQueueMsg(`${p.name} moved to the back of the queue.`);
+      setTimeout(() => setQueueMsg(""), 2500);
+    }
+  };
+
+  // Hold Match — reserves an upcoming matchup and removes it from
+  // automatic court assignment without dissolving it.
+  const holdMatch = (matchupId) => {
+    save(holdMatchAction(state, matchupId));
+  };
+
+  // Resume Match — returns a held matchup to normal automatic assignment,
+  // keeping its original queue position (never sent to the back).
+  const resumeMatch = (matchupId) => {
+    save(resumeMatchAction(state, matchupId));
+  };
+
+  // Cancel Match — dissolves the matchup; all of its players are
+  // automatically back in the waiting queue (they never left queueIds).
+  const cancelMatch = (matchupId) => {
+    clearOneShotSnapshots();
+    save(cancelMatchAction(state, matchupId));
   };
 
   // Player Checkout During Open Play — see PROJECT.md. Unlike
@@ -1091,11 +1442,43 @@ export default function PickleballOpenPlay() {
     if (!p || p.status === "CHECKED_OUT") return;
     const players = { ...state.players, [id]: { ...p, status: "CHECKED_OUT", checkedOutAt: Date.now() } };
     const queueIds = state.queueIds.filter((qid) => qid !== id);
-    const nextMatchups = (state.nextMatchups || []).filter(
-      (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
-    );
+    const before = state.nextMatchups || [];
+    const nextMatchups = before.filter((m) => !m.teamA.includes(id) && !m.teamB.includes(id));
     clearOneShotSnapshots();
-    save({ ...state, players, queueIds, nextMatchups });
+    const reason = `${p.name} checked out`;
+    const next = noteDissolvedHeldMatchups({ ...state, players, queueIds, nextMatchups }, before, nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: p.name,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
+  };
+
+  // Adaptive Skill Rotation — facilitator manual override. Reusable
+  // wrapper around lib/utils.js's changePlayerSkill (a pure function so any
+  // screen — Waiting Players panel today, Standings, a future Player
+  // Details screen — can call the same action). Never touches a live
+  // court: a player mid-match keeps playing untouched, they just re-enter
+  // matchmaking under the new skill once they're back in the pool.
+  const changePlayerSkill = (id, newSkill) => {
+    const before = state.nextMatchups;
+    let next = changePlayerSkillAction(state, id, newSkill);
+    if (next === state) return;
+    clearOneShotSnapshots();
+    const entry = next.skillChangeLog[0];
+    const reason = `${entry.playerName} ${newSkill === "intermediate" ? "promoted to Intermediate" : "moved to Beginner"}`;
+    next = noteDissolvedHeldMatchups(next, before, next.nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: entry.playerName,
+    });
+    save(next);
+    setSkillChangeMsg(
+      newSkill === "intermediate"
+        ? `${entry.playerName} has been promoted to Intermediate.`
+        : `${entry.playerName} has been moved to Beginner.`
+    );
+    setTimeout(() => setSkillChangeMsg(""), 4000);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   // permanently removes a waiting (not currently on a live court) player
@@ -1107,11 +1490,16 @@ export default function PickleballOpenPlay() {
     const players = { ...state.players };
     delete players[id];
     const queueIds = state.queueIds.filter((qid) => qid !== id);
-    const nextMatchups = (state.nextMatchups || []).filter(
-      (m) => !m.teamA.includes(id) && !m.teamB.includes(id)
-    );
+    const before = state.nextMatchups || [];
+    const nextMatchups = before.filter((m) => !m.teamA.includes(id) && !m.teamB.includes(id));
     clearOneShotSnapshots();
-    save({ ...state, players, queueIds, nextMatchups });
+    const reason = `${p.name} was removed from the session`;
+    const next = noteDissolvedHeldMatchups({ ...state, players, queueIds, nextMatchups }, before, nextMatchups, reason, {
+      players: state.players,
+      affectedPlayer: p.name,
+    });
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
   };
 
   const tryScorerLogin = () => {
@@ -1377,7 +1765,12 @@ export default function PickleballOpenPlay() {
                 />
               )}
 
-              {loaded && view === "standings" && <StandingsView players={state.players} />}
+              {loaded && view === "standings" && (
+                <StandingsView
+                  players={state.players}
+                  onChangeSkill={state.rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
+                />
+              )}
 
               {loaded && view === "history" && (
                 <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
@@ -1422,14 +1815,28 @@ export default function PickleballOpenPlay() {
                   undoRegenerate={undoRegenerate}
                   canUndoLastRound={!!lastRoundSnapshot}
                   undoLastRound={undoLastRound}
-                  toggleSkipPlayer={toggleSkipPlayer}
+                  holdPlayer={holdPlayer}
+                  resumePlayer={resumePlayer}
+                  skipPlayer={skipPlayer}
+                  holdMatch={holdMatch}
+                  resumeMatch={resumeMatch}
+                  cancelMatch={cancelMatch}
+                  queueMsg={queueMsg}
                   removePlayer={removePlayer}
                   checkoutPlayer={checkoutPlayer}
+                  changePlayerSkill={changePlayerSkill}
+                  skillChangeMsg={skillChangeMsg}
+                  skillChangeLog={state.skillChangeLog || []}
+                  queueActivityLog={state.queueActivityLog || []}
+                  startDispatchedMatch={startDispatchedMatch}
+                  repeatAnnouncement={repeatAnnouncement}
+                  courtDispatchSettings={state.courtDispatchSettings || defaultState.courtDispatchSettings}
                   rotationMode={state.rotationMode || "continuous"}
                   expectedGamesPerPlayer={state.expectedGamesPerPlayer || 6}
                   setExpectedGamesPerPlayer={setExpectedGamesPerPlayer}
                   progressiveSkillThresholds={state.progressiveSkillThresholds}
                   setProgressiveSkillThresholds={setProgressiveSkillThresholds}
+                  adaptiveSkillThresholds={state.adaptiveSkillThresholds}
                   progressiveSkillPhase={progressiveSkillPhaseFor(
                     state.rotationMode,
                     state.players,

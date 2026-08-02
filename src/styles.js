@@ -253,6 +253,23 @@ export const styles = {
     cursor: "pointer",
     flexShrink: 0,
   }),
+  // Adaptive Skill Rotation manual override — see WaitingPlayersPanel.jsx/
+  // StandingsView.jsx. Same shape/sizing as skipToggleBtn, just a neutral
+  // (not skipped-red) palette since this isn't a warning state.
+  skillToggleBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    background: "var(--chalk)",
+    color: "var(--color-text-muted)",
+    border: "1px solid var(--line)",
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    flexShrink: 0,
+  },
   startBtn: {
     width: "100%",
     justifyContent: "center",
@@ -405,7 +422,7 @@ export const styles = {
   },
   courtCard: (status) => ({
     background: "var(--color-surface)",
-    border: `1.5px solid ${status === "finished" ? "var(--coral)" : "var(--line)"}`,
+    border: `1.5px solid ${status === "finished" ? "var(--coral)" : status === "dispatching" ? "var(--color-secondary)" : "var(--line)"}`,
     borderRadius: 10,
     padding: 16,
     position: "relative",
@@ -431,7 +448,13 @@ export const styles = {
     fontWeight: 800,
     letterSpacing: "0.08em",
     color:
-      status === "open" ? "var(--color-text-muted)" : status === "finished" ? "var(--coral)" : "var(--court)",
+      status === "open"
+        ? "var(--color-text-muted)"
+        : status === "finished"
+          ? "var(--coral)"
+          : status === "dispatching"
+            ? "var(--color-secondary-text)"
+            : "var(--court)",
   }),
   openCourtBody: {
     textAlign: "center",
@@ -1146,6 +1169,94 @@ export const styles = {
     flexShrink: 0,
     letterSpacing: "0.03em",
   }),
+  // Smart Queue Management — see WaitingPlayersPanel.jsx's getPlayerQueueStatus
+  // badge. "Held" gets the same warning-coral treatment as the old
+  // Skip/"Sitting out" toggle did; everything else is a neutral chip.
+  queueStatusTag: (status) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: status === "Held" ? "var(--color-surface)" : "var(--color-text-muted)",
+    background: status === "Held" ? "var(--coral)" : "var(--chalk)",
+    border: status === "Held" ? "none" : "1px solid var(--line)",
+    borderRadius: 4,
+    padding: "2px 5px",
+    flexShrink: 0,
+    letterSpacing: "0.02em",
+  }),
+  waitingTimerText: {
+    fontSize: 11,
+    color: "var(--color-text-faint)",
+    flexShrink: 0,
+    whiteSpace: "nowrap",
+  },
+  // Sprint 2.1 — Queue Activity Log cards (Held Match Removed). Small,
+  // scannable cards rather than a single dense line, so a facilitator can
+  // recognize the dissolved matchup (which teams, not just who caused it)
+  // at a glance during a busy session.
+  queueActivityList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 14,
+  },
+  queueActivityCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderLeft: "4px solid var(--ball)",
+    borderRadius: 8,
+    padding: "10px 12px",
+  },
+  // amber/orange badge (not red — this isn't an error, just an
+  // attention-worthy event) with a pause icon, so a long log scans fast
+  queueActivityTitle: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    color: "var(--color-secondary-text)",
+    background: "var(--color-secondary)",
+    borderRadius: 5,
+    padding: "3px 7px",
+    marginBottom: 6,
+  },
+  queueActivityCourt: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+    marginBottom: 3,
+  },
+  queueActivityTeams: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13.5,
+    fontWeight: 600,
+    color: "var(--ink)",
+    flexWrap: "wrap",
+  },
+  queueActivityVs: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+  },
+  queueActivityReasonLabel: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "var(--color-text-faint)",
+    marginTop: 6,
+  },
+  queueActivityReason: {
+    fontSize: 12.5,
+    color: "var(--color-text-muted)",
+  },
+  queueActivityTime: {
+    fontSize: 10.5,
+    color: "var(--color-text-faint)",
+    marginTop: 6,
+  },
   skillToggle: {
     display: "flex",
     gap: 8,
@@ -2123,6 +2234,17 @@ export const styles = {
     fontSize: 11.5,
     color: "var(--color-text-muted)",
     fontWeight: 600,
+  },
+  // Smart Court Dispatch — SessionSettingsDialog.jsx's ON/OFF checkbox
+  // rows (Auto-fill Courts, Auto Start Match, Voice Announcements)
+  settingsCheckboxRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12.5,
+    color: "var(--color-text-muted)",
+    fontWeight: 600,
+    marginTop: 8,
   },
   textareaInput: {
     width: "100%",

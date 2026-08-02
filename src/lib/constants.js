@@ -41,7 +41,7 @@ export const DEV_ACCESS_CODE = "GUILSIGN"; // permanent, never-expiring, reusabl
 
 export const emptyCourt = (number) => ({
   number,
-  status: "open", // 'open' | 'live' | 'finished'
+  status: "open", // 'open' | 'dispatching' | 'live' | 'finished' — 'dispatching' is Smart Court Dispatch's own transient state (see lib/courtDispatch.js): teamA/teamB are already assigned and the court reads "Calling Players..." on screen, but scoring hasn't started yet. Moves to 'live' either automatically (Auto Start Match ON, once the voice announcement finishes/the announcement delay elapses) or only when the facilitator clicks "Start Match" (Auto Start Match OFF) — see confirmCourtLive.
   teamA: [],
   teamB: [],
   scoreA: 0,
@@ -49,6 +49,7 @@ export const emptyCourt = (number) => ({
   awaitingPair: false, // Winner Pool Rotation only — true once this court's finished but its paired court hasn't, see winnerPoolRound.js
   assignmentMode: "automatic", // "automatic" | "manual" — Manual Court Assignment, see PROJECT.md. While "manual" and status is "open", teamA/teamB hold the organizer's in-progress draft picks (still &lt;2 each is normal, not yet locked)
   manualLocked: false, // true once the organizer locks a manual court's 4 picks in (status becomes "live"); resets to false/"automatic" when the match ends, same as every other court
+  dispatchedAt: null, // Smart Court Dispatch only — set when this court entered 'dispatching', see lib/courtDispatch.js's dispatchAvailableCourts
 });
 
 // which matchmaking strategy builds the next matches — see src/engines/ and
@@ -73,6 +74,7 @@ export const ROTATION_MODES = [
   { value: "continuous", label: "Continuous queue" },
   { value: "winnerPool", label: "Winner Pool Rotation" },
   { value: "progressiveSkill", label: "Progressive Skill Rotation" },
+  { value: "adaptiveSkill", label: "Adaptive Skill Rotation" },
 ];
 
 // chosen once at Create Session — see CreateSessionScreen.jsx. Gates which
@@ -99,15 +101,28 @@ export const TOURNAMENT_FORMATS = [
 ];
 
 // Player Checkout During Open Play — see PROJECT.md. A session player's
-// participation status, separate from `skipped` (a temporary, reversible
-// per-round sit-out that still counts as "waiting"). CHECKED_OUT is
-// permanent for the rest of the session: the player is excluded from all
-// future match generation, but their record/stats/history are never
-// touched or deleted. Deliberately a plain array (not hardcoded string
-// literals scattered around) so a future status (AWAY/INJURED/SUSPENDED)
-// is one more entry here, never a data migration — this sprint only
-// implements ACTIVE and CHECKED_OUT, per explicit scope.
+// participation status, separate from `held` (a temporary, reversible
+// exclusion from matchmaking — see lib/queueManagement.js's holdPlayer).
+// CHECKED_OUT is permanent for the rest of the session: the player is
+// excluded from all future match generation, but their record/stats/
+// history are never touched or deleted. Deliberately a plain array (not
+// hardcoded string literals scattered around) so a future status
+// (AWAY/INJURED/SUSPENDED) is one more entry here, never a data migration
+// — this sprint only implements ACTIVE and CHECKED_OUT, per explicit scope.
 export const PLAYER_STATUSES = ["ACTIVE", "CHECKED_OUT"];
+
+// Smart Queue Management — see PROJECT.md/FEATURES.md. The canonical set of
+// display statuses a checked-in player can be in, computed (never stored)
+// by lib/utils.js's getPlayerQueueStatus — reusable throughout the app
+// (Waiting Players panel, Standings, any future Player Details screen)
+// rather than each screen deriving its own ad hoc label from raw fields.
+export const QUEUE_STATUSES = {
+  PLAYING: "Playing",
+  UPCOMING: "Upcoming",
+  WAITING: "Waiting",
+  HELD: "Held",
+  CHECKED_OUT: "Checked Out",
+};
 
 // id -> {
 //   id, name, photo, skill ('beginner' | 'intermediate'), checkedIn, skipped,
@@ -141,5 +156,20 @@ export const defaultState = {
   rotationMode: "continuous", // see ROTATION_MODES — Open Play only; labeled "Rotation Strategy" in the UI
   expectedGamesPerPlayer: 6, // Open Play only — organizer-configurable, drives Progressive Skill Rotation's session-progress/phase calc, see lib/progressiveSkillPhase.js
   progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js
+  adaptiveSkillThresholds: { promotionWins: 3, relegationLosses: 3 }, // Adaptive Skill Rotation only — organizer-configurable consecutive win/loss counts that trigger automatic promotion/relegation, see PickleballOpenPlay.jsx's endMatch
+  skillChangeLog: [], // Adaptive Skill Rotation only — append-only activity log of every promotion/relegation/manual override: { id, playerId, playerName, previousSkill, newSkill, reason, timestamp }, see lib/utils.js's changePlayerSkill and PickleballOpenPlay.jsx's endMatch
+  queueActivityLog: [], // Smart Queue Management / Smart Court Dispatch — one shared append-only activity log, entries tagged by `kind` ("heldMatchDissolved", "courtDispatched", "announcementCompleted", "announcementRepeated", "announcementMuted", "announcementSkipped"): { id, kind, matchupId?, courtNumber?, teamA (names), teamB (names), reason, affectedPlayer?, timestamp } — captured at the moment of the event, never reconstructed afterward, see lib/queueManagement.js's noteDissolvedHeldMatchups and lib/courtDispatch.js's logDispatchEvent
+  courtDispatchSettings: {
+    // Smart Court Dispatch — see PROJECT.md/FEATURES.md. Rotation-mode-
+    // agnostic session settings, editable in Session Settings regardless
+    // of which rotation mode is active.
+    autoFillCourts: true, // OFF stops automatic dispatch entirely — facilitators keep using manual "Assign match"/"Fill all open courts", everything else (Hold/Resume/regeneration/etc.) keeps working normally
+    autoStartMatch: true, // OFF: a dispatched court stays "Calling Players..." until the facilitator clicks "Start Match" — the announcement/timer still run, only the dispatching->live transition becomes manual
+    voiceEnabled: true, // ON/OFF for the Web Speech API announcement itself
+    volume: 1, // 0-1, SpeechSynthesisUtterance.volume
+    rate: 1, // SpeechSynthesisUtterance.rate (speed)
+    voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
+    announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
+  },
   updatedAt: 0,
 };

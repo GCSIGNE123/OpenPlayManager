@@ -1,6 +1,8 @@
-import { ACCESS_PREFIX, CODE_CHARS, STORAGE_PREFIX } from "./constants.js";
+import { ACCESS_PREFIX, CODE_CHARS, QUEUE_STATUSES, STORAGE_PREFIX } from "./constants.js";
 import { BalancedRotationEngine } from "../engines/BalancedRotationEngine.js";
 import { ProgressiveSkillRotationStrategy } from "../engines/ProgressiveSkillRotationStrategy.js";
+import { AdaptiveSkillRotationEngine } from "../engines/AdaptiveSkillRotationEngine.js";
+import { uid } from "./random.js";
 
 export { uid, shuffle } from "./random.js";
 
@@ -191,6 +193,70 @@ export function dissolveMatchupIfReserved(nextMatchups, playerId, exceptMatchupI
   );
 }
 
+// Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Reusable manual
+// skill-override action: a single pure function so every UI entry point
+// (Waiting Players panel today; Standings and any future Player Details
+// screen) calls the exact same logic rather than each reimplementing it.
+// Also used internally by automatic promotion/relegation (see endMatch in
+// PickleballOpenPlay.jsx), so both paths append to the same activity log in
+// the same shape. Deliberately does NOT touch state.courts — a live match a
+// player is currently on continues completely undisturbed; only
+// queueIds-eligible matchups are affected (dissolveMatchupIfReserved is a
+// no-op for a player who's mid-match, same as moveToQueue/substitution).
+// Resets both streak counters so a manual override can't be immediately
+// undone by an in-flight automatic promotion/relegation the next time
+// endMatch runs — manual changes are meant to override automatic ones.
+export function changePlayerSkill(state, playerId, newSkill, reason = "Manual override") {
+  const p = state.players[playerId];
+  if (!p || (newSkill !== "beginner" && newSkill !== "intermediate") || p.skill === newSkill) {
+    return state;
+  }
+  const previousSkill = p.skill === "intermediate" ? "intermediate" : "beginner";
+  const players = {
+    ...state.players,
+    [playerId]: { ...p, skill: newSkill, streak: 0, lossStreak: 0 },
+  };
+  const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
+  const logEntry = {
+    id: uid(),
+    playerId,
+    playerName: p.name,
+    previousSkill,
+    newSkill,
+    reason,
+    timestamp: Date.now(),
+  };
+  const skillChangeLog = [logEntry, ...(state.skillChangeLog || [])].slice(0, 50);
+  return { ...state, players, nextMatchups, skillChangeLog };
+}
+
+// Smart Queue Management — see PROJECT.md/FEATURES.md. Reusable, pure
+// status derivation for a checked-in player — never stored on the player
+// record itself (it's always computed fresh from state, so it can never
+// drift out of sync with the court/matchup/held data it's derived from).
+// Priority order matters: a player can only ever be in exactly one of
+// these at a time, so CHECKED_OUT/PLAYING are checked first since they're
+// the most "final" for this moment (a player mid-match stays PLAYING
+// regardless of any other flag). HELD is checked before UPCOMING —
+// holdPlayer (lib/queueManagement.js) always dissolves any matchup a
+// player is reserved in before marking them held, so in practice the two
+// never overlap, but this ordering keeps the function correct even if a
+// future caller sets `held` without going through that action.
+export function getPlayerQueueStatus(player, state) {
+  if (!player) return null;
+  if (player.status === "CHECKED_OUT") return QUEUE_STATUSES.CHECKED_OUT;
+  const onLiveCourt = (state.courts || []).some(
+    (c) => c.status !== "open" && (c.teamA.includes(player.id) || c.teamB.includes(player.id))
+  );
+  if (onLiveCourt) return QUEUE_STATUSES.PLAYING;
+  if (player.held) return QUEUE_STATUSES.HELD;
+  const upcoming = (state.nextMatchups || []).some(
+    (m) => m.teamA.includes(player.id) || m.teamB.includes(player.id)
+  );
+  if (upcoming) return QUEUE_STATUSES.UPCOMING;
+  return QUEUE_STATUSES.WAITING;
+}
+
 // Rotation strategies (Strategy pattern — see src/engines/), one instance
 // per mode. state.rotationMode ("continuous" | "winnerPool" |
 // "progressiveSkill", see ROTATION_MODES in constants.js) picks which one
@@ -200,30 +266,62 @@ export function dissolveMatchupIfReserved(nextMatchups, playerId, exceptMatchupI
 // pooled-team building is separate, see src/lib/winnerPoolRound.js.
 const balancedEngine = new BalancedRotationEngine();
 const progressiveSkillEngine = new ProgressiveSkillRotationStrategy();
+const adaptiveSkillEngine = new AdaptiveSkillRotationEngine();
 
 export function getRotationEngine(rotationMode) {
   if (rotationMode === "progressiveSkill") return progressiveSkillEngine;
+  if (rotationMode === "adaptiveSkill") return adaptiveSkillEngine;
   return balancedEngine;
 }
 
 // Player Checkout During Open Play — see PROJECT.md. A player is eligible
-// for future match generation only while ACTIVE: not sitting out
-// (skipped, temporary/reversible) and not checked out (status
-// "CHECKED_OUT", permanent for the rest of the session). One shared
-// predicate so refreshNextMatchups/regenerateNextMatchups (and anything
-// else that ever needs this question) can't drift out of sync with each
-// other.
+// for future match generation only while ACTIVE: not held (Smart Queue
+// Management's Hold Player — temporary, reversible, see
+// lib/queueManagement.js) and not checked out (status "CHECKED_OUT",
+// permanent for the rest of the session). One shared predicate so
+// refreshNextMatchups/regenerateNextMatchups (and anything else that ever
+// needs this question) can't drift out of sync with each other.
 function isEligibleForMatchmaking(player) {
-  return Boolean(player) && !player.skipped && player.status !== "CHECKED_OUT";
+  return Boolean(player) && !player.held && player.status !== "CHECKED_OUT";
+}
+
+// Smart Queue Management — see PROJECT.md/FEATURES.md. How many upcoming
+// matchups the automatic engine is allowed to keep queued at once, given
+// the session's current court occupancy. Manual-assignment courts are
+// excluded entirely from both counts — they're a separate pool the
+// automatic engine never touches (same precedent as
+// manuallyReservedIds/generateRemainingCourts).
+//
+// Steady state: Live Courts − 1 — enough that a court finishing has an
+// upcoming match ready immediately, without stockpiling matches far beyond
+// what can actually be deployed soon. "Live" here means any court not
+// currently "open" (covers "live" mid-score AND "finished" awaiting End
+// Match — both still occupied).
+//
+// Before the session has any court occupied yet (a fresh session, or a
+// lull where every court is simultaneously open), the steady-state formula
+// would floor at 0 and never let the FIRST matches get built at all — so
+// that specific case is special-cased to "enough to fill every automatic
+// court", exactly enough for one full round of "Fill all open courts".
+// The instant any court goes live, this reverts to the plain Live Courts −
+// 1 rule on its own — no separate "has the session started" flag to track.
+export function maxUpcomingMatchups(courts) {
+  const automaticCourts = (courts || []).filter((c) => c.assignmentMode !== "manual");
+  const occupiedCount = automaticCourts.filter((c) => c.status !== "open").length;
+  if (occupiedCount === 0) return automaticCourts.length;
+  return Math.max(0, occupiedCount - 1);
 }
 
 // appends any additional ready-to-play matchups the active rotation engine
-// can build from waiting players not already locked into one (and not
-// sitting out — players[id].skipped) — existing matchups are left
-// completely untouched, so a scorer's manual "fix teams" / substitute edits
-// (or a matchup already mid-review) never get silently overwritten. Safe to
-// call after every state change; it's a no-op unless the engine finds a
-// newly-possible matchup.
+// can build from waiting players not already locked into one (and not held
+// — players[id].held) — existing matchups are left completely untouched,
+// so a scorer's manual "fix teams" / substitute edits (or a matchup
+// already mid-review) never get silently overwritten. Safe to call after
+// every state change; it's a no-op unless the engine finds a
+// newly-possible matchup AND there's still room under maxUpcoming (Smart
+// Queue Management's queue-depth cap, see maxUpcomingMatchups above —
+// Infinity here preserves this function's old uncapped behavior for any
+// caller that doesn't pass one, e.g. existing tests).
 //
 // Guaranteed Upcoming Match Queue — see PROJECT.md/FEATURES.md. Skill
 // balancing is a preference, not a blocker: same-skill fallback is always
@@ -236,27 +334,36 @@ function isEligibleForMatchmaking(player) {
 // scored by the same waiting-time/games-played/repeat-partner-avoidance
 // rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
 // only removes skill as a hard requirement, it doesn't make pairing random.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+  const room = Math.max(0, maxUpcoming - existingMatchups.length);
+  if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
-  return [...existingMatchups, ...newMatchups];
+  return [...existingMatchups, ...newMatchups.slice(0, room)];
 }
 
-// "Regenerate matchups": dissolves every not-locked upcoming matchup and
-// reruns the engine over the full eligible pool (their players simply
-// become available again, since queueIds already contains everyone waiting
-// regardless of matchup membership). Locked matchups are left exactly as
-// they are. Same same-skill fallback as refreshNextMatchups above now that
+// "Regenerate matchups": dissolves every not-locked-and-not-held upcoming
+// matchup and reruns the engine over the full eligible pool (their players
+// simply become available again, since queueIds already contains everyone
+// waiting regardless of matchup membership). Locked AND held matchups are
+// left exactly as they are, in their original relative order — Smart Queue
+// Management's Hold Match requires a held matchup to "not regenerate the
+// queue" (survive an explicit Regenerate the same way a locked one
+// already does) and to keep its position rather than getting shuffled to
+// the back. Same same-skill fallback as refreshNextMatchups above now that
 // the queue is always-guaranteed — this is still useful as a deliberate,
 // one-off "reshuffle everyone waiting right now" action (e.g. after a
 // scorer manually dissolves a matchup), it just no longer differs from
-// refreshNextMatchups in fallback behavior, only in dissolving unlocked
-// matchups first.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null) {
-  const locked = existingMatchups.filter((m) => m.locked);
+// refreshNextMatchups in fallback behavior, only in dissolving
+// unlocked/not-held matchups first.
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+  const protectedMatchups = existingMatchups.filter((m) => m.locked || m.held);
+  const room = Math.max(0, maxUpcoming - protectedMatchups.length);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups: locked, phase }, true);
-  return [...locked, ...newMatchups];
+  const newMatchups = room === 0
+    ? []
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase }, true);
+  return [...protectedMatchups, ...newMatchups.slice(0, room)];
 }
 
 // records partner/opponent/court history on all 4 players in a just-ended

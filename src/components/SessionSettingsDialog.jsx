@@ -1,6 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { styles } from "../styles.js";
+
+// Announcement Delay — see PROJECT.md/FEATURES.md. Immediate / 2s
+// (default) / 5s / 10s, stored as milliseconds.
+const ANNOUNCEMENT_DELAY_OPTIONS = [
+  { value: 0, label: "Immediate" },
+  { value: 2000, label: "2 seconds (default)" },
+  { value: 5000, label: "5 seconds" },
+  { value: 10000, label: "10 seconds" },
+];
 
 // Editable session properties, post-creation. Rotation Mode is deliberately
 // NOT editable here — it's chosen once at Create Session and shown
@@ -13,6 +22,9 @@ export default function SessionSettingsDialog({
   expectedGamesPerPlayer,
   progressiveSkillThresholds,
   showThresholds,
+  adaptiveSkillThresholds,
+  showAdaptiveThresholds,
+  courtDispatchSettings,
   onSave,
   onClose,
 }) {
@@ -20,6 +32,31 @@ export default function SessionSettingsDialog({
   const [expectedGamesDraft, setExpectedGamesDraft] = useState(expectedGamesPerPlayer);
   const [mentorshipMaxDraft, setMentorshipMaxDraft] = useState(progressiveSkillThresholds?.mentorshipMax ?? 30);
   const [transitionMaxDraft, setTransitionMaxDraft] = useState(progressiveSkillThresholds?.transitionMax ?? 60);
+  const [promotionWinsDraft, setPromotionWinsDraft] = useState(adaptiveSkillThresholds?.promotionWins ?? 3);
+  const [relegationLossesDraft, setRelegationLossesDraft] = useState(adaptiveSkillThresholds?.relegationLosses ?? 3);
+
+  // Smart Court Dispatch — see PROJECT.md/FEATURES.md. Rotation-mode-
+  // agnostic, always shown (unlike the per-mode threshold sections above).
+  const [autoFillCourtsDraft, setAutoFillCourtsDraft] = useState(courtDispatchSettings?.autoFillCourts !== false);
+  const [autoStartMatchDraft, setAutoStartMatchDraft] = useState(courtDispatchSettings?.autoStartMatch !== false);
+  const [voiceEnabledDraft, setVoiceEnabledDraft] = useState(courtDispatchSettings?.voiceEnabled !== false);
+  const [volumeDraft, setVolumeDraft] = useState(courtDispatchSettings?.volume ?? 1);
+  const [rateDraft, setRateDraft] = useState(courtDispatchSettings?.rate ?? 1);
+  const [voiceURIDraft, setVoiceURIDraft] = useState(courtDispatchSettings?.voiceURI ?? "");
+  const [announcementDelayDraft, setAnnouncementDelayDraft] = useState(courtDispatchSettings?.announcementDelayMs ?? 2000);
+  const [availableVoices, setAvailableVoices] = useState([]);
+
+  // Voice list — window.speechSynthesis.getVoices() is frequently empty
+  // until the browser fires 'voiceschanged' (a well-known quirk), so this
+  // re-reads it on that event too. A no-op (empty list, "browser default"
+  // still selectable) in any environment without SpeechSynthesis at all.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return undefined;
+    const loadVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, []);
 
   const venueValid = venueDraft.trim().length > 0;
 
@@ -36,6 +73,23 @@ export default function SessionSettingsDialog({
             },
           }
         : {}),
+      ...(showAdaptiveThresholds
+        ? {
+            adaptiveSkillThresholds: {
+              promotionWins: Math.max(1, Number(promotionWinsDraft) || 3),
+              relegationLosses: Math.max(1, Number(relegationLossesDraft) || 3),
+            },
+          }
+        : {}),
+      courtDispatchSettings: {
+        autoFillCourts: autoFillCourtsDraft,
+        autoStartMatch: autoStartMatchDraft,
+        voiceEnabled: voiceEnabledDraft,
+        volume: Number(volumeDraft),
+        rate: Number(rateDraft),
+        voiceURI: voiceURIDraft || null,
+        announcementDelayMs: Number(announcementDelayDraft),
+      },
     });
     onClose();
   };
@@ -106,6 +160,121 @@ export default function SessionSettingsDialog({
             </div>
           </div>
         )}
+
+        {showAdaptiveThresholds && (
+          <div style={styles.dialogField}>
+            <label style={styles.dialogLabel}>Adaptive Skill Rotation thresholds</label>
+            <div style={styles.dialogThresholdRow}>
+              <label style={styles.settingsField}>
+                Promote after (consecutive wins)
+                <input
+                  type="number"
+                  min={1}
+                  style={styles.expectedGamesInput}
+                  value={promotionWinsDraft}
+                  onChange={(e) => setPromotionWinsDraft(e.target.value)}
+                />
+              </label>
+              <label style={styles.settingsField}>
+                Relegate after (consecutive losses)
+                <input
+                  type="number"
+                  min={1}
+                  style={styles.expectedGamesInput}
+                  value={relegationLossesDraft}
+                  onChange={(e) => setRelegationLossesDraft(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        )}
+
+        <div style={styles.dialogField}>
+          <label style={styles.dialogLabel}>Smart Court Dispatch</label>
+          <label style={styles.settingsCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={autoFillCourtsDraft}
+              onChange={(e) => setAutoFillCourtsDraft(e.target.checked)}
+            />
+            Auto-fill Courts — automatically dispatch the next eligible matchup when a court frees up
+          </label>
+          <label style={styles.settingsCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={autoStartMatchDraft}
+              onChange={(e) => setAutoStartMatchDraft(e.target.checked)}
+            />
+            Auto Start Match — otherwise a dispatched court stays "Calling Players..." until manually started
+          </label>
+          <label style={styles.settingsCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={voiceEnabledDraft}
+              onChange={(e) => setVoiceEnabledDraft(e.target.checked)}
+            />
+            Voice Announcements
+          </label>
+
+          <div style={styles.dialogThresholdRow}>
+            <label style={styles.settingsField}>
+              Announcement Volume
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={volumeDraft}
+                onChange={(e) => setVolumeDraft(e.target.value)}
+                disabled={!voiceEnabledDraft}
+              />
+            </label>
+            <label style={styles.settingsField}>
+              Announcement Speed
+              <input
+                type="range"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={rateDraft}
+                onChange={(e) => setRateDraft(e.target.value)}
+                disabled={!voiceEnabledDraft}
+              />
+            </label>
+          </div>
+
+          <label style={styles.settingsField}>
+            Announcement Voice
+            <select
+              style={styles.input}
+              value={voiceURIDraft}
+              onChange={(e) => setVoiceURIDraft(e.target.value)}
+              disabled={!voiceEnabledDraft}
+            >
+              <option value="">Browser default</option>
+              {availableVoices.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={styles.settingsField}>
+            Announcement Delay
+            <select
+              style={styles.input}
+              value={announcementDelayDraft}
+              onChange={(e) => setAnnouncementDelayDraft(e.target.value)}
+            >
+              {ANNOUNCEMENT_DELAY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div style={styles.dialogActions}>
           <button style={styles.secondaryBtn} onClick={onClose}>
