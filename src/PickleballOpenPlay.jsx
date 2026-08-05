@@ -27,6 +27,9 @@ import {
   cancelMatch as cancelMatchAction,
   regenerate as regenerateQueue,
   noteDissolvedHeldMatchups,
+  getPlayersNeedingHeldReminder,
+  markHeldReminderShown,
+  getLastCourtForPlayer,
 } from "./lib/queueManagement.js";
 import {
   selectNextDispatchableMatchup,
@@ -38,6 +41,8 @@ import { buildAnnouncementText, speakAnnouncement, emitDispatchEvent, DISPATCH_E
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
+import { applyWaitingTimeTracking, computeSessionAnalyticsReport } from "./lib/sessionAnalytics.js";
+import { saveSessionReport } from "./lib/sessionReportModel.js";
 import { RatingEngine } from "./engines/RatingEngine.js";
 import { fetchAllCourts as fetchAllClubCourts } from "./lib/courtDatabase.js";
 import { fetchAllBookings } from "./lib/bookingModel.js";
@@ -55,6 +60,9 @@ import ScorerLogin from "./components/ScorerLogin.jsx";
 import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
+import SessionAnalyticsReport from "./components/SessionAnalyticsReport.jsx";
+import HeldPlayerReminderBanner from "./components/HeldPlayerReminderBanner.jsx";
+import OpenPlaySessionHistoryScreen from "./components/OpenPlaySessionHistoryScreen.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import OpenPlayTVModePage from "./components/OpenPlayTVModePage.jsx";
@@ -171,6 +179,12 @@ export default function PickleballOpenPlay() {
 
   const [state, setState] = useState(defaultState);
   const [loaded, setLoaded] = useState(false);
+  // Session Analytics Engine (Sprint 4A / V1) — set by endSession below,
+  // before anything about the session is torn down. Non-null renders the
+  // full-screen report in place of the app's normal view; the actual
+  // teardown (delete + leaveSession) only happens once the facilitator
+  // confirms from the report, see confirmEndSession/cancelEndSession.
+  const [sessionReport, setSessionReport] = useState(null);
 
   // Court Booking & Reservations integration — see PROJECT.md and
   // fillCourt/fillAllCourts below. Polled (not a live realtime
@@ -226,6 +240,17 @@ export default function PickleballOpenPlay() {
   // preference is a per-device UI choice, not something to sync to every
   // other connected scorer device.
   const [queueActivityLogExpanded, setQueueActivityLogExpanded] = useState(false);
+  // Held Player Reminder — see PROJECT.md/FEATURES.md. Which currently-held
+  // players' reminders are visible right now, this device. Lifted up here
+  // (not local to ScorerView) for the same reason queueActivityLogExpanded
+  // above is: ScorerView unmounts on every tab switch, and a reminder that's
+  // already due shouldn't vanish just because the facilitator glanced at
+  // another tab. "Keep Held" only ever removes an id from this LOCAL set
+  // (see cancelHeldReminder below) — it never touches session state, so it
+  // can never affect matchmaking. The reminder becomes due again, on its
+  // own, once heldReminderLastShownAt's repeat interval elapses — see the
+  // ticking effect below.
+  const [heldReminderVisibleIds, setHeldReminderVisibleIds] = useState([]);
   const [saveError, setSaveError] = useState("");
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -349,6 +374,19 @@ export default function PickleballOpenPlay() {
           reason: "Court automatically dispatched",
         });
       });
+      // Session Analytics Engine — see PROJECT.md/FEATURES.md. Purely
+      // observational: diffs the court layout right before this save
+      // (stateRef.current, since `save` itself has no other reference to
+      // the previous state) against the layout just decided above, and
+      // accumulates wait-time/play-streak bookkeeping for anyone who just
+      // transitioned from waiting onto a court — regardless of whether
+      // that came from manual assignment, Fill all open courts, Generate
+      // remaining courts, or Smart Court Dispatch above. Never influences
+      // any of those decisions, only records their outcome.
+      withDispatch = {
+        ...withDispatch,
+        players: applyWaitingTimeTracking(stateRef.current.courts, withDispatch.courts, withDispatch.players),
+      };
       const withStamp = { ...withDispatch, updatedAt: Date.now() };
       setState(withStamp);
       try {
@@ -412,6 +450,45 @@ export default function PickleballOpenPlay() {
   useEffect(() => {
     scheduleAnnouncementsRef.current = scheduleAnnouncements;
   }, [scheduleAnnouncements]);
+
+  // Held Player Reminder — see PROJECT.md/FEATURES.md. A facilitator
+  // safeguard, not a matchmaking feature: on a slow tick (15s, same cadence
+  // WaitingTimer.jsx already uses for its own display), checks which held
+  // players have newly crossed the configurable minutes/rounds threshold
+  // and haven't been reminded within the configurable repeat interval (see
+  // lib/queueManagement.js's getPlayersNeedingHeldReminder — the only
+  // reader of these settings). For each one, marks it shown (persists
+  // heldReminderLastShownAt + logs one Queue Activity Log entry, so it
+  // won't re-fire until the repeat interval elapses again on any device)
+  // and adds it to this device's visible set. Only runs once a session is
+  // loaded and the facilitator has actually unlocked Scorer — no session,
+  // no reminders.
+  useEffect(() => {
+    if (!loaded || !scorerAuthed) return undefined;
+    const tick = () => {
+      const due = getPlayersNeedingHeldReminder(stateRef.current);
+      if (due.length === 0) return;
+      let next = stateRef.current;
+      due.forEach(({ playerId, minutesHeld, roundsHeld }) => {
+        next = markHeldReminderShown(next, playerId, { minutesHeld, roundsHeld });
+      });
+      save(next);
+      setHeldReminderVisibleIds((prev) => [...new Set([...prev, ...due.map((d) => d.playerId)])]);
+    };
+    tick(); // check immediately on entering Scorer, don't wait a full interval
+    const interval = setInterval(tick, 15000);
+    return () => clearInterval(interval);
+  }, [loaded, scorerAuthed, save]);
+
+  // "Resume" on a reminder just reuses the exact same Resume Player action
+  // as the Waiting Players panel's own button — no separate code path.
+  // "Keep Held" only ever touches this device's local visible set (see
+  // heldReminderVisibleIds above) — the player stays held, session state is
+  // completely untouched, and the reminder naturally becomes eligible again
+  // once the repeat interval elapses.
+  const dismissHeldReminder = (playerId) => {
+    setHeldReminderVisibleIds((prev) => prev.filter((id) => id !== playerId));
+  };
 
   // Manually starts a dispatched ("Calling Players...") court — for when
   // Auto Start Match is off, or a facilitator wants to start early instead
@@ -519,6 +596,9 @@ export default function PickleballOpenPlay() {
           checkedIn: false,
           checkedInAt: null, // Smart Queue Management — see PickleballOpenPlay.jsx's checkInExisting/quickAddCheckIn; the Waiting Queue Timer's fallback when a player has never played yet
           held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
+          heldAt: null, // Held Player Reminder — set fresh by holdPlayer each time this player becomes held, cleared by resumePlayer
+          heldAtRound: null,
+          heldReminderLastShownAt: null,
           status: "ACTIVE", // Player Checkout — see PLAYER_STATUSES in lib/constants.js
           checkedOutAt: null,
           games: 0,
@@ -537,12 +617,25 @@ export default function PickleballOpenPlay() {
           recentOpponentIds: [],
           courtCounts: {},
           lastCourt: null,
+          // Session Analytics Engine — see PROJECT.md/FEATURES.md and
+          // save()'s waiting-time accumulation below. totalWaitMs/
+          // waitPeriodsCount/longestWaitMs accumulate every time this
+          // player goes from waiting back onto a live court (a "wait
+          // period" ending); currentPlayStreak/longestPlayStreak track
+          // consecutive matches played with essentially no wait in
+          // between. All start at 0 and are read-only outside save().
+          totalWaitMs: 0,
+          longestWaitMs: 0,
+          waitPeriodsCount: 0,
+          currentPlayStreak: 0,
+          longestPlayStreak: 0,
         };
       });
       const courts = Array.from({ length: courtsCount }, (_, i) => emptyCourt(i + 1));
       const initial = {
         venue,
         venueId: activeVenueId, // Multi-Venue Workspace Architecture — see PROJECT.md; a plain passthrough of the active venue context, nothing yet reads it to change behavior
+        sessionStartedAt: Date.now(), // Session Analytics Engine — set once, here, never touched again
         courts,
         players,
         queueIds: [],
@@ -1107,6 +1200,7 @@ export default function PickleballOpenPlay() {
             previousSkill: "beginner",
             newSkill: "intermediate",
             reason: `${promotionWins} consecutive wins`,
+            source: "automatic", // Session Analytics Engine — distinguishes this from a manual override without string-matching `reason`
             timestamp: Date.now(),
           });
         } else if (p.skill === "intermediate" && (p.lossStreak || 0) >= relegationLosses) {
@@ -1118,6 +1212,7 @@ export default function PickleballOpenPlay() {
             previousSkill: "intermediate",
             newSkill: "beginner",
             reason: `${relegationLosses} consecutive losses`,
+            source: "automatic",
             timestamp: Date.now(),
           });
         }
@@ -1538,19 +1633,85 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
-  const endSession = async () => {
-    if (!window.confirm("End this session for everyone? This can't be undone.")) return;
+  // Session Analytics Engine (Sprint 4A / V1) — clicking "End session" no
+  // longer ends anything immediately. It computes the report from the
+  // still-live session state and shows it; the facilitator reviews it,
+  // then either confirms (actually ending the session, see
+  // confirmEndSession) or cancels (dismissing the report, session
+  // continues exactly as before — see cancelEndSession). V1 does not
+  // persist the report anywhere; closing/confirming discards it, per this
+  // sprint's explicit scope.
+  const endSession = () => {
+    setSessionReport(computeSessionAnalyticsReport(state));
+  };
+
+  const confirmEndSession = async () => {
+    // Session Report Persistence (Sprint 4B) — saved BEFORE the live
+    // session record is deleted below, under its own registry
+    // (SESSION_REPORT_PREFIX, see lib/sessionReportModel.js) so it survives
+    // independently of the session it was generated from. A save failure
+    // shouldn't block the facilitator from actually ending the session.
+    try {
+      await saveSessionReport(sessionReport, sessionCode);
+    } catch (e) {
+      // report save failure shouldn't block ending the session
+    }
     try {
       await window.storage.delete(`${STORAGE_PREFIX}${sessionCode}`, true);
     } catch (e) {
       // deletion failure shouldn't block leaving — session data may already be gone
     }
+    setSessionReport(null);
     leaveSession();
+  };
+
+  const cancelEndSession = () => {
+    setSessionReport(null);
   };
 
   return (
     <div style={styles.app}>
       <style>{fontImport}</style>
+
+      {sessionReport && (
+        <SessionAnalyticsReport report={sessionReport} onConfirm={confirmEndSession} onCancel={cancelEndSession} />
+      )}
+
+      {scorerAuthed && (
+        <HeldPlayerReminderBanner
+          reminders={heldReminderVisibleIds
+            .filter((id) => state.players[id]?.held)
+            .map((id) => {
+              const p = state.players[id];
+              const currentRound = (state.matchHistory || []).length;
+              // facilitator convenience only — does not read or affect
+              // heldAt/heldAtRound/heldReminderLastShownAt, the reminder's
+              // own timing fields, and never touches queueIds/nextMatchups.
+              const lastMatch = getLastCourtForPlayer(state, id);
+              let lastPlayedText;
+              if (lastMatch) {
+                lastPlayedText = `Court ${lastMatch.court}`;
+              } else {
+                const sessionStart = state.sessionStartedAt || 0;
+                const isMidSessionJoin = p.checkedInAt && sessionStart && p.checkedInAt - sessionStart > 5 * 60000;
+                lastPlayedText = isMidSessionJoin ? "Waiting for first match" : "Not yet played";
+              }
+              return {
+                playerId: id,
+                playerName: p.name,
+                skill: p.skill === "intermediate" ? "Intermediate" : "Beginner",
+                lastPlayedText,
+                minutesHeld: Math.floor((Date.now() - p.heldAt) / 60000),
+                roundsHeld: Math.max(0, currentRound - (p.heldAtRound ?? currentRound)),
+              };
+            })}
+          onResume={(id) => {
+            resumePlayer(id);
+            dismissHeldReminder(id);
+          }}
+          onKeepHeld={dismissHeldReminder}
+        />
+      )}
 
       {screen === "landing" && (
         <LandingScreen
@@ -1565,6 +1726,7 @@ export default function PickleballOpenPlay() {
           onCourtBooking={() => setScreen("courtBooking")}
           onRatings={() => setScreen("ratings")}
           onTournamentHistory={() => setScreen("tournamentHistory")}
+          onSessionHistory={() => setScreen("sessionHistory")}
           joinCode={joinCode}
           setJoinCode={setJoinCode}
           handleJoin={handleJoin}
@@ -1592,6 +1754,8 @@ export default function PickleballOpenPlay() {
       {screen === "ratings" && <RatingsScreen onBack={goToLanding} />}
 
       {screen === "tournamentHistory" && <TournamentHistoryScreen onBack={goToLanding} />}
+
+      {screen === "sessionHistory" && <OpenPlaySessionHistoryScreen onBack={goToLanding} />}
 
       {screen === "portal" && (
         <PlayerPortalScreen

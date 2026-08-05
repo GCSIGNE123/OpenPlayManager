@@ -224,6 +224,7 @@ export function changePlayerSkill(state, playerId, newSkill, reason = "Manual ov
     previousSkill,
     newSkill,
     reason,
+    source: "manual", // Session Analytics Engine — distinguishes this from an automatic promotion/relegation (see PickleballOpenPlay.jsx's endMatch) without string-matching `reason`
     timestamp: Date.now(),
   };
   const skillChangeLog = [logEntry, ...(state.skillChangeLog || [])].slice(0, 50);

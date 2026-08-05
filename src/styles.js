@@ -2508,6 +2508,167 @@ export const styles = {
     gap: 8,
     marginTop: 18,
   },
+  // Session Analytics Engine (Sprint 4A) — a wider variant of dialogCard
+  // for a data-heavy report; reuses dialogOverlay/dialogHeadRow/dialogTitle
+  // as-is for the same look-and-feel as every other dialog in the app.
+  analyticsReportCard: {
+    background: "var(--color-surface)",
+    borderRadius: 12,
+    border: "1.5px solid var(--line)",
+    padding: 24,
+    width: "100%",
+    maxWidth: 720,
+    maxHeight: "90vh",
+    overflowY: "auto",
+  },
+  // Held Player Reminder — a fixed, non-blocking stack (never a modal
+  // overlay) so it can never block interaction with the rest of the
+  // Scorer tab, and stacks vertically so multiple simultaneous held-player
+  // reminders are all visible at once.
+  heldReminderStack: {
+    position: "fixed",
+    bottom: 16,
+    right: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    zIndex: 90, // below dialogOverlay (100) so a real dialog always wins if both are somehow open
+    maxWidth: 300,
+  },
+  heldReminderCard: {
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--color-secondary)",
+    borderRadius: 10,
+    padding: "10px 12px",
+    boxShadow: "0 4px 16px rgba(20,26,38,0.18)",
+  },
+  heldReminderHeadRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  heldReminderTitle: {
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: "0.02em",
+    color: "var(--color-secondary-text)",
+    textTransform: "uppercase",
+  },
+  heldReminderBody: {
+    fontSize: 13,
+    color: "var(--ink)",
+    margin: "0 0 4px 0",
+  },
+  heldReminderSkill: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--color-secondary-text)",
+  },
+  heldReminderMeta: {
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+    margin: "0 0 6px 0",
+  },
+  heldReminderPrompt: {
+    fontSize: 12.5,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+    margin: "0 0 8px 0",
+  },
+  heldReminderActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  // Session Report Export (Sprint 4C)
+  analyticsExportRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 16,
+  },
+  analyticsGradeRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    padding: "14px 16px",
+    borderRadius: 10,
+    background: "var(--color-bg)",
+    border: "1.5px solid var(--line)",
+    marginBottom: 18,
+  },
+  analyticsGradeScore: (score) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    fontSize: 28,
+    color: score >= 90 ? "var(--court)" : score >= 70 ? "var(--color-secondary-text)" : "var(--coral)",
+    flexShrink: 0,
+  }),
+  analyticsGradeLabel: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "var(--ink)",
+  },
+  analyticsGradeSub: {
+    fontSize: 11.5,
+    color: "var(--color-text-faint)",
+  },
+  analyticsSection: {
+    marginBottom: 18,
+  },
+  analyticsStatGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+    gap: 10,
+  },
+  analyticsStatItem: {
+    background: "var(--color-bg)",
+    border: "1px solid var(--line)",
+    borderRadius: 8,
+    padding: "8px 10px",
+  },
+  analyticsStatLabel: {
+    display: "block",
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
+    color: "var(--color-text-faint)",
+    marginBottom: 3,
+  },
+  analyticsStatValue: {
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    fontSize: 16,
+    color: "var(--ink)",
+  },
+  analyticsAttentionList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  analyticsAttentionCard: {
+    background: "var(--color-bg)",
+    border: "1.5px solid var(--line)",
+    borderLeft: "4px solid var(--coral)",
+    borderRadius: 8,
+    padding: "8px 12px",
+  },
+  analyticsAttentionName: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "var(--ink)",
+  },
+  analyticsAttentionReason: {
+    fontSize: 11.5,
+    color: "var(--color-text-muted)",
+  },
+  analyticsEmptyNote: {
+    fontSize: 12.5,
+    color: "var(--color-text-faint)",
+    fontStyle: "italic",
+  },
   iconBtn: {
     display: "flex",
     alignItems: "center",

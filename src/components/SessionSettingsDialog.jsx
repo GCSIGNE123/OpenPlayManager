@@ -25,6 +25,7 @@ export default function SessionSettingsDialog({
   adaptiveSkillThresholds,
   showAdaptiveThresholds,
   courtDispatchSettings,
+  heldPlayerReminderSettings,
   onSave,
   onClose,
 }) {
@@ -34,6 +35,12 @@ export default function SessionSettingsDialog({
   const [transitionMaxDraft, setTransitionMaxDraft] = useState(progressiveSkillThresholds?.transitionMax ?? 60);
   const [promotionWinsDraft, setPromotionWinsDraft] = useState(adaptiveSkillThresholds?.promotionWins ?? 3);
   const [relegationLossesDraft, setRelegationLossesDraft] = useState(adaptiveSkillThresholds?.relegationLosses ?? 3);
+
+  // Held Player Reminder — see PROJECT.md/FEATURES.md. Rotation-mode-
+  // agnostic, always shown (Hold Player exists in every mode).
+  const [heldThresholdMinutesDraft, setHeldThresholdMinutesDraft] = useState(heldPlayerReminderSettings?.thresholdMinutes ?? 20);
+  const [heldThresholdRoundsDraft, setHeldThresholdRoundsDraft] = useState(heldPlayerReminderSettings?.thresholdRounds ?? 3);
+  const [heldRepeatIntervalDraft, setHeldRepeatIntervalDraft] = useState(heldPlayerReminderSettings?.repeatIntervalMinutes ?? 10);
 
   // Smart Court Dispatch — see PROJECT.md/FEATURES.md. Rotation-mode-
   // agnostic, always shown (unlike the per-mode threshold sections above).
@@ -89,6 +96,11 @@ export default function SessionSettingsDialog({
         rate: Number(rateDraft),
         voiceURI: voiceURIDraft || null,
         announcementDelayMs: Number(announcementDelayDraft),
+      },
+      heldPlayerReminderSettings: {
+        thresholdMinutes: Math.max(1, Number(heldThresholdMinutesDraft) || 20),
+        thresholdRounds: Math.max(1, Number(heldThresholdRoundsDraft) || 3),
+        repeatIntervalMinutes: Math.max(1, Number(heldRepeatIntervalDraft) || 10),
       },
     });
     onClose();
@@ -188,6 +200,45 @@ export default function SessionSettingsDialog({
             </div>
           </div>
         )}
+
+        <div style={styles.dialogField}>
+          <label style={styles.dialogLabel}>Held Player Reminder</label>
+          <p style={styles.dialogReadOnlyValue}>
+            Nudges the facilitator about a player who's stayed held a while — never affects matchmaking or player priority.
+          </p>
+          <div style={styles.dialogThresholdRow}>
+            <label style={styles.settingsField}>
+              Remind after (minutes held)
+              <input
+                type="number"
+                min={1}
+                style={styles.expectedGamesInput}
+                value={heldThresholdMinutesDraft}
+                onChange={(e) => setHeldThresholdMinutesDraft(e.target.value)}
+              />
+            </label>
+            <label style={styles.settingsField}>
+              Or after (completed rounds)
+              <input
+                type="number"
+                min={1}
+                style={styles.expectedGamesInput}
+                value={heldThresholdRoundsDraft}
+                onChange={(e) => setHeldThresholdRoundsDraft(e.target.value)}
+              />
+            </label>
+            <label style={styles.settingsField}>
+              Repeat every (minutes)
+              <input
+                type="number"
+                min={1}
+                style={styles.expectedGamesInput}
+                value={heldRepeatIntervalDraft}
+                onChange={(e) => setHeldRepeatIntervalDraft(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
 
         <div style={styles.dialogField}>
           <label style={styles.dialogLabel}>Smart Court Dispatch</label>

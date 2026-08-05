@@ -29,22 +29,121 @@ import { uid } from "./random.js";
 // matchup they're currently reserved in (same mechanism moveToQueue/
 // changePlayerSkill already use) so "temporarily exclude from matchmaking"
 // is actually true immediately, not just from the next round onward.
+//
+// Held Player Reminder — see PROJECT.md/FEATURES.md — needs to know WHEN a
+// player became held and how many rounds have completed since, purely to
+// decide when to nudge the facilitator; `heldAt`/`heldAtRound` are set here,
+// fresh, every time a player is newly held (never touched while already
+// held — the existing no-op guard above already prevents a re-hold from
+// resetting these mid-hold). `heldReminderLastShownAt` starts null so the
+// very first reminder check for this hold period isn't gated by anything.
+// None of these three fields are ever read by matchmaking/rotation
+// engines — see getPlayersNeedingHeldReminder below, the only reader.
 export function holdPlayer(state, playerId) {
   const p = state.players[playerId];
   if (!p || p.held) return state;
-  const players = { ...state.players, [playerId]: { ...p, held: true } };
+  const players = {
+    ...state.players,
+    [playerId]: {
+      ...p,
+      held: true,
+      heldAt: Date.now(),
+      heldAtRound: (state.matchHistory || []).length,
+      heldReminderLastShownAt: null,
+    },
+  };
   const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
   return { ...state, players, nextMatchups };
 }
 
 // Resume Player — the inverse of holdPlayer. Returns the player to the
 // waiting queue; everything else (stats/streaks/payment/queue position) is
-// untouched.
+// untouched. Also clears the Held Player Reminder bookkeeping above, so a
+// later, fresh hold starts its own reminder clock rather than inheriting a
+// stale one.
 export function resumePlayer(state, playerId) {
   const p = state.players[playerId];
   if (!p || !p.held) return state;
-  const players = { ...state.players, [playerId]: { ...p, held: false } };
+  const players = {
+    ...state.players,
+    [playerId]: { ...p, held: false, heldAt: null, heldAtRound: null, heldReminderLastShownAt: null },
+  };
   return { ...state, players };
+}
+
+// Held Player Reminder — see PROJECT.md/FEATURES.md. Pure, UI-agnostic
+// query: which currently-held players have been held long enough (by
+// either configurable threshold — whichever is met first) to warrant
+// reminding the facilitator, and haven't already been reminded within the
+// configurable repeat interval. Returns plain data ({playerId, playerName,
+// minutesHeld, roundsHeld}); the caller decides how/whether to render it.
+// Deliberately reads only held/heldAt/heldAtRound/heldReminderLastShownAt —
+// never touches queueIds/nextMatchups/players' skill/games/etc., so this
+// can never influence matchmaking or player priority, only surface a
+// reminder about a fact that's already true.
+export function getPlayersNeedingHeldReminder(state, now = Date.now()) {
+  const { thresholdMinutes = 20, thresholdRounds = 3, repeatIntervalMinutes = 10 } = state.heldPlayerReminderSettings || {};
+  const currentRound = (state.matchHistory || []).length;
+  return Object.values(state.players || {})
+    .filter((p) => p.held && p.heldAt)
+    .map((p) => {
+      const minutesHeld = (now - p.heldAt) / 60000;
+      const roundsHeld = currentRound - (p.heldAtRound ?? currentRound);
+      return { p, minutesHeld, roundsHeld };
+    })
+    .filter(({ minutesHeld, roundsHeld }) => minutesHeld >= thresholdMinutes || roundsHeld >= thresholdRounds)
+    .filter(({ p }) => {
+      if (!p.heldReminderLastShownAt) return true;
+      return (now - p.heldReminderLastShownAt) / 60000 >= repeatIntervalMinutes;
+    })
+    .map(({ p, minutesHeld, roundsHeld }) => ({
+      playerId: p.id,
+      playerName: p.name,
+      minutesHeld: Math.floor(minutesHeld),
+      roundsHeld: Math.max(0, roundsHeld),
+    }));
+}
+
+// Held Player Reminder — marks a reminder as shown for one player (updates
+// heldReminderLastShownAt, the repeat-interval gate getPlayersNeedingHeldReminder
+// above reads) and records a Queue Activity Log entry, same shared-log
+// convention as noteDissolvedHeldMatchups. A no-op (same state reference)
+// if the player isn't actually held right now — same defensive precedent
+// every other action in this file already follows.
+export function markHeldReminderShown(state, playerId, { minutesHeld, roundsHeld }) {
+  const p = state.players[playerId];
+  if (!p || !p.held) return state;
+  const players = { ...state.players, [playerId]: { ...p, heldReminderLastShownAt: Date.now() } };
+  const entry = {
+    id: uid(),
+    kind: "heldPlayerReminder", // shared Queue Activity Log — see lib/courtDispatch.js's logDispatchEvent for the other kinds this same log holds
+    playerId,
+    playerName: p.name,
+    minutesHeld,
+    roundsHeld,
+    reason: `Held for ${minutesHeld} min (${roundsHeld} completed round${roundsHeld === 1 ? "" : "s"})`,
+    timestamp: Date.now(),
+  };
+  const queueActivityLog = [entry, ...(state.queueActivityLog || [])].slice(0, 50);
+  return { ...state, players, queueActivityLog };
+}
+
+// Held Player Reminder (facilitator convenience) — a read-only lookup of a
+// player's most recent completed match, scanning matchHistory (newest
+// entries are appended, so we scan from the end) for the last record
+// naming this player in either team. Returns null if the player has never
+// appeared in any completed match. Pure query, no state mutation — does
+// not affect getPlayersNeedingHeldReminder/markHeldReminderShown above or
+// anything else; it only feeds the reminder banner's display copy.
+export function getLastCourtForPlayer(state, playerId) {
+  const history = state.matchHistory || [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.teamA.includes(playerId) || m.teamB.includes(playerId)) {
+      return { court: m.court, endedAt: m.endedAt };
+    }
+  }
+  return null;
 }
 
 // Skip Player — a brief "let others go first" nudge (restroom, water,

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-05
+
+### Added
+- **Adaptive Skill Rotation — games-played fairness redesign** — real-session testing surfaced large games-played gaps (e.g. 8 vs 2) between players who checked in simultaneously, even after the earlier cross-division fix. Root cause: team formation has no awareness of games played, and a flat additive games/waiting bonus was numerically swamped by the much larger partner/opponent scoring range. `generateMatchups` now ranks every candidate matchup (across both divisions) by an explicit, lexicographic tuple — (1) lowest average games played, (2) lowest max games played, (3) existing matchup quality (partner + opponent diversity + Winner-vs-Winner, unchanged), (4) waiting time as the final tiebreak — instead of one blended score. Team formation, partner/opponent scoring, and Winner-vs-Winner are completely untouched. Verified via a permanent 10-session seeded regression test plus before/after simulation (games-played spread 4.93→3.17 at ~3h, 8.6→3.5 at ~15h) and a 75-trial realistic stress test (mid-session check-ins/outs, promotions/relegations, held players/matches, Skip Player, odd player counts, uneven division ratios) confirming the spread stays low under non-ideal conditions.
+- **Session Analytics & Fairness Report** — an end-of-session report (games-played spread, waiting-time fairness, court utilization, promotions/relegations) shown at End Session, with an explicit facilitator confirm/cancel step before the session actually ends. Reports persist independently of the live session record (new `opl-session-report-{id}` registry, `lib/sessionReportModel.js`) so they survive past End Session, browsable from a new **Session History** screen (search/filter, reached from the landing page). Exportable as PDF (print layout), CSV, and JSON (`ExportService.exportJSON`).
+- **Held Player Reminder** — a facilitator safeguard (not a matchmaking feature): if a held player stays held for a configurable amount of time (default 20 minutes) OR a configurable number of completed rounds (default 3), a small non-blocking reminder card appears with Resume/Keep Held actions, repeating on a configurable interval until resumed. Supports multiple simultaneously-held players (stacked cards). Each fired reminder is recorded in the shared Queue Activity Log. The card also shows the player's current skill division and a "Last played" line (their last court, "Not yet played" for an original-roster player who hasn't played yet, or "Waiting for first match" for a mid-session check-in who hasn't been placed yet) — read-only display data, computed from existing `matchHistory`/`checkedInAt`, that cannot affect the reminder's own timing or matchmaking.
+- **Scorer tab redesign** — reorders sections to prioritize Courts (Courts → Next Matchups → Waiting Players → Skill Change Log → Queue Activity Log), removes player avatars from the Scorer tab in favor of names-first display, compacts the Queue Activity Log, and switches the court grid to one full-width row per court for readability during large sessions.
+
+### Fixed
+- **Smart Court Dispatch — partial court occupancy** — two related bugs in mixed available/occupied-court sessions: the upcoming-matchup queue's capacity accounting didn't account for courts already in use, silently under-filling the queue; and only one of several simultaneously-available courts was being dispatched to per save cycle instead of all of them.
+
 ## 2026-08-02
 
 ### Added

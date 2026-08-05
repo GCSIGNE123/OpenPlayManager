@@ -225,4 +225,23 @@ export class BalancedRotationEngine extends RotationEngine {
     }
     return score;
   }
+
+  // Total fairness score for one fully-formed matchup (both teams already
+  // decided) — the complete number this class computes internally, in
+  // pieces, while deciding which teams to form (scorePartner) and which
+  // teams to pit against each other (scoreOpponents), but never previously
+  // surfaced as a single value. Exposed as its own method — rather than
+  // left as an anonymous `reduce` inside buildTeamsOnce/buildMatchupsFromTeams
+  // — specifically so Adaptive Skill Rotation can reuse it (see
+  // AdaptiveSkillRotationEngine.scoreFullMatchup) to compare candidate
+  // matchups ACROSS its two divisions without reimplementing any of this
+  // scoring. Composes scorePartner/scoreOpponents as-is; this method adds
+  // no new scoring logic of its own.
+  scoreFullMatchup(teamA, teamB, players) {
+    return (
+      this.scorePartner(teamA[0], teamA[1], players) +
+      this.scorePartner(teamB[0], teamB[1], players) +
+      this.scoreOpponents(teamA, teamB, players)
+    );
+  }
 }

@@ -41,6 +41,15 @@ export class ExportService {
     downloadFile(csv, "text/csv;charset=utf-8", `${slugify(report.title)}.csv`);
   }
 
+  // JSON export — Session Analytics & Fairness Report (Sprint 4C) is the
+  // first caller: downloads the exact data object a report was built from,
+  // for a facilitator who wants the raw numbers rather than a CSV/PDF.
+  // Same Blob -> object URL -> anchor.click() download mechanism as
+  // exportCSV/HistoryView's own copy, not a new one.
+  exportJSON(data, title) {
+    downloadFile(JSON.stringify(data, null, 2), "application/json;charset=utf-8", `${slugify(title)}.json`);
+  }
+
   // The caller (TournamentReportsView) is responsible for having the
   // print-optimized DOM already rendered before calling this — exportPDF
   // itself just triggers the browser's print dialog. Kept as a real method

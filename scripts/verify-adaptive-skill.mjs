@@ -6,8 +6,10 @@
 // the engine or the manual-override action.
 //
 // Usage: node scripts/verify-adaptive-skill.mjs
-import { getRotationEngine, refreshNextMatchups, changePlayerSkill } from "../src/lib/utils.js";
+import { getRotationEngine, refreshNextMatchups, maxUpcomingMatchups, changePlayerSkill, recordRotationHistory } from "../src/lib/utils.js";
+import { dispatchAvailableCourts } from "../src/lib/courtDispatch.js";
 import { AdaptiveSkillRotationEngine } from "../src/engines/AdaptiveSkillRotationEngine.js";
+import { BalancedRotationEngine } from "../src/engines/BalancedRotationEngine.js";
 
 let pass = 0, fail = 0;
 function assert(desc, cond) {
@@ -201,6 +203,217 @@ console.log("\n9. Partners still rotate under Winner vs Winner (no fixed partner
   const m = matchups[0];
   const b0Team = m.teamA.includes("b0") ? m.teamA : m.teamB;
   assert("b0 and b1 (recent partners, same lastResult) still avoided as teammates -- partner rotation unaffected by winner grouping", !b0Team.includes("b1"));
+}
+
+console.log("\n10. scoreFullMatchup — exposed BalancedRotationEngine score composes scorePartner+scorePartner+scoreOpponents, nothing reimplemented");
+{
+  const players = makePlayers(2, 2);
+  players.b0.partnerCounts = { b1: 0 };
+  players.i0.partnerCounts = { i1: 5 };
+  players.i0.recentPartnerIds = ["i1"];
+  const balanced = new BalancedRotationEngine();
+  const teamA = ["b0", "b1"];
+  const teamB = ["i0", "i1"];
+  const expected =
+    balanced.scorePartner("b0", "b1", players) +
+    balanced.scorePartner("i0", "i1", players) +
+    balanced.scoreOpponents(teamA, teamB, players);
+  assert("scoreFullMatchup equals scorePartner(A)+scorePartner(B)+scoreOpponents(A,B)", balanced.scoreFullMatchup(teamA, teamB, players) === expected);
+}
+
+console.log("\n11. Cross-division merge-then-cap — a long-waiting Intermediate matchup outranks a fresh Beginner one, and both divisions survive the queue-depth cap");
+{
+  // 8 beginners who just played (fresh lastMatchEndAt -> ~0 min waited) vs
+  // 4 intermediates who have been waiting a long time (old checkedInAt) --
+  // this is exactly the shape that produced total Intermediate starvation
+  // before this redesign (see PROJECT.md).
+  const players = makePlayers(8, 4);
+  const now = Date.now();
+  Object.values(players).forEach((p) => {
+    if (p.skill === "beginner") p.lastMatchEndAt = now; // just played, ~0 min waited
+    else p.checkedInAt = now - 45 * 60 * 1000; // waiting 45 minutes, never played yet
+  });
+  const queueIds = Object.keys(players);
+  const engine = getRotationEngine("adaptiveSkill");
+  // cap of 2 (e.g. 3 courts, 1 occupied) -- small enough that the old
+  // beginner-first concatenation would always fill it with 0 Intermediate
+  // matchups ever getting through
+  const matchups = refreshNextMatchups(queueIds, players, [], engine, null, 2);
+  assert("cap of 2 is respected", matchups.length === 2);
+  const hasIntermediate = matchups.some((m) => players[m.teamA[0]].skill === "intermediate");
+  assert("the long-waiting Intermediate division gets at least one of the 2 slots (no total starvation)", hasIntermediate);
+}
+
+console.log("\n12. Long-session regression — neither division is starved over many rounds at 3 courts (the exact scenario reported)");
+{
+  // A synchronous test loop runs in milliseconds of real time, but the
+  // waiting bonus is measured in real minutes (players[id].checkedInAt/
+  // lastMatchEndAt vs Date.now()) -- exactly like a live session, where
+  // actual wall-clock minutes pass between rounds. Date.now() is
+  // monkey-patched for the duration of this section only (pure test
+  // technique, no production code touched) so 40 rounds simulate roughly
+  // 40 x 15 real minutes instead of 40 x ~0ms.
+  const realDateNow = Date.now;
+
+  function runStarvationCheck(beginnerCount, intermediateCount) {
+    let virtualNow = realDateNow();
+    Date.now = () => virtualNow;
+
+    const players = {};
+    const queueIds = [];
+    for (let i = 0; i < beginnerCount; i++) {
+      const id = `b${i}`;
+      queueIds.push(id);
+      players[id] = { id, name: `Beg${i}`, skill: "beginner", games: 0, wins: 0, losses: 0, lastResult: null, checkedInAt: virtualNow };
+    }
+    for (let i = 0; i < intermediateCount; i++) {
+      const id = `i${i}`;
+      queueIds.push(id);
+      players[id] = { id, name: `Int${i}`, skill: "intermediate", games: 0, wins: 0, losses: 0, lastResult: null, checkedInAt: virtualNow };
+    }
+    let courts = Array.from({ length: 3 }, (_, i) => ({ number: i + 1, status: "open", assignmentMode: "automatic", teamA: [], teamB: [], scoreA: 0, scoreB: 0 }));
+    let nextMatchups = [];
+    let qIds = [...queueIds];
+    const engine = getRotationEngine("adaptiveSkill");
+
+    for (let round = 0; round < 40; round++) {
+      virtualNow += 15 * 60000; // 15 real minutes pass per round, same default as CreateSessionScreen's avg match duration
+      const cap = maxUpcomingMatchups(courts);
+      nextMatchups = refreshNextMatchups(qIds, players, nextMatchups, engine, null, cap);
+      const dispatched = dispatchAvailableCourts({ courts, nextMatchups, queueIds: qIds, players, autoFillCourts: true, isCourtReserved: () => false });
+      courts = dispatched.courts.map((c) => (c.status === "dispatching" ? { ...c, status: "live" } : c));
+      nextMatchups = dispatched.nextMatchups;
+      qIds = dispatched.queueIds;
+
+      for (const c of courts) {
+        if (c.status !== "live") continue;
+        const aWon = Math.random() < 0.5;
+        for (const id of [...c.teamA, ...c.teamB]) players[id].games += 1;
+        c.teamA.forEach((id) => (players[id].lastResult = aWon ? "win" : "loss"));
+        c.teamB.forEach((id) => (players[id].lastResult = aWon ? "loss" : "win"));
+        c.teamA.forEach((id) => (players[id].lastMatchEndAt = virtualNow));
+        c.teamB.forEach((id) => (players[id].lastMatchEndAt = virtualNow));
+        qIds.push(...c.teamA, ...c.teamB);
+      }
+      courts = courts.map((c) => (c.status === "live" ? { number: c.number, status: "open", assignmentMode: "automatic", teamA: [], teamB: [], scoreA: 0, scoreB: 0 } : c));
+    }
+
+    Date.now = realDateNow;
+    const beginnerGames = Object.values(players).filter((p) => p.skill === "beginner").reduce((s, p) => s + p.games, 0);
+    const intermediateGames = Object.values(players).filter((p) => p.skill === "intermediate").reduce((s, p) => s + p.games, 0);
+    return { beginnerGames, intermediateGames };
+  }
+
+  const r1 = runStarvationCheck(24, 8);
+  assert("24 Beginner / 8 Intermediate — Intermediates get games over 40 rounds (previously 0)", r1.intermediateGames > 0);
+  const r2 = runStarvationCheck(20, 12);
+  assert("20 Beginner / 12 Intermediate — Intermediates get games over 40 rounds (previously 0)", r2.intermediateGames > 0);
+  const r3 = runStarvationCheck(16, 16);
+  assert("16 Beginner / 16 Intermediate — Intermediates get games over 40 rounds (previously 0)", r3.intermediateGames > 0);
+  assert("16/16 even split — Beginners still get games too (fix doesn't just flip starvation onto the other division)", r3.beginnerGames > 0);
+}
+
+console.log("\n13. PERMANENT REGRESSION GUARD — simultaneous check-in cannot drift into extreme games-played imbalance (e.g. 8 vs 2)");
+{
+  // The exact real-world bug report this section guards against: 22
+  // players (12 Beginner / 10 Intermediate) who ALL check in at the same
+  // instant still ended up with some players at 8 games and others at 2
+  // over a normal ~3 hour session. Root cause (see PROJECT.md's Games-
+  // Played Imbalance Redesign): team formation has no games-played
+  // awareness, and a flat additive fairness bonus was numerically swamped
+  // by partner/opponent-avoidance scores. Fixed by ranking candidate
+  // matchups on a lexicographic tuple (lowest avg games -> lowest max
+  // games -> quality -> waiting) instead of one blended number — see
+  // AdaptiveSkillRotationEngine.js's generateMatchups.
+  //
+  // Runs the REAL production engine (getRotationEngine("adaptiveSkill"),
+  // unmodified) across several seeded, ~3-hour (12-round) sessions with
+  // every player checked in at the exact same simultaneous timestamp, and
+  // asserts the worst games-played spread across all of them stays well
+  // under the old buggy behavior's scale. This must keep passing no matter
+  // what future matchmaking changes touch this file or BalancedRotationEngine
+  // — if it ever fails, some change reintroduced the imbalance this sprint
+  // fixed.
+  function mulberry32(seed) {
+    let a = seed;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const realDateNow = Date.now;
+  const realMathRandom = Math.random;
+
+  function runSimultaneousCheckInSession(seed) {
+    let virtualNow = realDateNow();
+    Date.now = () => virtualNow;
+    Math.random = mulberry32(seed);
+
+    const players = {};
+    const queueIds = [];
+    for (let i = 0; i < 12; i++) {
+      const id = `b${i}`;
+      queueIds.push(id);
+      players[id] = { id, name: `Beg${i}`, skill: "beginner", games: 0, wins: 0, losses: 0, streak: 0, lossStreak: 0, lastResult: null, checkedInAt: virtualNow, partnerCounts: {}, recentPartnerIds: [], opponentCounts: {}, lastOpponentIds: [], recentOpponentIds: [] };
+    }
+    for (let i = 0; i < 10; i++) {
+      const id = `i${i}`;
+      queueIds.push(id);
+      players[id] = { id, name: `Int${i}`, skill: "intermediate", games: 0, wins: 0, losses: 0, streak: 0, lossStreak: 0, lastResult: null, checkedInAt: virtualNow, partnerCounts: {}, recentPartnerIds: [], opponentCounts: {}, lastOpponentIds: [], recentOpponentIds: [] };
+    }
+    let courts = Array.from({ length: 3 }, (_, i) => ({ number: i + 1, status: "open", assignmentMode: "automatic", teamA: [], teamB: [], scoreA: 0, scoreB: 0 }));
+    let nextMatchups = [];
+    let qIds = [...queueIds];
+    const engine = getRotationEngine("adaptiveSkill"); // the real, unmodified production engine
+
+    for (let round = 0; round < 12; round++) { // 12 rounds x 15min = ~3 real hours, matching CreateSessionScreen's default avg match duration
+      virtualNow += 15 * 60000;
+      const cap = maxUpcomingMatchups(courts);
+      nextMatchups = refreshNextMatchups(qIds, players, nextMatchups, engine, null, cap);
+      const dispatched = dispatchAvailableCourts({ courts, nextMatchups, queueIds: qIds, players, autoFillCourts: true, isCourtReserved: () => false });
+      courts = dispatched.courts.map((c) => (c.status === "dispatching" ? { ...c, status: "live" } : c));
+      nextMatchups = dispatched.nextMatchups;
+      qIds = dispatched.queueIds;
+
+      for (const c of courts) {
+        if (c.status !== "live") continue;
+        const aWon = Math.random() < 0.5;
+        for (const id of [...c.teamA, ...c.teamB]) players[id].games += 1;
+        c.teamA.forEach((id) => (players[id].lastResult = aWon ? "win" : "loss"));
+        c.teamB.forEach((id) => (players[id].lastResult = aWon ? "loss" : "win"));
+        c.teamA.forEach((id) => (players[id].lastMatchEndAt = virtualNow));
+        c.teamB.forEach((id) => (players[id].lastMatchEndAt = virtualNow));
+        Object.assign(players, recordRotationHistory(players, c.teamA, c.teamB, c.number));
+        qIds.push(...c.teamA, ...c.teamB);
+      }
+      courts = courts.map((c) => (c.status === "live" ? { number: c.number, status: "open", assignmentMode: "automatic", teamA: [], teamB: [], scoreA: 0, scoreB: 0 } : c));
+    }
+
+    Date.now = realDateNow;
+    Math.random = realMathRandom;
+    const gp = Object.values(players).map((p) => p.games);
+    return { spread: Math.max(...gp) - Math.min(...gp), minGP: Math.min(...gp), maxGP: Math.max(...gp) };
+  }
+
+  // Multiple seeds so this can never be a one-off lucky/unlucky pass --
+  // threshold (6) sits comfortably above this algorithm's typical spread
+  // (~3, +/- ~0.5 trial-to-trial per the simulation comparison in
+  // TESTING.md) while sitting AT the old bug's reported scale (8 vs 2 = a
+  // spread of 6), so a regression back toward that behavior fails loudly.
+  const SPREAD_CEILING = 6;
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const results = seeds.map(runSimultaneousCheckInSession);
+  const worst = results.reduce((a, b) => (b.spread > a.spread ? b : a));
+  assert(
+    `games-played spread stays under ${SPREAD_CEILING} across ${seeds.length} seeded ~3h sessions with simultaneous check-in (worst: ${worst.spread}, min ${worst.minGP}/max ${worst.maxGP})`,
+    worst.spread < SPREAD_CEILING
+  );
+  results.forEach((r, i) => {
+    assert(`seed ${seeds[i]}: no player reaches 0 games (no starvation)`, r.minGP > 0);
+  });
 }
 
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);

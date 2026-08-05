@@ -2,7 +2,7 @@ import { LogIn, Plus } from "lucide-react";
 import { styles } from "../styles.js";
 import { APP_NAME, TAGLINE, FOOTER_TEXT } from "../lib/brand.js";
 
-export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, onPlayerPortal, onLeagues, onPlayerManagement, onVenueManagement, onCourtBooking, onRatings, onTournamentHistory, joinCode, setJoinCode, handleJoin, joinError, joining }) {
+export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTemplates, onPlayerPortal, onLeagues, onPlayerManagement, onVenueManagement, onCourtBooking, onRatings, onTournamentHistory, onSessionHistory, joinCode, setJoinCode, handleJoin, joinError, joining }) {
   return (
     <div style={styles.landingWrap}>
       <div style={styles.landingHero}>
@@ -71,6 +71,9 @@ export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTempla
       </button>
       <button style={styles.adminLink} onClick={onTournamentHistory}>
         View tournament history →
+      </button>
+      <button style={styles.adminLink} onClick={onSessionHistory}>
+        View session history →
       </button>
       <button style={styles.adminLink} onClick={onDeveloper}>
         Developer? Run the rotation simulator →

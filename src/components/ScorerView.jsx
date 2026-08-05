@@ -24,6 +24,7 @@ const QUEUE_ACTIVITY_KIND_META = {
   announcementRepeated: { title: "Voice Announcement Repeated" },
   announcementMuted: { title: "Announcement Muted" },
   announcementSkipped: { title: "Announcement Skipped" },
+  heldPlayerReminder: { title: "Held Player Reminder" },
 };
 
 // Collapsed-state "Latest:" compact summary — one readable line per kind,
@@ -44,6 +45,8 @@ function queueActivitySummaryText(entry) {
       return `${court}announcement muted`;
     case "announcementSkipped":
       return `${court}announcement skipped`;
+    case "heldPlayerReminder":
+      return `${entry.playerName} held ${entry.minutesHeld}m (${entry.roundsHeld} round${entry.roundsHeld === 1 ? "" : "s"})`;
     case "heldMatchDissolved":
     default:
       return "Held Match removed";
@@ -57,6 +60,9 @@ function queueActivitySummaryText(entry) {
 // of detail the teams alone don't explain).
 function queueActivityRowText(entry) {
   const kind = entry.kind || "heldMatchDissolved";
+  if (kind === "heldPlayerReminder") {
+    return `${entry.playerName} — held ${entry.minutesHeld} min (${entry.roundsHeld} round${entry.roundsHeld === 1 ? "" : "s"})`;
+  }
   const teamsPart = `${(entry.teamA || []).join(" / ")} vs ${(entry.teamB || []).join(" / ")}`;
   if (kind === "heldMatchDissolved") return `${teamsPart} — ${entry.reason}`;
   const courtPart = typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber}: ` : "";
@@ -274,81 +280,6 @@ export default function ScorerView({
         <div style={styles.confirmMsg}>{queueMsg}</div>
       )}
 
-      <WaitingPlayersPanel
-        players={unassignedPlayers}
-        state={state}
-        onHoldPlayer={holdPlayer}
-        onResumePlayer={resumePlayer}
-        onSkipPlayer={skipPlayer}
-        onRemove={removePlayer}
-        onCheckout={checkoutPlayer}
-        onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
-        checkedOutPlayers={checkedOutPlayers}
-      />
-
-      {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
-        <>
-          <SectionLabel>Skill Change Activity Log</SectionLabel>
-          <ul style={styles.rosterList}>
-            {skillChangeLog.map((entry) => (
-              <li key={entry.id} style={styles.rosterItem}>
-                <span style={styles.queueName}>
-                  {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                  {" — "}
-                  {entry.playerName}: {entry.previousSkill === "intermediate" ? "Intermediate" : "Beginner"} →{" "}
-                  {entry.newSkill === "intermediate" ? "Intermediate" : "Beginner"} ({entry.reason})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {nextMatchups.length > 0 && (
-        <>
-          <div style={styles.scorerToolbar}>
-            <SectionLabel>Next matchups</SectionLabel>
-            <div style={{ display: "flex", gap: 8 }}>
-              {canUndoRegenerate && (
-                <button
-                  style={{ ...styles.secondaryBtn, margin: 0 }}
-                  onClick={undoRegenerate}
-                  title="Restore the matchups from before the last Regenerate"
-                >
-                  <Undo2 size={13} strokeWidth={2.5} />
-                  Undo regenerate
-                </button>
-              )}
-              <button
-                style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
-                onClick={regenerateMatchups}
-                disabled={!canRegenerate}
-                title="Rebuild every not-locked matchup from scratch"
-              >
-                <RefreshCw size={13} strokeWidth={2.5} />
-                Regenerate
-              </button>
-            </div>
-          </div>
-          {nextMatchups.map((m, i) => (
-            <NextMatchupCard
-              key={m.id}
-              matchup={m}
-              players={state.players}
-              candidates={buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players, m.id)}
-              label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
-              onReassign={reassignMatchup}
-              onSubstitute={substituteInMatchup}
-              onToggleLock={toggleLockMatchup}
-              onMoveToQueue={moveToQueue}
-              onHold={() => holdMatch(m.id)}
-              onResume={() => resumeMatch(m.id)}
-              onCancel={() => cancelMatch(m.id)}
-            />
-          ))}
-        </>
-      )}
-
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
         {canUndoLastRound && (
@@ -411,6 +342,81 @@ export default function ScorerView({
           });
         })()}
       </div>
+
+      {nextMatchups.length > 0 && (
+        <>
+          <div style={styles.scorerToolbar}>
+            <SectionLabel>Next matchups</SectionLabel>
+            <div style={{ display: "flex", gap: 8 }}>
+              {canUndoRegenerate && (
+                <button
+                  style={{ ...styles.secondaryBtn, margin: 0 }}
+                  onClick={undoRegenerate}
+                  title="Restore the matchups from before the last Regenerate"
+                >
+                  <Undo2 size={13} strokeWidth={2.5} />
+                  Undo regenerate
+                </button>
+              )}
+              <button
+                style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
+                onClick={regenerateMatchups}
+                disabled={!canRegenerate}
+                title="Rebuild every not-locked matchup from scratch"
+              >
+                <RefreshCw size={13} strokeWidth={2.5} />
+                Regenerate
+              </button>
+            </div>
+          </div>
+          {nextMatchups.map((m, i) => (
+            <NextMatchupCard
+              key={m.id}
+              matchup={m}
+              players={state.players}
+              candidates={buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players, m.id)}
+              label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
+              onReassign={reassignMatchup}
+              onSubstitute={substituteInMatchup}
+              onToggleLock={toggleLockMatchup}
+              onMoveToQueue={moveToQueue}
+              onHold={() => holdMatch(m.id)}
+              onResume={() => resumeMatch(m.id)}
+              onCancel={() => cancelMatch(m.id)}
+            />
+          ))}
+        </>
+      )}
+
+      <WaitingPlayersPanel
+        players={unassignedPlayers}
+        state={state}
+        onHoldPlayer={holdPlayer}
+        onResumePlayer={resumePlayer}
+        onSkipPlayer={skipPlayer}
+        onRemove={removePlayer}
+        onCheckout={checkoutPlayer}
+        onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
+        checkedOutPlayers={checkedOutPlayers}
+      />
+
+      {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
+        <>
+          <SectionLabel>Skill Change Activity Log</SectionLabel>
+          <ul style={styles.rosterList}>
+            {skillChangeLog.map((entry) => (
+              <li key={entry.id} style={styles.rosterItem}>
+                <span style={styles.queueName}>
+                  {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                  {" — "}
+                  {entry.playerName}: {entry.previousSkill === "intermediate" ? "Intermediate" : "Beginner"} →{" "}
+                  {entry.newSkill === "intermediate" ? "Intermediate" : "Beginner"} ({entry.reason})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {/* Scorer Layout — Courts always have visual priority over the Queue
           Activity Log (see PROJECT.md/FEATURES.md): the log renders here,
@@ -497,6 +503,7 @@ export default function ScorerView({
           adaptiveSkillThresholds={adaptiveSkillThresholds}
           showAdaptiveThresholds={rotationMode === "adaptiveSkill"}
           courtDispatchSettings={courtDispatchSettings}
+          heldPlayerReminderSettings={state.heldPlayerReminderSettings}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

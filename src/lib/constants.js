@@ -16,6 +16,7 @@ export const QUALIFICATION_AUDIT_PREFIX = "opl-qualaudit-"; // one KV record per
 export const COURT_PREFIX = "opl-court-"; // one KV record per physical club Court, shared — see lib/courtDatabase.js. The first PERSISTENT Court entity in this app: Open Play's state.courts and Tournament's tournament.courts are both still freshly-generated, numbered-only, container-scoped arrays with no identity beyond that one session/tournament — this is deliberately a separate, new registry (Court Booking & Reservations' "master" court list), not a rename/migration of either.
 export const BOOKING_PREFIX = "opl-booking-"; // one KV record per court reservation, shared — see lib/bookingModel.js
 export const VENUE_PREFIX = "opl-venue-"; // one KV record per Venue (a physical pickleball facility), shared — see lib/venueModel.js. Phase 0: Multi-Tenant Foundation — the new top-level entity every other module is being prepared to hang off of (via a venueId field), but nothing is backfilled/migrated onto it yet.
+export const SESSION_REPORT_PREFIX = "opl-session-report-"; // one KV record per saved Session Analytics & Fairness Report, shared — see lib/sessionReportModel.js. Sprint 4B — deliberately its own registry, independent of STORAGE_PREFIX (the LIVE session record, deleted on End Session), so a report survives the session it was generated from.
 export const ORGANIZATION_PREFIX = "opl-organization-"; // one KV record per Organization (Pickleball Club / Coach / Academy / Corporate Group / Tournament Organizer), shared — see lib/organizationModel.js. RESERVED ARCHITECTURE ONLY this phase: no screen reads or writes these yet, per explicit direction not to build Organization Management.
 
 // Prepared future roles — see PROJECT.md's Multi-Tenant Foundation section.
@@ -153,12 +154,23 @@ export const defaultState = {
   // itself generates a schedule. null for every Open Play session and for
   // any tournament session created via "Start From Scratch".
   pendingTournamentTemplate: null,
+  sessionStartedAt: null, // Session Analytics Engine — set once at session creation (startSession), never touched again; the Session Summary's Duration is computed from this vs. the report's generatedAt
   rotationMode: "continuous", // see ROTATION_MODES — Open Play only; labeled "Rotation Strategy" in the UI
   expectedGamesPerPlayer: 6, // Open Play only — organizer-configurable, drives Progressive Skill Rotation's session-progress/phase calc, see lib/progressiveSkillPhase.js
   progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js
   adaptiveSkillThresholds: { promotionWins: 3, relegationLosses: 3 }, // Adaptive Skill Rotation only — organizer-configurable consecutive win/loss counts that trigger automatic promotion/relegation, see PickleballOpenPlay.jsx's endMatch
   skillChangeLog: [], // Adaptive Skill Rotation only — append-only activity log of every promotion/relegation/manual override: { id, playerId, playerName, previousSkill, newSkill, reason, timestamp }, see lib/utils.js's changePlayerSkill and PickleballOpenPlay.jsx's endMatch
-  queueActivityLog: [], // Smart Queue Management / Smart Court Dispatch — one shared append-only activity log, entries tagged by `kind` ("heldMatchDissolved", "courtDispatched", "announcementCompleted", "announcementRepeated", "announcementMuted", "announcementSkipped"): { id, kind, matchupId?, courtNumber?, teamA (names), teamB (names), reason, affectedPlayer?, timestamp } — captured at the moment of the event, never reconstructed afterward, see lib/queueManagement.js's noteDissolvedHeldMatchups and lib/courtDispatch.js's logDispatchEvent
+  queueActivityLog: [], // Smart Queue Management / Smart Court Dispatch — one shared append-only activity log, entries tagged by `kind` ("heldMatchDissolved", "courtDispatched", "announcementCompleted", "announcementRepeated", "announcementMuted", "announcementSkipped", "heldPlayerReminder"): { id, kind, matchupId?, courtNumber?, teamA (names), teamB (names), reason, affectedPlayer?, timestamp } — captured at the moment of the event, never reconstructed afterward, see lib/queueManagement.js's noteDissolvedHeldMatchups/markHeldReminderShown and lib/courtDispatch.js's logDispatchEvent
+  heldPlayerReminderSettings: {
+    // Held Player Reminder — see PROJECT.md/FEATURES.md. A facilitator
+    // safeguard only — purely reminds, never affects matchmaking/player
+    // priority (see lib/queueManagement.js's getPlayersNeedingHeldReminder,
+    // the only reader of these thresholds). Whichever threshold a held
+    // player reaches first (minutes OR rounds) triggers the reminder.
+    thresholdMinutes: 20,
+    thresholdRounds: 3,
+    repeatIntervalMinutes: 10, // how long a dismissed ("Keep Held") reminder stays quiet before it can fire again for the same player
+  },
   courtDispatchSettings: {
     // Smart Court Dispatch — see PROJECT.md/FEATURES.md. Rotation-mode-
     // agnostic session settings, editable in Session Settings regardless
