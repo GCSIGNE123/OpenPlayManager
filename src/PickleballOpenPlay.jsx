@@ -16,6 +16,8 @@ import {
   getPlayerQueueStatus,
   changePlayerSkill as changePlayerSkillAction,
   setPreCheckInSkill as setPreCheckInSkillAction,
+  renameCourt as renameCourtAction,
+  courtDisplayName,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -421,7 +423,8 @@ export default function PickleballOpenPlay() {
       const cfg = settings || defaultState.courtDispatchSettings;
       dispatchedList.forEach(({ courtNumber, teamANames, teamBNames }) => {
         setTimeout(() => {
-          const text = buildAnnouncementText(courtNumber, teamANames, teamBNames);
+          const liveCourt = stateRef.current.courts.find((c) => c.number === courtNumber);
+          const text = buildAnnouncementText(courtNumber, teamANames, teamBNames, courtDisplayName(liveCourt));
           const finish = (kind, reason) => {
             let updated = logDispatchEvent(stateRef.current, { kind, courtNumber, teamANames, teamBNames, reason });
             if (cfg.autoStartMatch !== false) {
@@ -512,7 +515,7 @@ export default function PickleballOpenPlay() {
     if (!court || court.status === "open") return;
     const teamANames = court.teamA.map((id) => state.players[id]?.name || "Unknown player");
     const teamBNames = court.teamB.map((id) => state.players[id]?.name || "Unknown player");
-    const text = buildAnnouncementText(courtNumber, teamANames, teamBNames);
+    const text = buildAnnouncementText(courtNumber, teamANames, teamBNames, courtDisplayName(court));
     const cfg = state.courtDispatchSettings || defaultState.courtDispatchSettings;
     const logRepeat = () => {
       save(
@@ -1663,6 +1666,16 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
+  // Court Renaming — thin wrapper around the pure renameCourt (lib/utils.js).
+  // A blank name resets the court back to its default "Court {number}"
+  // display. Purely a display-label change; never touches `number`,
+  // status, teams, or anything matchmaking/dispatch/history rely on.
+  const renameCourt = (courtNumber, name) => {
+    const next = renameCourtAction(state, courtNumber, name);
+    if (next === state) return;
+    save(next);
+  };
+
   // Session Analytics Engine (Sprint 4A / V1) — clicking "End session" no
   // longer ends anything immediately. It computes the report from the
   // still-live session state and shows it; the facilitator reviews it,
@@ -2059,6 +2072,7 @@ export default function PickleballOpenPlay() {
                   waitingCount={waitingPlayers.length}
                   addCourt={addCourt}
                   removeCourt={removeCourt}
+                  renameCourt={renameCourt}
                   endSession={endSession}
                   updateSessionSettings={updateSessionSettings}
                   reservedCourtNumbers={reservedCourtNumbers}

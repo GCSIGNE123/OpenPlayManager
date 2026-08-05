@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Check, Clock, Lock, Megaphone, PhoneCall, Play, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
+import { Check, Clock, Lock, Megaphone, Pencil, PhoneCall, Play, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
+import { courtDisplayName } from "../lib/utils.js";
 import Avatar from "./Avatar.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
 import TeamRow from "./TeamRow.jsx";
@@ -28,6 +29,7 @@ export default function CourtCard({
   onRequestCheckout,
   onStartMatch,
   onRepeatAnnouncement,
+  onRename,
   hideAvatar,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
@@ -38,6 +40,11 @@ export default function CourtCard({
   const isManual = court.assignmentMode === "manual";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
+  // Court Renaming — see PROJECT.md/FEATURES.md. Local-only draft text
+  // while the facilitator is actively editing the court's display name;
+  // committed via onRename (renameCourt, lib/utils.js) only on Save.
+  const [renamingCourt, setRenamingCourt] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const [subbingId, setSubbingId] = useState(null);
   const [subChoice, setSubChoice] = useState(null);
   const [manualSlot, setManualSlot] = useState(null); // { side, slotIndex } — which empty slot is currently being filled
@@ -87,10 +94,53 @@ export default function CourtCard({
     setEditing(false);
   };
 
+  const startRenaming = () => {
+    setNameDraft(court.name || "");
+    setRenamingCourt(true);
+  };
+  const saveRename = () => {
+    onRename(nameDraft);
+    setRenamingCourt(false);
+  };
+
   return (
     <div style={styles.courtCard(court.status)}>
       <div style={styles.courtHeadRow}>
-        <span style={styles.courtBadge}>COURT {court.number}</span>
+        {renamingCourt ? (
+          <span style={styles.courtRenameRow}>
+            <input
+              style={styles.courtRenameInput}
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveRename();
+                if (e.key === "Escape") setRenamingCourt(false);
+              }}
+              placeholder={`Court ${court.number}`}
+              autoFocus
+            />
+            <button style={styles.iconBtn} onClick={saveRename} aria-label="save court name">
+              <Check size={13} strokeWidth={3} />
+            </button>
+            <button style={styles.iconBtn} onClick={() => setRenamingCourt(false)} aria-label="cancel renaming court">
+              <X size={13} strokeWidth={3} />
+            </button>
+          </span>
+        ) : (
+          <span style={styles.courtBadge}>
+            {courtDisplayName(court).toUpperCase()}
+            {onRename && (
+              <button
+                style={styles.courtRenameBtn}
+                onClick={startRenaming}
+                aria-label={`rename ${courtDisplayName(court)}`}
+                title="Rename this court (display only — its court number never changes)"
+              >
+                <Pencil size={10} strokeWidth={2.5} />
+              </button>
+            )}
+          </span>
+        )}
         {court.manualLocked ? (
           <span style={styles.manualBadge}>
             <Lock size={10} strokeWidth={3} />
@@ -266,7 +316,7 @@ export default function CourtCard({
           </div>
           <p style={styles.awaitingPairText}>
             <PhoneCall size={12} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 4 }} />
-            Calling players to Court {court.number}…
+            Calling players to {courtDisplayName(court)}…
           </p>
           {!readOnly && (
             <div style={styles.courtActionsRow}>

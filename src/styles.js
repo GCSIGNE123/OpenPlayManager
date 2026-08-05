@@ -487,6 +487,9 @@ export const styles = {
     marginBottom: 12,
   },
   courtBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
     fontFamily: "'Space Mono', monospace",
     fontWeight: 700,
     fontSize: 12,
@@ -495,6 +498,35 @@ export const styles = {
     color: "var(--chalk)",
     padding: "3px 8px",
     borderRadius: 4,
+  },
+  // Court Renaming — see PROJECT.md/FEATURES.md. Small pencil button
+  // embedded in courtBadge; only rendered when the caller passes onRename
+  // (currently the Scorer tab only — read-only board/TV views omit it).
+  courtRenameBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "none",
+    border: "none",
+    color: "var(--chalk)",
+    opacity: 0.75,
+    padding: 0,
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  courtRenameRow: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+  },
+  courtRenameInput: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "3px 6px",
+    borderRadius: 4,
+    border: "1.5px solid var(--line)",
+    width: 130,
   },
   statusTag: (status) => ({
     fontSize: 10,

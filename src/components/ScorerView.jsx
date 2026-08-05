@@ -136,6 +136,7 @@ export default function ScorerView({
   waitingCount,
   addCourt,
   removeCourt,
+  renameCourt,
   endSession,
   updateSessionSettings,
   reservedCourtNumbers,
@@ -350,6 +351,7 @@ export default function ScorerView({
                 onRequestCheckout={checkoutPlayer ? (id) => setConfirmingCheckoutId(id) : null}
                 onStartMatch={() => startDispatchedMatch(court.number)}
                 onRepeatAnnouncement={() => repeatAnnouncement(court.number)}
+                onRename={renameCourt ? (name) => renameCourt(court.number, name) : null}
                 hideAvatar
               />
             );

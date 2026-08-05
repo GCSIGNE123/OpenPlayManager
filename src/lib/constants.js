@@ -42,6 +42,7 @@ export const DEV_ACCESS_CODE = "GUILSIGN"; // permanent, never-expiring, reusabl
 
 export const emptyCourt = (number) => ({
   number,
+  name: null, // Court Renaming — see PROJECT.md/FEATURES.md. Display-only label, editable by the facilitator (renameCourt, lib/utils.js); `number` itself remains the court's real identifier everywhere (matchHistory, Court Booking reservations, dispatch, matchmaking) and never changes. `null` (the default) falls back to "Court {number}" — see courtDisplayName.
   status: "open", // 'open' | 'dispatching' | 'live' | 'finished' — 'dispatching' is Smart Court Dispatch's own transient state (see lib/courtDispatch.js): teamA/teamB are already assigned and the court reads "Calling Players..." on screen, but scoring hasn't started yet. Moves to 'live' either automatically (Auto Start Match ON, once the voice announcement finishes/the announcement delay elapses) or only when the facilitator clicks "Start Match" (Auto Start Match OFF) — see confirmCourtLive.
   teamA: [],
   teamB: [],

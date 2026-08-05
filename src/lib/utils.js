@@ -253,6 +253,33 @@ export function setPreCheckInSkill(state, playerId, newSkill) {
   return { ...state, players: { ...state.players, [playerId]: { ...p, skill: newSkill } } };
 }
 
+// Court Renaming — see PROJECT.md/FEATURES.md. Display-only: sets a
+// court's `name` label, found by its (unchanged, real-identifier) `number`.
+// A blank/whitespace-only name resets the court back to the default
+// "Court {number}" display (stored as `null`, not an empty string, so
+// courtDisplayName's fallback stays a single check). A no-op (same state
+// reference) if the court doesn't exist or the name is already exactly
+// this value. Never touches `number` itself, `status`, or any other court
+// field — matchHistory, Court Booking reservations, dispatch, and every
+// matchmaking engine all key off `number`, completely unaffected by this.
+export function renameCourt(state, courtNumber, name) {
+  const court = state.courts.find((c) => c.number === courtNumber);
+  if (!court) return state;
+  const trimmed = (name || "").trim();
+  const nextName = trimmed === "" ? null : trimmed;
+  if (court.name === nextName) return state;
+  const courts = state.courts.map((c) => (c.number === courtNumber ? { ...c, name: nextName } : c));
+  return { ...state, courts };
+}
+
+// Court Renaming — the one place "what does this court display as" is
+// decided, so every screen (CourtCard, voice announcements, Queue
+// Activity Log, etc.) shows the exact same label. Falls back to
+// "Court {number}" whenever no custom name has been set.
+export function courtDisplayName(court) {
+  return court?.name ? court.name : `Court ${court?.number}`;
+}
+
 // Smart Queue Management — see PROJECT.md/FEATURES.md. Reusable, pure
 // status derivation for a checked-in player — never stored on the player
 // record itself (it's always computed fresh from state, so it can never

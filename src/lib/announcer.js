@@ -5,10 +5,11 @@
 // window.speechSynthesis / window.dispatchEvent, so every caller
 // (automatic dispatch, Repeat Announcement) produces an identical
 // announcement the same way.
-export function buildAnnouncementText(courtNumber, teamANames, teamBNames) {
+export function buildAnnouncementText(courtNumber, teamANames, teamBNames, courtLabel) {
   const [a, b] = teamANames || [];
   const [c, d] = teamBNames || [];
-  return `Court ${courtNumber}. ${a} and ${b}, versus ${c} and ${d}. Please proceed to Court ${courtNumber}.`;
+  const label = courtLabel || `Court ${courtNumber}`;
+  return `${label}. ${a} and ${b}, versus ${c} and ${d}. Please proceed to ${label}.`;
 }
 
 // Fires `onDone(result)` exactly once — "completed" (speech finished
