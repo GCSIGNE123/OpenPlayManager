@@ -1,6 +1,7 @@
 import { LogOut, Repeat, Undo2 } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
+import PaymentBadge from "./PaymentBadge.jsx";
 
 export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick, hideAvatar, index }) {
   if (!player) return null;
@@ -17,6 +18,7 @@ export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueu
       {player.skill && (
         <span style={styles.skillTag(player.skill)}>{player.skill === "intermediate" ? "INT" : "BEG"}</span>
       )}
+      {player.checkedIn && <PaymentBadge player={player} />}
       {onMoveToQueueClick && (
         <button
           style={styles.moveToQueueBtn}

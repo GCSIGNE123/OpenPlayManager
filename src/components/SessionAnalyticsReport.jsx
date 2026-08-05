@@ -27,7 +27,7 @@ const exportService = new ExportService();
 // session those numbers came from is long over. Never both at once.
 export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose }) {
   if (!report) return null;
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, grade } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, grade } = report;
   const isReopened = Boolean(onClose);
   const exportTitle = report.sessionSummary.venue
     ? `${report.sessionSummary.venue} — Session Analytics Report`
@@ -129,6 +129,19 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
               <Stat label="Relegations" value={adaptive.relegations} />
               <Stat label="Manual Skill Changes" value={adaptive.manualChanges} />
               <Stat label="Automatic Skill Changes" value={adaptive.automaticChanges} />
+            </div>
+          </div>
+        )}
+
+        {payment && (
+          <div style={styles.analyticsSection}>
+            <SectionLabel>Payment Summary</SectionLabel>
+            <div style={styles.analyticsStatGrid}>
+              <Stat label="Total Players" value={payment.totalPlayers} />
+              <Stat label="Paid" value={payment.paid} />
+              <Stat label="Unpaid" value={payment.unpaid} />
+              <Stat label="Cash" value={payment.cash} />
+              <Stat label="GCash" value={payment.gcash} />
             </div>
           </div>
         )}

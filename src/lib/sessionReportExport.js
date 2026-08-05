@@ -5,7 +5,7 @@
 // ExportService.exportCSV already knows how to turn into a CSV download —
 // no new CSV-writing code, no new export mechanism invented.
 export function buildSessionReportExportTable(report) {
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, grade } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, grade } = report;
   const rows = [
     ["Session", sessionSummary.venue || ""],
     ["Rotation Mode", sessionSummary.rotationModeLabel],
@@ -29,6 +29,15 @@ export function buildSessionReportExportTable(report) {
       ["Relegations", adaptive.relegations],
       ["Manual Skill Changes", adaptive.manualChanges],
       ["Automatic Skill Changes", adaptive.automaticChanges]
+    );
+  }
+  if (payment) {
+    rows.push(
+      ["Payment — Total Players", payment.totalPlayers],
+      ["Payment — Paid", payment.paid],
+      ["Payment — Unpaid", payment.unpaid],
+      ["Payment — Cash", payment.cash],
+      ["Payment — GCash", payment.gcash]
     );
   }
   rows.push(["Session Grade", `${grade.score} / 100 (${grade.label})`]);

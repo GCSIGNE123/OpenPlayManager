@@ -4,6 +4,7 @@ import { styles } from "../styles.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
+import PaymentBadge from "./PaymentBadge.jsx";
 
 // sortable columns: click cycles ascending -> descending -> back to the
 // default standings order (see SORT_COLUMNS below for value getters)
@@ -15,7 +16,7 @@ const SORT_COLUMNS = [
   { key: "rating", label: "RTG", getValue: (p) => p.performance.rating ?? 0 },
 ];
 
-export default function StandingsView({ players, onChangeSkill }) {
+export default function StandingsView({ players, onChangeSkill, onSetPayment }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(null); // "asc" | "desc" | null
 
@@ -91,6 +92,7 @@ export default function StandingsView({ players, onChangeSkill }) {
                     {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
                   </button>
                 )}
+                {p.checkedIn && <PaymentBadge player={p} onSetPayment={onSetPayment} />}
                 {p.streak >= 3 && (
                   <Flame
                     size={14}

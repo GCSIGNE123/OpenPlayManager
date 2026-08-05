@@ -31,6 +31,8 @@ import {
   getPlayersNeedingHeldReminder,
   markHeldReminderShown,
   getLastCourtForPlayer,
+  setPlayerPayment as setPlayerPaymentAction,
+  derivePaymentStats,
 } from "./lib/queueManagement.js";
 import {
   selectNextDispatchableMatchup,
@@ -596,6 +598,8 @@ export default function PickleballOpenPlay() {
           skill: p.skill === "intermediate" ? "intermediate" : "beginner",
           checkedIn: false,
           checkedInAt: null, // Smart Queue Management — see PickleballOpenPlay.jsx's checkInExisting/quickAddCheckIn; the Waiting Queue Timer's fallback when a player has never played yet
+          paymentStatus: "unpaid", // Player Payment Tracking — see PROJECT.md/FEATURES.md. Session-scoped only (never carries into the Player Database or a future session): a brand-new player record is created fresh at every startSession/quickAddCheckIn, so this always resets automatically
+          paymentMethod: null, // "cash" | "gcash" | null (null while unpaid)
           held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
           heldAt: null, // Held Player Reminder — set fresh by holdPlayer each time this player becomes held, cleared by resumePlayer
           heldAtRound: null,
@@ -876,6 +880,8 @@ export default function PickleballOpenPlay() {
         skill: skillInput === "intermediate" ? "intermediate" : "beginner",
         checkedIn: true,
         checkedInAt: Date.now(), // Smart Queue Management — see the Waiting Queue Timer
+        paymentStatus: "unpaid", // Player Payment Tracking — see PROJECT.md/FEATURES.md, session-scoped only
+        paymentMethod: null,
         held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
         status: "ACTIVE",
         checkedOutAt: null,
@@ -1603,6 +1609,15 @@ export default function PickleballOpenPlay() {
     save(next);
   };
 
+  // Player Payment Tracking — thin wrapper around the pure setPlayerPayment
+  // (lib/queueManagement.js). One click marks Paid with the given method,
+  // or corrects an already-paid player's method — same handler either way.
+  const setPlayerPayment = (id, method) => {
+    const next = setPlayerPaymentAction(state, id, method);
+    if (next === state) return;
+    save(next);
+  };
+
   // permanently removes a waiting (not currently on a live court) player
   // from the session — substitute them off a court first if needed
   const removePlayer = (id) => {
@@ -1961,6 +1976,7 @@ export default function PickleballOpenPlay() {
                 <StandingsView
                   players={state.players}
                   onChangeSkill={state.rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
+                  onSetPayment={setPlayerPayment}
                 />
               )}
 
@@ -2017,6 +2033,8 @@ export default function PickleballOpenPlay() {
                   removePlayer={removePlayer}
                   checkoutPlayer={checkoutPlayer}
                   changePlayerSkill={changePlayerSkill}
+                  setPlayerPayment={setPlayerPayment}
+                  paymentStats={derivePaymentStats(state.players)}
                   skillChangeMsg={skillChangeMsg}
                   skillChangeLog={state.skillChangeLog || []}
                   queueActivityLog={state.queueActivityLog || []}

@@ -11,6 +11,7 @@
 // Session History integration — those are explicitly out of scope for
 // this sprint (see FEATURES.md).
 import { ROTATION_MODES } from "./constants.js";
+import { derivePaymentStats } from "./queueManagement.js";
 
 // ---------------------------------------------------------------------
 // Waiting-time tracking — called from PickleballOpenPlay.jsx's save(),
@@ -358,6 +359,13 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
     },
     adaptive, // null unless rotationMode === "adaptiveSkill"
     playersNeedingAttention,
+    // Player Payment Tracking — see PROJECT.md/FEATURES.md. Purely
+    // additive: reuses the same derivePaymentStats (lib/queueManagement.js)
+    // the Scorer tab's own stats panel reads, so this can never drift out
+    // of sync with it. Facilitator reference only — never fed back into
+    // gamesFairnessScore/waiting/diversity/grade above, all of which are
+    // computed identically to before this field existed.
+    payment: derivePaymentStats(state.players),
     grade,
   };
 }

@@ -25,6 +25,8 @@ const QUEUE_ACTIVITY_KIND_META = {
   announcementMuted: { title: "Announcement Muted" },
   announcementSkipped: { title: "Announcement Skipped" },
   heldPlayerReminder: { title: "Held Player Reminder" },
+  paymentReceived: { title: "Payment Received" },
+  paymentUpdated: { title: "Payment Updated" },
 };
 
 // Collapsed-state "Latest:" compact summary — one readable line per kind,
@@ -47,6 +49,10 @@ function queueActivitySummaryText(entry) {
       return `${court}announcement skipped`;
     case "heldPlayerReminder":
       return `${entry.playerName} held ${entry.minutesHeld}m (${entry.roundsHeld} round${entry.roundsHeld === 1 ? "" : "s"})`;
+    case "paymentReceived":
+      return `${entry.playerName} paid (${entry.newMethod === "gcash" ? "GCash" : "Cash"})`;
+    case "paymentUpdated":
+      return `${entry.playerName} ${entry.reason}`;
     case "heldMatchDissolved":
     default:
       return "Held Match removed";
@@ -62,6 +68,12 @@ function queueActivityRowText(entry) {
   const kind = entry.kind || "heldMatchDissolved";
   if (kind === "heldPlayerReminder") {
     return `${entry.playerName} — held ${entry.minutesHeld} min (${entry.roundsHeld} round${entry.roundsHeld === 1 ? "" : "s"})`;
+  }
+  if (kind === "paymentReceived") {
+    return `${entry.playerName} — paid (${entry.newMethod === "gcash" ? "GCash" : "Cash"})`;
+  }
+  if (kind === "paymentUpdated") {
+    return `${entry.playerName} — ${entry.reason}`;
   }
   const teamsPart = `${(entry.teamA || []).join(" / ")} vs ${(entry.teamB || []).join(" / ")}`;
   if (kind === "heldMatchDissolved") return `${teamsPart} — ${entry.reason}`;
@@ -103,6 +115,8 @@ export default function ScorerView({
   removePlayer,
   checkoutPlayer,
   changePlayerSkill,
+  setPlayerPayment,
+  paymentStats,
   skillChangeMsg,
   skillChangeLog,
   queueActivityLog,
@@ -397,8 +411,26 @@ export default function ScorerView({
         onRemove={removePlayer}
         onCheckout={checkoutPlayer}
         onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
+        onSetPayment={setPlayerPayment}
         checkedOutPlayers={checkedOutPlayers}
       />
+
+      {paymentStats && (
+        <div style={styles.paymentStatsPanel}>
+          <span style={styles.paymentStatsItem}>
+            Players Paid: <strong>{paymentStats.paid}</strong>
+          </span>
+          <span style={styles.paymentStatsItem}>
+            Players Unpaid: <strong>{paymentStats.unpaid}</strong>
+          </span>
+          <span style={styles.paymentStatsItem}>
+            Cash: <strong>{paymentStats.cash}</strong>
+          </span>
+          <span style={styles.paymentStatsItem}>
+            GCash: <strong>{paymentStats.gcash}</strong>
+          </span>
+        </div>
+      )}
 
       {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
         <>

@@ -7,6 +7,7 @@ import { QUEUE_STATUSES } from "../lib/constants.js";
 import SectionLabel from "./SectionLabel.jsx";
 import WaitingTimer from "./WaitingTimer.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
+import PaymentBadge from "./PaymentBadge.jsx";
 
 function formatCheckoutTime(ms) {
   if (!ms) return "";
@@ -32,6 +33,7 @@ export default function WaitingPlayersPanel({
   onRemove,
   onCheckout,
   onChangeSkill,
+  onSetPayment,
   checkedOutPlayers = [],
 }) {
   const [confirmingPlayer, setConfirmingPlayer] = useState(null);
@@ -65,6 +67,7 @@ export default function WaitingPlayersPanel({
                       {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
                     </button>
                   )}
+                  {onSetPayment && <PaymentBadge player={p} onSetPayment={onSetPayment} />}
                   {performance.rating !== null && (
                     <span
                       style={styles.ratingBadge(performance.rating)}

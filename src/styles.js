@@ -1236,6 +1236,73 @@ export const styles = {
     letterSpacing: "0.03em",
     cursor: "pointer",
   }),
+  // Player Payment Tracking — see PROJECT.md/FEATURES.md. Compact
+  // read-only tag ("UP"/"P-C"/"P-GC"), same visual family as skillTag.
+  // Green when paid, coral when unpaid, so a facilitator can scan a whole
+  // roster at a glance. See PaymentBadge.jsx.
+  paymentTag: (paid) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: paid ? "var(--chalk)" : "var(--ink)",
+    background: paid ? "var(--color-success)" : "var(--coral)",
+    borderRadius: 4,
+    padding: "2px 5px",
+    flexShrink: 0,
+    letterSpacing: "0.03em",
+  }),
+  // Same tag, as a real <button> — used only once a player is already
+  // Paid, so a facilitator can correct a mistaken method (Cash <-> GCash)
+  // in a single tap. See PaymentBadge.jsx.
+  paymentTagButton: (paid) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: paid ? "var(--chalk)" : "var(--ink)",
+    background: paid ? "var(--color-success)" : "var(--coral)",
+    border: "none",
+    borderRadius: 4,
+    padding: "3px 6px",
+    flexShrink: 0,
+    letterSpacing: "0.03em",
+    cursor: "pointer",
+  }),
+  paymentButtonGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  paymentQuickBtn: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: "var(--ink)",
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 4,
+    padding: "2px 5px",
+    flexShrink: 0,
+    letterSpacing: "0.02em",
+    cursor: "pointer",
+  },
+  // Player Payment Tracking — Scorer tab's facilitator-reference stats
+  // panel (Players Paid/Unpaid, Cash/GCash breakdown). Read-only, purely
+  // informational — see PickleballOpenPlay.jsx's derivePaymentStats.
+  paymentStatsPanel: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 14,
+    background: "var(--color-surface)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 8,
+    padding: "8px 12px",
+    margin: "10px 0",
+    fontSize: 12.5,
+  },
+  paymentStatsItem: {
+    color: "var(--color-text-muted)",
+  },
   // Smart Queue Management — see WaitingPlayersPanel.jsx's getPlayerQueueStatus
   // badge. "Held" gets the same warning-coral treatment as the old
   // Skip/"Sitting out" toggle did; everything else is a neutral chip.

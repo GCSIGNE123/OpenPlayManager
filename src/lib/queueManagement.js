@@ -146,6 +146,73 @@ export function getLastCourtForPlayer(state, playerId) {
   return null;
 }
 
+// Player Payment Tracking — see PROJECT.md/FEATURES.md. Session-scoped
+// only: `paymentStatus`/`paymentMethod` live on the session's own player
+// record (state.players), never on the Player Database — a fresh player
+// record is created at every startSession/quickAddCheckIn (see
+// PickleballOpenPlay.jsx), so payment status always starts over ("unpaid",
+// null) for a new session with zero extra reset logic needed here.
+// Marks a player Paid with the given method, or corrects an already-paid
+// player's method (Cash <-> GCash) if the facilitator made a mistake — the
+// same one function handles both, since both are just "set paymentMethod,
+// set paymentStatus to paid". A no-op (same state reference) if the
+// method is invalid or already exactly this player's current method+
+// status (so a repeat click of the same method does nothing). Records one
+// Queue Activity Log entry per change — "Payment Received" for
+// unpaid->paid, "Payment Updated" (showing the Cash -> GCash / GCash ->
+// Cash correction) for an already-paid player's method changing — same
+// shared-log convention as markHeldReminderShown/noteDissolvedHeldMatchups.
+// Does not touch queueIds/nextMatchups/skill/games/streaks — purely
+// session payment bookkeeping, cannot affect matchmaking or player
+// priority.
+export function setPlayerPayment(state, playerId, method) {
+  const p = state.players[playerId];
+  if (!p || (method !== "cash" && method !== "gcash")) return state;
+  if (p.paymentStatus === "paid" && p.paymentMethod === method) return state;
+  const wasPaid = p.paymentStatus === "paid";
+  const previousMethod = p.paymentMethod;
+  const players = { ...state.players, [playerId]: { ...p, paymentStatus: "paid", paymentMethod: method } };
+  const methodLabel = (m) => (m === "gcash" ? "GCash" : "Cash");
+  const entry = wasPaid
+    ? {
+        id: uid(),
+        kind: "paymentUpdated",
+        playerId,
+        playerName: p.name,
+        previousMethod,
+        newMethod: method,
+        reason: `${methodLabel(previousMethod)} → ${methodLabel(method)}`,
+        timestamp: Date.now(),
+      }
+    : {
+        id: uid(),
+        kind: "paymentReceived",
+        playerId,
+        playerName: p.name,
+        newMethod: method,
+        reason: methodLabel(method),
+        timestamp: Date.now(),
+      };
+  const queueActivityLog = [entry, ...(state.queueActivityLog || [])].slice(0, 50);
+  return { ...state, players, queueActivityLog };
+}
+
+// Player Payment Tracking — pure derivation of session-wide payment
+// statistics (Paid/Unpaid counts, Cash/GCash breakdown), read fresh from
+// state.players every time, never stored. Only counts checked-in players
+// (a not-yet-checked-in registered player isn't part of "this session" for
+// payment-reference purposes yet). Facilitator-reference only — read by
+// the Scorer tab's stats panel and the Session Analytics Payment Summary,
+// never by matchmaking/queue/dispatch logic.
+export function derivePaymentStats(players) {
+  const checkedIn = Object.values(players || {}).filter((p) => p.checkedIn);
+  const paid = checkedIn.filter((p) => p.paymentStatus === "paid");
+  const unpaid = checkedIn.length - paid.length;
+  const cash = paid.filter((p) => p.paymentMethod === "cash").length;
+  const gcash = paid.filter((p) => p.paymentMethod === "gcash").length;
+  return { totalPlayers: checkedIn.length, paid: paid.length, unpaid, cash, gcash };
+}
+
 // Skip Player — a brief "let others go first" nudge (restroom, water,
 // stepping away), NOT an exclusion: the player stays fully eligible for
 // matchmaking the whole time, only their position in the waiting queue
