@@ -87,6 +87,19 @@ export function sortByGames(ids, players) {
   return [...ids].sort((a, b) => (players[a]?.games || 0) - (players[b]?.games || 0));
 }
 
+// Alphabetical Check-In List — see PROJECT.md/FEATURES.md. Every
+// registered player not yet checked in, A→Z by display name. Recomputed
+// fresh from the current player map every time it's called (never
+// memoized/stored), so it's always up to date — a newly-registered
+// walk-in, or a whole 32-player roster, appears in order automatically
+// with zero extra bookkeeping. Checked-in players are excluded exactly as
+// before; only the ORDER of what's left changed.
+export function getRegisteredNotHere(players) {
+  return Object.values(players || {})
+    .filter((p) => !p.checkedIn)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // tries a handful of random codes and returns the first one not already in
 // use — collisions are astronomically unlikely with a 6-char code, but a
 // quick check costs nothing
@@ -397,11 +410,11 @@ export function maxUpcomingMatchups(courts) {
 // scored by the same waiting-time/games-played/repeat-partner-avoidance
 // rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
 // only removes skill as a hard requirement, it doesn't make pairing random.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, alwaysPairPlayers = false) {
   const room = Math.max(0, maxUpcoming - existingMatchups.length);
   if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, alwaysPairPlayers }, true);
   return [...existingMatchups, ...newMatchups.slice(0, room)];
 }
 
@@ -419,13 +432,13 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // scorer manually dissolves a matchup), it just no longer differs from
 // refreshNextMatchups in fallback behavior, only in dissolving
 // unlocked/not-held matchups first.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, alwaysPairPlayers = false) {
   const protectedMatchups = existingMatchups.filter((m) => m.locked || m.held);
   const room = Math.max(0, maxUpcoming - protectedMatchups.length);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
-    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase }, true);
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, alwaysPairPlayers }, true);
   return [...protectedMatchups, ...newMatchups.slice(0, room)];
 }
 

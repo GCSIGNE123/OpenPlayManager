@@ -30,6 +30,7 @@ export default function CourtCard({
   onStartMatch,
   onRepeatAnnouncement,
   onRename,
+  onCancelLiveMatch,
   hideAvatar,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
@@ -332,6 +333,17 @@ export default function CourtCard({
                   Repeat Announcement
                 </button>
               )}
+              {onCancelLiveMatch && (
+                <button
+                  style={styles.lockToggleBtn(false)}
+                  onClick={onCancelLiveMatch}
+                  aria-label={`cancel this match on ${courtDisplayName(court)}`}
+                  title="Cancel — free this court and return all 4 players to the front of Next Matchups, same pairing, no result recorded (e.g. a player stepped away)"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                  Cancel match
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -476,6 +488,17 @@ export default function CourtCard({
                 <button style={styles.fixTeamsBtn} onClick={onUnlock}>
                   <Unlock size={12} strokeWidth={2.5} />
                   Unlock
+                </button>
+              )}
+              {onCancelLiveMatch && court.status === "live" && (
+                <button
+                  style={styles.lockToggleBtn(false)}
+                  onClick={onCancelLiveMatch}
+                  aria-label={`cancel this match on ${courtDisplayName(court)}`}
+                  title="Cancel — free this court and return all 4 players to the front of Next Matchups, same pairing, no result recorded (e.g. a player stepped away)"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                  Cancel match
                 </button>
               )}
               <button

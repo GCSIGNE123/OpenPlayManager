@@ -1,4 +1,5 @@
 export const STORAGE_PREFIX = "opl-session-";
+export const ACTIVE_SESSION_STORAGE_KEY = "opl-active-session-code"; // Session Persistence Across Refresh — see PROJECT.md/FEATURES.md. sessionStorage (not localStorage): survives an F5/refresh within the same tab, but clears itself the moment the tab/window actually closes, so a facilitator's device never silently auto-resumes a stale session days later. Holds just the plain session code string, nothing else.
 export const ACCESS_PREFIX = "opl-access-";
 export const PLAYER_DB_PREFIX = "opl-player-"; // one KV record per player, shared across every session — see lib/playerDatabase.js
 export const TOURNAMENT_PREFIX = "opl-tournament-"; // one KV record per tournament, independent of the Open Play session's own state shape — see lib/tournamentModel.js
@@ -53,6 +54,20 @@ export const emptyCourt = (number) => ({
   manualLocked: false, // true once the organizer locks a manual court's 4 picks in (status becomes "live"); resets to false/"automatic" when the match ends, same as every other court
   dispatchedAt: null, // Smart Court Dispatch only — set when this court entered 'dispatching', see lib/courtDispatch.js's dispatchAvailableCourts
 });
+
+// Court Renaming — bug fix, see PROJECT.md/FEATURES.md. Every place a
+// finished match used to reset a court back to its "open" defaults via a
+// plain `emptyCourt(court.number)` was silently wiping out a custom court
+// name too, since emptyCourt always starts `name` at null — the court
+// would work fine, dispatch fine, and display its custom name right up
+// until the first match on it ended, then quietly revert to "Court N".
+// This is the one place that reset happens now: same fresh defaults as
+// emptyCourt, but carries the court's current `name` forward untouched, so
+// a custom name is authoritative for the entire session until the
+// organizer explicitly renames it again (renameCourt, lib/utils.js).
+export function resetCourtForNextMatch(court) {
+  return { ...emptyCourt(court.number), name: court.name };
+}
 
 // which matchmaking strategy builds the next matches — see src/engines/ and
 // PROJECT.md for how these plug in. "continuous": the default; every court
@@ -184,5 +199,13 @@ export const defaultState = {
     voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
     announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
   },
+  // Permanent Partner Mode — see PROJECT.md/FEATURES.md. OFF by default —
+  // existing sessions/behavior are completely unchanged. ON: any player
+  // with a designated partner (see setFixedPartner, lib/queueManagement.js)
+  // is always teamed with that partner; only opponents rotate. Read only
+  // by BalancedRotationEngine.buildTeams (and, via composition, every
+  // rotation mode/division that shares that team-forming step) — never a
+  // separate rotation mode of its own.
+  alwaysPairPlayers: false,
   updatedAt: 0,
 };

@@ -1,4 +1,4 @@
-import { getRotationEngine, refreshNextMatchups, regenerateNextMatchups, maxUpcomingMatchups, dissolveMatchupIfReserved } from "./utils.js";
+import { getRotationEngine, refreshNextMatchups, regenerateNextMatchups, maxUpcomingMatchups, dissolveMatchupIfReserved, courtDisplayName } from "./utils.js";
 import { progressiveSkillPhaseFor } from "./progressiveSkillPhase.js";
 import { uid } from "./random.js";
 
@@ -235,6 +235,54 @@ export function derivePaymentStats(players) {
   return { totalPlayers: checkedIn.length, paid: paid.length, unpaid, cash, gcash };
 }
 
+// Permanent Partner Mode ("Always Pair Players") — see PROJECT.md/
+// FEATURES.md. Facilitator designation of a fixed doubles partner, stored
+// as a mutual `partnerId` pointer on both player records (session-scoped
+// roster data, same precedent as skill/payment fields — never read by
+// anything except BalancedRotationEngine.extractFixedPartnerTeams, and
+// even that only when the alwaysPairPlayers session setting is on). Never
+// touches queueIds/nextMatchups/matchmaking directly — setting a partner
+// mid-session doesn't retroactively change an already-built upcoming
+// matchup, only future matchmaking calls.
+//
+// Setting a new partner for either player first clears whatever partner
+// link they already had (on both sides of that old pairing too), so
+// `partnerId` is always either genuinely mutual or null — never a stale,
+// one-sided pointer at a player who's since paired with someone else. A
+// no-op if either id is missing, they're the same player, or they're
+// already each other's partner.
+export function setFixedPartner(state, playerIdA, playerIdB) {
+  if (!playerIdA || !playerIdB || playerIdA === playerIdB) return state;
+  const a = state.players[playerIdA];
+  const b = state.players[playerIdB];
+  if (!a || !b) return state;
+  if (a.partnerId === playerIdB && b.partnerId === playerIdA) return state;
+
+  const players = { ...state.players };
+  if (a.partnerId && players[a.partnerId]) {
+    players[a.partnerId] = { ...players[a.partnerId], partnerId: null };
+  }
+  if (b.partnerId && players[b.partnerId]) {
+    players[b.partnerId] = { ...players[b.partnerId], partnerId: null };
+  }
+  players[playerIdA] = { ...players[playerIdA], partnerId: playerIdB };
+  players[playerIdB] = { ...players[playerIdB], partnerId: playerIdA };
+  return { ...state, players };
+}
+
+// Inverse of setFixedPartner — clears the mutual link on both sides. A
+// no-op if the player has no partner set.
+export function clearFixedPartner(state, playerId) {
+  const p = state.players[playerId];
+  if (!p || !p.partnerId) return state;
+  const partnerId = p.partnerId;
+  const players = { ...state.players, [playerId]: { ...p, partnerId: null } };
+  if (players[partnerId]) {
+    players[partnerId] = { ...players[partnerId], partnerId: null };
+  }
+  return { ...state, players };
+}
+
 // Skip Player — a brief "let others go first" nudge (restroom, water,
 // stepping away), NOT an exclusion: the player stays fully eligible for
 // matchmaking the whole time, only their position in the waiting queue
@@ -278,6 +326,75 @@ export function resumeMatch(state, matchupId) {
 export function cancelMatch(state, matchupId) {
   const nextMatchups = (state.nextMatchups || []).filter((m) => m.id !== matchupId);
   return { ...state, nextMatchups };
+}
+
+// Cancel Live Match — see PROJECT.md/FEATURES.md. The on-court equivalent
+// of Cancel Match above, for a match that's already been assigned to a
+// court (status "live" or "dispatching") rather than still sitting in
+// nextMatchups. Facilitator use case: a player or two step away (toilet
+// break, phone call) mid-match and the court needs to be freed up for
+// someone else in the meantime, without losing the pairing or recording a
+// result. A no-op (same state reference) if the court doesn't exist or is
+// already "open" (nothing live to cancel).
+//
+// Deliberately does NOT touch matchHistory/games/wins/losses/streaks — no
+// match result is recorded, this is a full abort, not an early finish
+// (see PickleballOpenPlay.jsx's endMatch for that, a completely separate
+// action). The court itself resets to "open" (status/teamA/teamB/score/
+// assignmentMode/manualLocked/dispatchedAt/awaitingPair all back to their
+// emptyCourt defaults) — its `number` and any custom `name` (Court
+// Renaming) are preserved, since neither is match-specific.
+//
+// The 4 interrupted players go back into state.queueIds (fillCourt/
+// fillAllCourts removed them when the court went live, so they must be
+// added back — nextMatchups is only ever a reservation overlay on top of
+// queueIds, never a separate pool, same invariant every other queue action
+// in this file relies on) AND their exact same pairing is reinserted as a
+// new entry at the very FRONT of nextMatchups — "put on next queue" — so
+// when they're back, they resume the SAME match (not reshuffled by the
+// rotation engine) and are first in line for the next open court. That new
+// entry is a completely ordinary (not held/locked) matchup, so it behaves
+// exactly like any other queued matchup afterward — including being
+// editable via Fix Teams/Substitute, or dissolved via Cancel Match, same
+// as one the rotation engine generated itself.
+export function cancelLiveMatch(state, courtNumber) {
+  const court = state.courts.find((c) => c.number === courtNumber);
+  if (!court || court.status === "open") return state;
+  const { teamA, teamB } = court;
+  const playedIds = [...teamA, ...teamB];
+  const courts = state.courts.map((c) =>
+    c.number === courtNumber
+      ? {
+          ...c,
+          status: "open",
+          teamA: [],
+          teamB: [],
+          scoreA: 0,
+          scoreB: 0,
+          awaitingPair: false,
+          assignmentMode: "automatic",
+          manualLocked: false,
+          dispatchedAt: null,
+        }
+      : c
+  );
+  const queueIds = [...playedIds.filter((id) => !state.queueIds.includes(id)), ...state.queueIds];
+  const restoredMatchup = { id: uid(), teamA, teamB };
+  const nextMatchups = [restoredMatchup, ...(state.nextMatchups || [])];
+  const teamANames = teamA.map((id) => state.players[id]?.name || "Unknown player");
+  const teamBNames = teamB.map((id) => state.players[id]?.name || "Unknown player");
+  const entry = {
+    id: uid(),
+    kind: "liveMatchCancelled", // shared Queue Activity Log — see lib/courtDispatch.js's logDispatchEvent for the other kinds this same log holds
+    courtNumber,
+    courtLabel: courtDisplayName(court), // Court Renaming — resolved once, now, from the court BEFORE its reset above — see logDispatchEvent's own courtLabel for the same "frozen snapshot" precedent
+    teamA: teamANames,
+    teamB: teamBNames,
+    reason: "Match cancelled — players returned to the front of the queue",
+    timestamp: Date.now(),
+  };
+  const queueActivityLog = [entry, ...(state.queueActivityLog || [])].slice(0, 50);
+  return { ...state, courts, queueIds, nextMatchups, queueActivityLog };
 }
 
 // Held Match dissolution notice — see PROJECT.md/FEATURES.md. Whenever a
@@ -347,6 +464,6 @@ export function regenerate(state) {
     state.progressiveSkillThresholds
   );
   const cap = maxUpcomingMatchups(state.courts);
-  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap);
+  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap, state.alwaysPairPlayers);
   return { ...state, nextMatchups };
 }

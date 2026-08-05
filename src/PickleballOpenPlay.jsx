@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users, Tv } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
-import { ACCESS_PREFIX, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt } from "./lib/constants.js";
+import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -18,6 +18,7 @@ import {
   setPreCheckInSkill as setPreCheckInSkillAction,
   renameCourt as renameCourtAction,
   courtDisplayName,
+  getRegisteredNotHere,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -28,6 +29,9 @@ import {
   holdMatch as holdMatchAction,
   resumeMatch as resumeMatchAction,
   cancelMatch as cancelMatchAction,
+  cancelLiveMatch as cancelLiveMatchAction,
+  setFixedPartner as setFixedPartnerAction,
+  clearFixedPartner as clearFixedPartnerAction,
   regenerate as regenerateQueue,
   noteDissolvedHeldMatchups,
   getPlayersNeedingHeldReminder,
@@ -184,6 +188,54 @@ export default function PickleballOpenPlay() {
 
   const [state, setState] = useState(defaultState);
   const [loaded, setLoaded] = useState(false);
+
+  // Session Persistence Across Refresh — see PROJECT.md/FEATURES.md. On
+  // mount, restores whatever session was open in THIS tab before an F5/
+  // refresh, instead of dropping back to the landing page and forcing the
+  // facilitator to re-type the join code mid-session. Skipped whenever any
+  // of the URL-driven screens above (?display=, ?openPlayDisplay=,
+  // ?portal=, the /openplay/:code/tv path) already claimed this load —
+  // those are explicit navigations and always take priority. Reads
+  // sessionStorage (ACTIVE_SESSION_STORAGE_KEY) directly rather than a
+  // state variable since this runs once, before any state depending on it
+  // exists yet.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hasUrlOverride =
+      params.get("display") || params.get("openPlayDisplay") || params.get("portal") ||
+      window.location.pathname.match(/^\/openplay\/([^/]+)\/tv\/?$/i);
+    if (hasUrlOverride) return;
+    const savedCode = sessionStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    if (!savedCode) return;
+    (async () => {
+      try {
+        const res = await window.storage.get(`${STORAGE_PREFIX}${savedCode}`, true);
+        if (res && res.value) {
+          setState(JSON.parse(res.value));
+          setSessionCode(savedCode);
+          setLoaded(true);
+          setScreen("app");
+        } else {
+          sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+        }
+      } catch (e) {
+        sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      }
+    })();
+  }, []);
+
+  // Keeps sessionStorage in sync with whichever session is actually open —
+  // one place, rather than writing it at every join/create call site.
+  // leaveSession (below) is the one place that clears it, so ending a
+  // session or explicitly switching sessions doesn't leave a stale code
+  // behind for the next refresh to (harmlessly, since a deleted session
+  // just fails the fetch above and clears itself) try to resume.
+  useEffect(() => {
+    if (screen === "app" && sessionCode) {
+      sessionStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionCode);
+    }
+  }, [screen, sessionCode]);
+
   // Session Analytics Engine (Sprint 4A / V1) — set by endSession below,
   // before anything about the session is torn down. Non-null renders the
   // full-screen report in place of the app's normal view; the actual
@@ -342,7 +394,8 @@ export default function PickleballOpenPlay() {
           next.nextMatchups || [],
           engine,
           phase,
-          maxUpcomingMatchups(next.courts)
+          maxUpcomingMatchups(next.courts),
+          next.alwaysPairPlayers
         ),
       };
       // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
@@ -371,9 +424,11 @@ export default function PickleballOpenPlay() {
         queueIds: dispatchResult.queueIds,
       };
       dispatchResult.dispatched.forEach((d) => {
+        const dispatchedCourt = withDispatch.courts.find((c) => c.number === d.courtNumber);
         withDispatch = logDispatchEvent(withDispatch, {
           kind: "courtDispatched",
           courtNumber: d.courtNumber,
+          courtLabel: courtDisplayName(dispatchedCourt),
           teamANames: d.teamANames,
           teamBNames: d.teamBNames,
           reason: "Court automatically dispatched",
@@ -426,7 +481,14 @@ export default function PickleballOpenPlay() {
           const liveCourt = stateRef.current.courts.find((c) => c.number === courtNumber);
           const text = buildAnnouncementText(courtNumber, teamANames, teamBNames, courtDisplayName(liveCourt));
           const finish = (kind, reason) => {
-            let updated = logDispatchEvent(stateRef.current, { kind, courtNumber, teamANames, teamBNames, reason });
+            let updated = logDispatchEvent(stateRef.current, {
+              kind,
+              courtNumber,
+              courtLabel: courtDisplayName(liveCourt),
+              teamANames,
+              teamBNames,
+              reason,
+            });
             if (cfg.autoStartMatch !== false) {
               updated = confirmCourtLiveAction(updated, courtNumber);
             }
@@ -522,6 +584,7 @@ export default function PickleballOpenPlay() {
         logDispatchEvent(stateRef.current, {
           kind: "announcementRepeated",
           courtNumber,
+          courtLabel: courtDisplayName(court),
           teamANames,
           teamBNames,
           reason: "Voice announcement repeated",
@@ -603,6 +666,7 @@ export default function PickleballOpenPlay() {
           checkedInAt: null, // Smart Queue Management — see PickleballOpenPlay.jsx's checkInExisting/quickAddCheckIn; the Waiting Queue Timer's fallback when a player has never played yet
           paymentStatus: "unpaid", // Player Payment Tracking — see PROJECT.md/FEATURES.md. Session-scoped only (never carries into the Player Database or a future session): a brand-new player record is created fresh at every startSession/quickAddCheckIn, so this always resets automatically
           paymentMethod: null, // "cash" | "gcash" | null (null while unpaid)
+          partnerId: null, // Permanent Partner Mode — see PROJECT.md/FEATURES.md, session-scoped mutual fixed-partner link (setFixedPartner/clearFixedPartner, lib/queueManagement.js)
           held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
           heldAt: null, // Held Player Reminder — set fresh by holdPlayer each time this player becomes held, cleared by resumePlayer
           heldAtRound: null,
@@ -728,6 +792,7 @@ export default function PickleballOpenPlay() {
   };
 
   const leaveSession = () => {
+    sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     setScreen("landing");
     setSessionCode(null);
     setState(defaultState);
@@ -885,6 +950,7 @@ export default function PickleballOpenPlay() {
         checkedInAt: Date.now(), // Smart Queue Management — see the Waiting Queue Timer
         paymentStatus: "unpaid", // Player Payment Tracking — see PROJECT.md/FEATURES.md, session-scoped only
         paymentMethod: null,
+        partnerId: null, // Permanent Partner Mode — see PROJECT.md/FEATURES.md
         held: false, // Smart Queue Management (renamed from the old "skipped" — Hold Player, see lib/queueManagement.js)
         status: "ACTIVE",
         checkedOutAt: null,
@@ -1088,7 +1154,8 @@ export default function PickleballOpenPlay() {
       protectedMatchups,
       engine,
       phase,
-      maxUpcomingMatchups(state.courts)
+      maxUpcomingMatchups(state.courts),
+      state.alwaysPairPlayers
     );
 
     let remainingIds = [...state.queueIds];
@@ -1294,7 +1361,7 @@ export default function PickleballOpenPlay() {
     }
 
     const queueIds = [...state.queueIds, ...playedIds];
-    const courts = state.courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
+    const courts = state.courts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
     setRegenerateSnapshot(null); // stale after this round's requeue
     setLastRoundSnapshot(preMatchState);
     save({ ...state, courts, players, queueIds, matchHistory, skillChangeLog });
@@ -1542,6 +1609,32 @@ export default function PickleballOpenPlay() {
   const cancelMatch = (matchupId) => {
     clearOneShotSnapshots();
     save(cancelMatchAction(state, matchupId));
+  };
+
+  // Cancel Live Match — see PROJECT.md/FEATURES.md. The Live Board/Scorer
+  // equivalent of Cancel Match, for a match already assigned to a court
+  // (a player stepping away for a toilet break, etc.): frees the court and
+  // reinserts the same 4 players' exact pairing at the front of Next
+  // Matchups, without recording any result. Thin wrapper around the pure
+  // cancelLiveMatchAction (lib/queueManagement.js).
+  const cancelLiveMatch = (courtNumber) => {
+    clearOneShotSnapshots();
+    save(cancelLiveMatchAction(state, courtNumber));
+  };
+
+  // Permanent Partner Mode — thin wrappers around the pure
+  // setFixedPartner/clearFixedPartner (lib/queueManagement.js). Facilitator
+  // action in the Waiting Players panel; has no effect on matchmaking
+  // unless the alwaysPairPlayers session setting is also on.
+  const setFixedPartner = (playerIdA, playerIdB) => {
+    const next = setFixedPartnerAction(state, playerIdA, playerIdB);
+    if (next === state) return;
+    save(next);
+  };
+  const clearFixedPartner = (playerId) => {
+    const next = clearFixedPartnerAction(state, playerId);
+    if (next === state) return;
+    save(next);
   };
 
   // Player Checkout During Open Play — see PROJECT.md. Unlike
@@ -1877,7 +1970,7 @@ export default function PickleballOpenPlay() {
         const checkedOutPlayers = Object.values(state.players)
           .filter((p) => p.status === "CHECKED_OUT")
           .sort((a, b) => (b.checkedOutAt || 0) - (a.checkedOutAt || 0));
-        const registeredNotHere = Object.values(state.players).filter((p) => !p.checkedIn);
+        const registeredNotHere = getRegisteredNotHere(state.players);
         const openCourtsCount = state.courts.filter((c) => c.status === "open").length;
 
         return (
@@ -1986,11 +2079,7 @@ export default function PickleballOpenPlay() {
               )}
 
               {loaded && view === "standings" && (
-                <StandingsView
-                  players={state.players}
-                  onChangeSkill={state.rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
-                  onSetPayment={setPlayerPayment}
-                />
+                <StandingsView players={state.players} />
               )}
 
               {loaded && view === "history" && (
@@ -2042,11 +2131,14 @@ export default function PickleballOpenPlay() {
                   holdMatch={holdMatch}
                   resumeMatch={resumeMatch}
                   cancelMatch={cancelMatch}
+                  cancelLiveMatch={cancelLiveMatch}
                   queueMsg={queueMsg}
                   removePlayer={removePlayer}
                   checkoutPlayer={checkoutPlayer}
                   changePlayerSkill={changePlayerSkill}
                   setPlayerPayment={setPlayerPayment}
+                  setFixedPartner={setFixedPartner}
+                  clearFixedPartner={clearFixedPartner}
                   paymentStats={derivePaymentStats(state.players)}
                   skillChangeMsg={skillChangeMsg}
                   skillChangeLog={state.skillChangeLog || []}

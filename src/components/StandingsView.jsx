@@ -1,10 +1,8 @@
 import { useState } from "react";
-import { Flame } from "lucide-react";
 import { styles } from "../styles.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
-import PaymentBadge from "./PaymentBadge.jsx";
 
 // sortable columns: click cycles ascending -> descending -> back to the
 // default standings order (see SORT_COLUMNS below for value getters)
@@ -16,7 +14,17 @@ const SORT_COLUMNS = [
   { key: "rating", label: "RTG", getValue: (p) => p.performance.rating ?? 0 },
 ];
 
-export default function StandingsView({ players, onChangeSkill, onSetPayment }) {
+// Simplify Standings Table — see PROJECT.md/FEATURES.md. Reduced to
+// exactly Player/GP/W/L/+/-/RTG, per a real 32-player session's
+// facilitator feedback that the live Standings tab carried more
+// information than needed at a glance (skill tag + skill-override button,
+// payment badge, win-streak flame). Those aren't lost capabilities — skill
+// correction already lives in the Scorer tab's Waiting Players panel, and
+// payment status in both the Waiting Players panel and the Scorer tab's
+// own stats bar — this view just no longer duplicates them. Session
+// Analytics' own reporting (lib/sessionAnalytics.js) is untouched; this is
+// a presentation-only change to the live Standings tab.
+export default function StandingsView({ players }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(null); // "asc" | "desc" | null
 
@@ -80,29 +88,6 @@ export default function StandingsView({ players, onChangeSkill, onSetPayment }) 
               <span style={styles.standingsNameCol}>
                 <Avatar player={p} size={24} />
                 <span style={styles.standingsName}>{p.name}</span>
-                {onChangeSkill && p.skill && (
-                  <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
-                )}
-                {onChangeSkill && (
-                  <button
-                    style={styles.skillOverrideBtn}
-                    onClick={() => onChangeSkill(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")}
-                    title={`Move ${p.name} to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"}`}
-                  >
-                    {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
-                  </button>
-                )}
-                {p.checkedIn && <PaymentBadge player={p} onSetPayment={onSetPayment} />}
-                {p.streak >= 3 && (
-                  <Flame
-                    size={14}
-                    strokeWidth={2.5}
-                    color="var(--coral)"
-                    fill="var(--coral)"
-                    style={{ flexShrink: 0 }}
-                    aria-label={`${p.streak} game win streak`}
-                  />
-                )}
               </span>
               <span style={styles.standingsStatCol}>{p.gp}</span>
               <span style={styles.standingsStatCol}>{p.wins}</span>

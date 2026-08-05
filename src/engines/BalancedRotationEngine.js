@@ -30,11 +30,11 @@ export class BalancedRotationEngine extends RotationEngine {
   // below) and still scores those pairings by the same partner-recency
   // rules as everything else (see pairLeftovers/scorePartner) — it's a
   // relaxed constraint, not a random assignment.
-  generateMatchups({ waitingIds, players, existingMatchups }, allowSameSkillFallback = false) {
+  generateMatchups({ waitingIds, players, existingMatchups, alwaysPairPlayers }, allowSameSkillFallback = false) {
     const reserved = new Set(existingMatchups.flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = waitingIds.filter((id) => !reserved.has(id) && players[id]);
 
-    const teams = this.buildTeams(pool, players, allowSameSkillFallback);
+    const teams = this.buildTeams(pool, players, allowSameSkillFallback, alwaysPairPlayers);
     const rawMatchups = this.buildMatchupsFromTeams(teams, players);
 
     return rawMatchups.map(({ teamA, teamB }) => ({ id: uid(), teamA, teamB }));
@@ -50,14 +50,65 @@ export class BalancedRotationEngine extends RotationEngine {
   // whichever produced the best total score — cheap and reliable at the
   // player counts open play sessions actually have, without needing a true
   // maximum-weight matching algorithm.
-  buildTeams(pool, players, allowSameSkillFallback) {
-    const beginnerIds = pool.filter((id) => players[id]?.skill === "beginner");
-    const intermediateIds = pool.filter((id) => players[id]?.skill === "intermediate");
+  // Permanent Partner Mode ("Always Pair Players") — see PROJECT.md/
+  // FEATURES.md. A reusable matchmaking OPTION, not a separate rotation
+  // mode or engine: when `alwaysPairPlayers` is true, any player with a
+  // mutually-set `partnerId` (see setFixedPartner/clearFixedPartner,
+  // lib/queueManagement.js) is force-paired with that partner as one team
+  // BEFORE the normal beginner/intermediate greedy matching ever runs —
+  // see extractFixedPartnerTeams below. Everything downstream is
+  // completely untouched: the fixed team still goes through the exact same
+  // opponent-selection scoring (scoreOpponents/buildMatchupsFromTeams) as
+  // any other team, so opponent rotation/diversity keeps working normally,
+  // and (composed via AdaptiveSkillRotationEngine.divisionEngine) the
+  // games-played fairness tuple and Winner-vs-Winner bonus both still
+  // apply to the resulting matchup exactly as they would to any other one
+  // — only which two players end up on the same team changed, never how
+  // matchups are scored or ranked afterward. `alwaysPairPlayers` defaults
+  // to false/undefined, so every existing caller that doesn't pass it sees
+  // zero behavior change.
+  buildTeams(pool, players, allowSameSkillFallback, alwaysPairPlayers = false) {
+    let workingPool = pool;
+    let fixedTeams = [];
+    if (alwaysPairPlayers) {
+      const extracted = this.extractFixedPartnerTeams(pool, players);
+      fixedTeams = extracted.teams;
+      workingPool = extracted.remaining;
+    }
 
-    return this.bestOfAttempts(
+    const beginnerIds = workingPool.filter((id) => players[id]?.skill === "beginner");
+    const intermediateIds = workingPool.filter((id) => players[id]?.skill === "intermediate");
+
+    const builtTeams = this.bestOfAttempts(
       () => this.buildTeamsOnce(beginnerIds, intermediateIds, players, allowSameSkillFallback),
       (teams) => teams.reduce((sum, [a, b]) => sum + this.scorePartner(a, b, players), 0)
     );
+
+    return [...fixedTeams, ...builtTeams];
+  }
+
+  // Pulls out every mutually-agreeing fixed-partner pair present in `pool`
+  // as its own team, leaving everyone else (including a player whose fixed
+  // partner isn't currently waiting) in `remaining` to go through the
+  // normal algorithm unchanged. "Mutually-agreeing" — both A.partnerId===B
+  // AND B.partnerId===A — guards against a stale one-sided link (e.g. a
+  // player's old partner already re-paired with someone else) silently
+  // force-pairing the wrong two people.
+  extractFixedPartnerTeams(pool, players) {
+    const poolSet = new Set(pool);
+    const used = new Set();
+    const teams = [];
+    for (const id of pool) {
+      if (used.has(id)) continue;
+      const partnerId = players[id]?.partnerId;
+      if (!partnerId || used.has(partnerId) || !poolSet.has(partnerId)) continue;
+      if (players[partnerId]?.partnerId !== id) continue; // one-sided/stale link — not a real mutual pair
+      teams.push([id, partnerId]);
+      used.add(id);
+      used.add(partnerId);
+    }
+    const remaining = pool.filter((id) => !used.has(id));
+    return { teams, remaining };
   }
 
   buildTeamsOnce(beginnerIds, intermediateIds, players, allowSameSkillFallback) {

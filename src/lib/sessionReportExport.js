@@ -5,7 +5,7 @@
 // ExportService.exportCSV already knows how to turn into a CSV download —
 // no new CSV-writing code, no new export mechanism invented.
 export function buildSessionReportExportTable(report) {
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, grade } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, grade } = report;
   const rows = [
     ["Session", sessionSummary.venue || ""],
     ["Rotation Mode", sessionSummary.rotationModeLabel],
@@ -44,6 +44,17 @@ export function buildSessionReportExportTable(report) {
   playersNeedingAttention.forEach((p) => {
     rows.push([`Player Needing Attention: ${p.playerName}`, p.reasons.join("; ")]);
   });
+  if (paymentDetails) {
+    paymentDetails.forEach((p) => {
+      const methodLabel = p.paymentStatus === "paid" ? (p.paymentMethod === "gcash" ? "Paid (GCash)" : "Paid (Cash)") : "Unpaid";
+      rows.push([`Payment: ${p.playerName}`, methodLabel]);
+    });
+  }
+  if (finalStandings) {
+    finalStandings.forEach((p, i) => {
+      rows.push([`Standing #${i + 1}: ${p.playerName}`, `GP ${p.gp}, W ${p.wins}, L ${p.losses}, +/- ${p.diff}, RTG ${p.rating ?? "—"}`]);
+    });
+  }
 
   return {
     title: sessionSummary.venue ? `${sessionSummary.venue} — Session Analytics Report` : "Session Analytics Report",

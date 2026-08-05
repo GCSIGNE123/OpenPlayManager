@@ -276,6 +276,21 @@ export const styles = {
     cursor: "pointer",
     flexShrink: 0,
   },
+  // Permanent Partner Mode — see PROJECT.md/FEATURES.md. Compact partner
+  // picker, Waiting Players panel only, shown while Always Pair Players is
+  // on. See WaitingPlayersPanel.jsx.
+  partnerSelect: {
+    background: "var(--chalk)",
+    color: "var(--color-text-muted)",
+    border: "1px solid var(--line)",
+    borderRadius: 6,
+    padding: "5px 6px",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    flexShrink: 0,
+    maxWidth: 110,
+  },
   startBtn: {
     width: "100%",
     justifyContent: "center",
@@ -1538,11 +1553,24 @@ export const styles = {
     minWidth: 14,
     textAlign: "right",
   },
+  // Optimize Player Names in the Scorer Tab — see PROJECT.md/FEATURES.md.
+  // Overrides teamName's nowrap/ellipsis: names-first Scorer tab rows
+  // (court cards) now let a long name wrap onto a second line instead of
+  // being cut short with "…", and get a much larger guaranteed minWidth so
+  // truncation only happens in the rare case a name genuinely doesn't fit
+  // even at full width — not as a matter of course. Static font size
+  // (no responsive/clamp scaling) — this alone resolved the readability
+  // complaint from a real 32-player session without needing one.
   teamNameProminent: {
     fontSize: 14.5,
     fontWeight: 700,
-    flex: "1 1 auto",
-    minWidth: 40,
+    flex: "3 1 auto",
+    minWidth: 90,
+    whiteSpace: "normal",
+    overflow: "visible",
+    textOverflow: "clip",
+    wordBreak: "break-word",
+    lineHeight: 1.15,
   },
   skillToggle: {
     display: "flex",
@@ -2784,6 +2812,26 @@ export const styles = {
     fontSize: 12.5,
     color: "var(--color-text-faint)",
     fontStyle: "italic",
+  },
+  // Session Review Improvements — see PROJECT.md/FEATURES.md. Read-only
+  // per-player payment detail list inside the Payment Summary section.
+  analyticsPaymentList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    marginTop: 10,
+  },
+  analyticsPaymentRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "4px 0",
+    borderBottom: "1px solid var(--line)",
+    fontSize: 12.5,
+  },
+  analyticsPaymentName: {
+    color: "var(--ink)",
+    fontWeight: 600,
   },
   iconBtn: {
     display: "flex",

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-06
+
+### Added
+- **Session Persistence Across Refresh** — an F5/browser refresh mid-session now restores the same session automatically instead of dropping back to the landing page (`sessionStorage`-based, clears itself when the tab/window closes so a device never auto-resumes a stale session days later). A URL-driven screen (TV Mode, Player Portal, etc.) always takes priority. Scorer PIN auth is deliberately not persisted.
+- **Cancel Live Match** — a new "Cancel match" button on any live/dispatching court frees it and reinserts the same 4 players' exact pairing at the front of Next Matchups, with no result recorded — for a player stepping away mid-match (toilet break, etc.) without losing their spot or their teammate.
+- **Alphabetical Check-In List** — the Check-In tab's "not yet here" roster is now sorted A→Z by name, updating automatically as new players register.
+- **Optimize Player Names in the Scorer Tab** — long player names on court cards now wrap instead of being cut short with an ellipsis, with more guaranteed horizontal space; no photos reintroduced.
+- **Simplify Standings Table** — the live Standings tab is reduced to Player/GP/W/L/+/-/RTG, removing the skill tag, payment badge, and streak icon that duplicated controls already available elsewhere (Scorer tab). Session Analytics' own reporting is unaffected.
+- **Permanent Partner Mode ("Always Pair Players")** — a new, off-by-default session setting: designated partners always stay teamed together while opponents keep rotating normally. Implemented once as a reusable option in the shared team-forming step (`BalancedRotationEngine`), so it works for Continuous and Adaptive Skill Rotation (which still separates Beginner/Intermediate divisions) without special-casing either engine; games-played fairness and opponent diversity are untouched.
+- **Session Review Improvements** — a completed session's reopenable Session History report now also includes Final Standings and a per-player payment detail (who paid, who's unpaid, by which method), fully read-only, alongside the existing aggregate summaries.
+
+### Fixed
+- **Court Name Persistence** — a custom court name was silently reverting to "Court N" the instant a match on that court ended, because every court-reset-to-open path used a plain reset that always starts the name over at null. Fixed with a single new reset helper that carries the current name forward; a custom name is now authoritative for the entire session until explicitly changed again. Also fixed the Queue Activity Log, which was always showing the plain court number even for a renamed court.
+
 ## 2026-08-05
 
 ### Added

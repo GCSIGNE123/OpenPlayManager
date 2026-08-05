@@ -144,11 +144,19 @@ export function confirmCourtLive(state, courtNumber) {
 // shared, generic log, not a parallel one). Always includes the court
 // number and both teams' player names, not just a prose description, per
 // Sprint 3's explicit requirement.
-export function logDispatchEvent(state, { kind, courtNumber, teamANames, teamBNames, reason }) {
+export function logDispatchEvent(state, { kind, courtNumber, teamANames, teamBNames, reason, courtLabel }) {
   const entry = {
     id: uid(),
     kind,
     courtNumber,
+    // Court Renaming — see PROJECT.md/FEATURES.md. Resolved once, right
+    // now, by the caller (which has the live court object) — never
+    // reconstructed later from courtNumber alone, same "frozen snapshot"
+    // precedent Sprint 2.1's noteDissolvedHeldMatchups already set for
+    // dissolved matchup team names. Optional/nullable so older entries
+    // written before this field existed still render fine (ScorerView
+    // falls back to "Court {courtNumber}" when it's absent).
+    courtLabel: courtLabel || null,
     teamA: teamANames || [],
     teamB: teamBNames || [],
     reason,

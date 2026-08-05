@@ -27,7 +27,7 @@ const exportService = new ExportService();
 // session those numbers came from is long over. Never both at once.
 export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose }) {
   if (!report) return null;
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, grade } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, grade } = report;
   const isReopened = Boolean(onClose);
   const exportTitle = report.sessionSummary.venue
     ? `${report.sessionSummary.venue} — Session Analytics Report`
@@ -142,6 +142,62 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
               <Stat label="Unpaid" value={payment.unpaid} />
               <Stat label="Cash" value={payment.cash} />
               <Stat label="GCash" value={payment.gcash} />
+            </div>
+            {/* Session Review Improvements — see PROJECT.md/FEATURES.md.
+                Read-only: who paid, who's still unpaid, and by which
+                method — reopenable from Session History after a session
+                has ended, alongside the aggregate counts above. */}
+            {paymentDetails && paymentDetails.length > 0 && (
+              <div style={styles.analyticsPaymentList}>
+                {paymentDetails.map((p) => (
+                  <div key={p.playerId} style={styles.analyticsPaymentRow}>
+                    <span style={styles.analyticsPaymentName}>{p.playerName}</span>
+                    <span style={styles.paymentTag(p.paymentStatus === "paid")}>
+                      {p.paymentStatus === "paid" ? (p.paymentMethod === "gcash" ? "P-GC" : "P-C") : "UP"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {finalStandings && finalStandings.length > 0 && (
+          <div style={styles.analyticsSection}>
+            <SectionLabel>Final Standings</SectionLabel>
+            <div style={styles.standingsTable}>
+              <div style={styles.standingsHeadRow}>
+                <span style={styles.standingsRankCol}>#</span>
+                <span style={styles.standingsNameCol}>Player</span>
+                <span style={styles.standingsStatCol}>GP</span>
+                <span style={styles.standingsStatCol}>W</span>
+                <span style={styles.standingsStatCol}>L</span>
+                <span style={styles.standingsStatCol}>+/-</span>
+                <span style={styles.standingsRatingCol}>RTG</span>
+              </div>
+              {finalStandings.map((p, i) => (
+                <div key={p.playerId} style={styles.standingsRow}>
+                  <span style={styles.standingsRankCol}>{i + 1}</span>
+                  <span style={styles.standingsNameCol}>
+                    <span style={styles.standingsName}>{p.playerName}</span>
+                  </span>
+                  <span style={styles.standingsStatCol}>{p.gp}</span>
+                  <span style={styles.standingsStatCol}>{p.wins}</span>
+                  <span style={styles.standingsStatCol}>{p.losses}</span>
+                  <span
+                    style={{
+                      ...styles.standingsStatCol,
+                      color: p.diff > 0 ? "var(--color-success)" : p.diff < 0 ? "var(--color-error)" : "var(--color-text-faint)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {p.diff > 0 ? `+${p.diff}` : p.diff}
+                  </span>
+                  <span style={styles.standingsRatingCol}>
+                    <span style={styles.ratingBadge(p.rating)}>{p.rating === null ? "—" : p.rating}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}

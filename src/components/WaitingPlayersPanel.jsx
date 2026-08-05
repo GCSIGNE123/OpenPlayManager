@@ -34,6 +34,8 @@ export default function WaitingPlayersPanel({
   onCheckout,
   onChangeSkill,
   onSetPayment,
+  onSetPartner,
+  onClearPartner,
   checkedOutPlayers = [],
 }) {
   const [confirmingPlayer, setConfirmingPlayer] = useState(null);
@@ -68,6 +70,30 @@ export default function WaitingPlayersPanel({
                     </button>
                   )}
                   {onSetPayment && <PaymentBadge player={p} onSetPayment={onSetPayment} />}
+                  {onSetPartner && (
+                    // Permanent Partner Mode — see PROJECT.md/FEATURES.md.
+                    // Only rendered while the alwaysPairPlayers session
+                    // setting is on (ScorerView gates onSetPartner/
+                    // onClearPartner to null otherwise). Options are every
+                    // OTHER currently-waiting player — picking one who
+                    // already has a different partner cleanly reassigns
+                    // both sides (see setFixedPartner, lib/queueManagement.js).
+                    <select
+                      style={styles.partnerSelect}
+                      value={p.partnerId || ""}
+                      onChange={(e) => (e.target.value ? onSetPartner(p.id, e.target.value) : onClearPartner(p.id))}
+                      title="Fixed partner — always teamed together while Always Pair Players is on"
+                    >
+                      <option value="">+ Partner</option>
+                      {players
+                        .filter((other) => other.id !== p.id)
+                        .map((other) => (
+                          <option key={other.id} value={other.id}>
+                            {other.name}
+                          </option>
+                        ))}
+                    </select>
+                  )}
                   {performance.rating !== null && (
                     <span
                       style={styles.ratingBadge(performance.rating)}

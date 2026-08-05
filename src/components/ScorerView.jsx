@@ -27,6 +27,7 @@ const QUEUE_ACTIVITY_KIND_META = {
   heldPlayerReminder: { title: "Held Player Reminder" },
   paymentReceived: { title: "Payment Received" },
   paymentUpdated: { title: "Payment Updated" },
+  liveMatchCancelled: { title: "Live Match Cancelled" },
 };
 
 // Collapsed-state "Latest:" compact summary — one readable line per kind,
@@ -35,7 +36,12 @@ const QUEUE_ACTIVITY_KIND_META = {
 // exact same entry data the expanded card already shows.
 function queueActivitySummaryText(entry) {
   const kind = entry.kind || "heldMatchDissolved";
-  const court = typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber} ` : "";
+  // Court Renaming — prefer the frozen courtLabel stamped at the moment
+  // this entry was created (see lib/courtDispatch.js's logDispatchEvent);
+  // falls back to the plain court number for older entries written before
+  // that field existed.
+  const courtName = entry.courtLabel || (typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber}` : "");
+  const court = courtName ? `${courtName} ` : "";
   switch (kind) {
     case "courtDispatched":
       return `${court}automatically dispatched`;
@@ -53,6 +59,8 @@ function queueActivitySummaryText(entry) {
       return `${entry.playerName} paid (${entry.newMethod === "gcash" ? "GCash" : "Cash"})`;
     case "paymentUpdated":
       return `${entry.playerName} ${entry.reason}`;
+    case "liveMatchCancelled":
+      return `${court}match cancelled — returned to queue`;
     case "heldMatchDissolved":
     default:
       return "Held Match removed";
@@ -77,7 +85,9 @@ function queueActivityRowText(entry) {
   }
   const teamsPart = `${(entry.teamA || []).join(" / ")} vs ${(entry.teamB || []).join(" / ")}`;
   if (kind === "heldMatchDissolved") return `${teamsPart} — ${entry.reason}`;
-  const courtPart = typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber}: ` : "";
+  const courtName = entry.courtLabel || (typeof entry.courtNumber === "number" ? `Court ${entry.courtNumber}` : "");
+  const courtPart = courtName ? `${courtName}: ` : "";
+  if (kind === "liveMatchCancelled") return `${courtPart}${teamsPart} — ${entry.reason}`;
   return `${courtPart}${teamsPart}`;
 }
 
@@ -111,11 +121,14 @@ export default function ScorerView({
   holdMatch,
   resumeMatch,
   cancelMatch,
+  cancelLiveMatch,
   queueMsg,
   removePlayer,
   checkoutPlayer,
   changePlayerSkill,
   setPlayerPayment,
+  setFixedPartner,
+  clearFixedPartner,
   paymentStats,
   skillChangeMsg,
   skillChangeLog,
@@ -352,6 +365,7 @@ export default function ScorerView({
                 onStartMatch={() => startDispatchedMatch(court.number)}
                 onRepeatAnnouncement={() => repeatAnnouncement(court.number)}
                 onRename={renameCourt ? (name) => renameCourt(court.number, name) : null}
+                onCancelLiveMatch={cancelLiveMatch ? () => cancelLiveMatch(court.number) : null}
                 hideAvatar
               />
             );
@@ -414,6 +428,8 @@ export default function ScorerView({
         onCheckout={checkoutPlayer}
         onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
         onSetPayment={setPlayerPayment}
+        onSetPartner={state.alwaysPairPlayers ? setFixedPartner : null}
+        onClearPartner={state.alwaysPairPlayers ? clearFixedPartner : null}
         checkedOutPlayers={checkedOutPlayers}
       />
 
@@ -538,6 +554,7 @@ export default function ScorerView({
           showAdaptiveThresholds={rotationMode === "adaptiveSkill"}
           courtDispatchSettings={courtDispatchSettings}
           heldPlayerReminderSettings={state.heldPlayerReminderSettings}
+          alwaysPairPlayers={state.alwaysPairPlayers}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

@@ -1,4 +1,4 @@
-import { emptyCourt } from "./constants.js";
+import { resetCourtForNextMatch } from "./constants.js";
 import { uid } from "./random.js";
 import { WinnerPoolRotationEngine } from "../engines/WinnerPoolRotationEngine.js";
 
@@ -54,7 +54,7 @@ export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defau
 
   if (partnerIdx === null) {
     const requeueIds = [...thisCourt.teamA, ...thisCourt.teamB];
-    const newCourts = courts.map((c, i) => (i === courtIdx ? emptyCourt(c.number) : c));
+    const newCourts = courts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
     return { courts: newCourts, requeueIds, newMatchups: [] };
   }
 
@@ -84,7 +84,7 @@ export function resolveWinnerPoolMatch(courts, players, courtIdx, engine = defau
 
   const lowerIdx = Math.min(courtIdx, partnerIdx);
   const higherIdx = Math.max(courtIdx, partnerIdx);
-  const newCourts = courts.map((c, i) => (i === lowerIdx || i === higherIdx ? emptyCourt(c.number) : c));
+  const newCourts = courts.map((c, i) => (i === lowerIdx || i === higherIdx ? resetCourtForNextMatch(c) : c));
 
   const newMatchups = [];
   if (winnerMatch) newMatchups.push({ id: uid(), teamA: winnerMatch.teamA, teamB: winnerMatch.teamB });

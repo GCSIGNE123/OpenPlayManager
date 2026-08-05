@@ -26,6 +26,7 @@ export default function SessionSettingsDialog({
   showAdaptiveThresholds,
   courtDispatchSettings,
   heldPlayerReminderSettings,
+  alwaysPairPlayers,
   onSave,
   onClose,
 }) {
@@ -52,6 +53,12 @@ export default function SessionSettingsDialog({
   const [voiceURIDraft, setVoiceURIDraft] = useState(courtDispatchSettings?.voiceURI ?? "");
   const [announcementDelayDraft, setAnnouncementDelayDraft] = useState(courtDispatchSettings?.announcementDelayMs ?? 2000);
   const [availableVoices, setAvailableVoices] = useState([]);
+
+  // Permanent Partner Mode — see PROJECT.md/FEATURES.md. Rotation-mode-
+  // agnostic, always shown (Continuous and Adaptive Skill Rotation both
+  // honor it; other modes simply aren't wired to read it yet — see
+  // BalancedRotationEngine.buildTeams).
+  const [alwaysPairPlayersDraft, setAlwaysPairPlayersDraft] = useState(alwaysPairPlayers === true);
 
   // Voice list — window.speechSynthesis.getVoices() is frequently empty
   // until the browser fires 'voiceschanged' (a well-known quirk), so this
@@ -102,6 +109,7 @@ export default function SessionSettingsDialog({
         thresholdRounds: Math.max(1, Number(heldThresholdRoundsDraft) || 3),
         repeatIntervalMinutes: Math.max(1, Number(heldRepeatIntervalDraft) || 10),
       },
+      alwaysPairPlayers: alwaysPairPlayersDraft,
     });
     onClose();
   };
@@ -238,6 +246,18 @@ export default function SessionSettingsDialog({
               />
             </label>
           </div>
+        </div>
+
+        <div style={styles.dialogField}>
+          <label style={styles.dialogLabel}>Permanent Partner Mode</label>
+          <label style={styles.settingsCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={alwaysPairPlayersDraft}
+              onChange={(e) => setAlwaysPairPlayersDraft(e.target.checked)}
+            />
+            Always Pair Players — designated partners (set in the Waiting Players panel) always stay teamed together; only opponents rotate
+          </label>
         </div>
 
         <div style={styles.dialogField}>

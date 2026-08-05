@@ -12,6 +12,7 @@
 // this sprint (see FEATURES.md).
 import { ROTATION_MODES } from "./constants.js";
 import { derivePaymentStats } from "./queueManagement.js";
+import { buildStandingsRows } from "./performanceRating.js";
 
 // ---------------------------------------------------------------------
 // Waiting-time tracking — called from PickleballOpenPlay.jsx's save(),
@@ -366,6 +367,35 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
     // gamesFairnessScore/waiting/diversity/grade above, all of which are
     // computed identically to before this field existed.
     payment: derivePaymentStats(state.players),
+    // Session Review Improvements — see PROJECT.md/FEATURES.md. Purely
+    // additive, same precedent as `payment` above: reuses buildStandingsRows
+    // (lib/performanceRating.js), the exact same function the live
+    // Standings tab computes its rows from, so a reopened Session History
+    // report can never show different numbers than what Standings showed
+    // live. Read-only — this report is a snapshot; nothing here can be
+    // edited once generated.
+    finalStandings: buildStandingsRows(state.players).map((p) => ({
+      playerId: p.id,
+      playerName: p.name,
+      gp: p.gp,
+      wins: p.wins,
+      losses: p.losses,
+      diff: p.diff,
+      rating: p.performance.rating,
+    })),
+    // Session Review Improvements — per-player payment detail (who paid,
+    // who's still unpaid, and by which method), alongside the aggregate
+    // `payment` counts above. Sorted alphabetically for easy scanning, same
+    // convention as the Check-In tab's own alphabetical ordering.
+    paymentDetails: Object.values(state.players || {})
+      .filter((p) => p.checkedIn)
+      .map((p) => ({
+        playerId: p.id,
+        playerName: p.name,
+        paymentStatus: p.paymentStatus || "unpaid",
+        paymentMethod: p.paymentMethod || null,
+      }))
+      .sort((a, b) => a.playerName.localeCompare(b.playerName)),
     grade,
   };
 }
