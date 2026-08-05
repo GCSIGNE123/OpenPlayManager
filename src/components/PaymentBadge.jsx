@@ -8,8 +8,10 @@ import { styles } from "../styles.js";
 // mutate state, or space is tight). When provided: an unpaid player gets
 // two one-click buttons (Cash/GCash) to mark them paid; an already-paid
 // player's tag itself becomes a one-click toggle to correct a mistaken
-// method (Cash <-> GCash) — the same `onSetPayment(id, method)` handler
-// either way (see lib/queueManagement.js's setPlayerPayment).
+// method (Cash <-> GCash), plus a small "Unpaid" button to revert the
+// whole payment for a mis-click — the same `onSetPayment(id, method)`
+// handler for all three, method being "cash"/"gcash"/"unpaid" (see
+// lib/queueManagement.js's setPlayerPayment).
 export default function PaymentBadge({ player, onSetPayment }) {
   if (!player) return null;
   const paid = player.paymentStatus === "paid";
@@ -22,13 +24,22 @@ export default function PaymentBadge({ player, onSetPayment }) {
   if (paid) {
     const otherMethod = player.paymentMethod === "gcash" ? "cash" : "gcash";
     return (
-      <button
-        style={styles.paymentTagButton(true)}
-        onClick={() => onSetPayment(player.id, otherMethod)}
-        title={`Tap to correct to ${otherMethod === "gcash" ? "GCash" : "Cash"}`}
-      >
-        {tagLabel}
-      </button>
+      <span style={styles.paymentButtonGroup}>
+        <button
+          style={styles.paymentTagButton(true)}
+          onClick={() => onSetPayment(player.id, otherMethod)}
+          title={`Tap to correct to ${otherMethod === "gcash" ? "GCash" : "Cash"}`}
+        >
+          {tagLabel}
+        </button>
+        <button
+          style={styles.paymentQuickBtn}
+          onClick={() => onSetPayment(player.id, "unpaid")}
+          title={`Undo — revert ${player.name} to Unpaid (mis-clicked payment)`}
+        >
+          Undo
+        </button>
+      </span>
     );
   }
 

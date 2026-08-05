@@ -152,27 +152,45 @@ export function getLastCourtForPlayer(state, playerId) {
 // record is created at every startSession/quickAddCheckIn (see
 // PickleballOpenPlay.jsx), so payment status always starts over ("unpaid",
 // null) for a new session with zero extra reset logic needed here.
-// Marks a player Paid with the given method, or corrects an already-paid
-// player's method (Cash <-> GCash) if the facilitator made a mistake — the
-// same one function handles both, since both are just "set paymentMethod,
-// set paymentStatus to paid". A no-op (same state reference) if the
-// method is invalid or already exactly this player's current method+
-// status (so a repeat click of the same method does nothing). Records one
-// Queue Activity Log entry per change — "Payment Received" for
-// unpaid->paid, "Payment Updated" (showing the Cash -> GCash / GCash ->
-// Cash correction) for an already-paid player's method changing — same
+// Marks a player Paid with the given method, corrects an already-paid
+// player's method (Cash <-> GCash) if the facilitator made a mistake, OR —
+// method === "unpaid" — reverts an already-paid player back to Unpaid for
+// a mis-clicked payment. One function handles all three, since they're all
+// just "set paymentStatus/paymentMethod together, log what changed". A
+// no-op (same state reference) if the method is invalid, or the player is
+// already in exactly that state (so a repeat click, or reverting a player
+// who's already unpaid, does nothing). Records one Queue Activity Log
+// entry per real change — "Payment Received" for unpaid->paid,
+// "Payment Updated" for any other transition (Cash <-> GCash, or paid ->
+// Unpaid, each showing the specific before/after in its reason) — same
 // shared-log convention as markHeldReminderShown/noteDissolvedHeldMatchups.
 // Does not touch queueIds/nextMatchups/skill/games/streaks — purely
 // session payment bookkeeping, cannot affect matchmaking or player
 // priority.
 export function setPlayerPayment(state, playerId, method) {
   const p = state.players[playerId];
-  if (!p || (method !== "cash" && method !== "gcash")) return state;
-  if (p.paymentStatus === "paid" && p.paymentMethod === method) return state;
+  if (!p || (method !== "cash" && method !== "gcash" && method !== "unpaid")) return state;
   const wasPaid = p.paymentStatus === "paid";
+  if (method === "unpaid") {
+    if (!wasPaid) return state;
+    const previousMethod = p.paymentMethod;
+    const players = { ...state.players, [playerId]: { ...p, paymentStatus: "unpaid", paymentMethod: null } };
+    const entry = {
+      id: uid(),
+      kind: "paymentUpdated",
+      playerId,
+      playerName: p.name,
+      previousMethod,
+      newMethod: null,
+      reason: `${methodLabel(previousMethod)} → Unpaid`,
+      timestamp: Date.now(),
+    };
+    const queueActivityLog = [entry, ...(state.queueActivityLog || [])].slice(0, 50);
+    return { ...state, players, queueActivityLog };
+  }
+  if (wasPaid && p.paymentMethod === method) return state;
   const previousMethod = p.paymentMethod;
   const players = { ...state.players, [playerId]: { ...p, paymentStatus: "paid", paymentMethod: method } };
-  const methodLabel = (m) => (m === "gcash" ? "GCash" : "Cash");
   const entry = wasPaid
     ? {
         id: uid(),
@@ -195,6 +213,10 @@ export function setPlayerPayment(state, playerId, method) {
       };
   const queueActivityLog = [entry, ...(state.queueActivityLog || [])].slice(0, 50);
   return { ...state, players, queueActivityLog };
+}
+
+function methodLabel(m) {
+  return m === "gcash" ? "GCash" : "Cash";
 }
 
 // Player Payment Tracking — pure derivation of session-wide payment

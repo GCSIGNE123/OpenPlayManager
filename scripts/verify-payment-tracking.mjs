@@ -74,6 +74,49 @@ console.log("\nChange Cash -> GCash (facilitator correction)");
   assert("reason reads Cash -> GCash", entry.reason === "Cash → GCash");
 }
 
+console.log("\nRevert Paid -> Unpaid (mis-clicked payment)");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "cash");
+  const before = state.queueActivityLog.length;
+  const next = setPlayerPayment(state, "p1", "unpaid");
+  assert("paymentStatus is back to unpaid", next.players.p1.paymentStatus === "unpaid");
+  assert("paymentMethod is cleared back to null", next.players.p1.paymentMethod === null);
+  assert("a new log entry was added", next.queueActivityLog.length === before + 1);
+  const entry = next.queueActivityLog[0];
+  assert("entry kind is paymentUpdated", entry.kind === "paymentUpdated");
+  assert("entry records the previous method and null newMethod", entry.previousMethod === "cash" && entry.newMethod === null);
+  assert("reason reads Cash -> Unpaid", entry.reason === "Cash → Unpaid");
+}
+
+console.log("\nRevert Paid (GCash) -> Unpaid");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "gcash");
+  const next = setPlayerPayment(state, "p1", "unpaid");
+  assert("paymentStatus is back to unpaid", next.players.p1.paymentStatus === "unpaid");
+  assert("paymentMethod is cleared", next.players.p1.paymentMethod === null);
+  assert("reason reads GCash -> Unpaid", next.queueActivityLog[0].reason === "GCash → Unpaid");
+}
+
+console.log("\nGuard: reverting an already-unpaid player is a no-op");
+{
+  const state = makeState();
+  assert("returns the exact same state reference", setPlayerPayment(state, "p1", "unpaid") === state);
+}
+
+console.log("\nFull round trip: Cash -> GCash -> Unpaid -> Cash again");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "cash");
+  state = setPlayerPayment(state, "p1", "gcash");
+  state = setPlayerPayment(state, "p1", "unpaid");
+  assert("unpaid after the revert", state.players.p1.paymentStatus === "unpaid" && state.players.p1.paymentMethod === null);
+  state = setPlayerPayment(state, "p1", "cash");
+  assert("can be marked paid again after a revert (paymentReceived, not paymentUpdated)", state.players.p1.paymentStatus === "paid" && state.players.p1.paymentMethod === "cash");
+  assert("re-marking after a revert logs paymentReceived again (it's a fresh payment, not a correction)", state.queueActivityLog[0].kind === "paymentReceived");
+}
+
 console.log("\nPayment survives during the current session (unrelated state changes don't clear it)");
 {
   let state = makeState();
