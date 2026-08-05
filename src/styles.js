@@ -1219,6 +1219,23 @@ export const styles = {
     flexShrink: 0,
     letterSpacing: "0.03em",
   }),
+  // Pre-Check-In Skill Correction — same look as skillTag above, but a real
+  // <button> (border reset + pointer cursor) so a facilitator can flip a
+  // registered-not-yet-checked-in player's skill in one tap, right in the
+  // Check-In tab's roster list. See CheckinView.jsx.
+  skillTagButton: (skill) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: skill === "intermediate" ? "var(--chalk)" : "var(--ink)",
+    background: skill === "intermediate" ? "var(--court)" : "var(--ball)",
+    border: "none",
+    borderRadius: 4,
+    padding: "3px 6px",
+    flexShrink: 0,
+    letterSpacing: "0.03em",
+    cursor: "pointer",
+  }),
   // Smart Queue Management — see WaitingPlayersPanel.jsx's getPlayerQueueStatus
   // badge. "Held" gets the same warning-coral treatment as the old
   // Skip/"Sitting out" toggle did; everything else is a neutral chip.

@@ -15,6 +15,7 @@ import {
   maxUpcomingMatchups,
   getPlayerQueueStatus,
   changePlayerSkill as changePlayerSkillAction,
+  setPreCheckInSkill as setPreCheckInSkillAction,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -1588,6 +1589,20 @@ export default function PickleballOpenPlay() {
     notifyIfHeldMatchDissolved(next, reason);
   };
 
+  // Pre-Check-In Skill Correction — one-click roster correction, Check-In
+  // tab only, before the player is checked in. Thin wrapper around the
+  // pure setPreCheckInSkill (lib/utils.js), mirroring changePlayerSkill's
+  // own wrapper shape above but deliberately NOT reusing changePlayerSkill
+  // itself — that one logs to skillChangeLog and dissolves reserved
+  // matchups, both meaningless (and undesired, per spec) for a player who
+  // isn't in the queue yet. No toast, no activity log entry — this is
+  // roster data being corrected, not an in-session event.
+  const setPreCheckInSkill = (id, newSkill) => {
+    const next = setPreCheckInSkillAction(state, id, newSkill);
+    if (next === state) return;
+    save(next);
+  };
+
   // permanently removes a waiting (not currently on a live court) player
   // from the session — substitute them off a court first if needed
   const removePlayer = (id) => {
@@ -1925,6 +1940,7 @@ export default function PickleballOpenPlay() {
                 <CheckinView
                   registeredNotHere={registeredNotHere}
                   checkInExisting={checkInExisting}
+                  onChangeSkillPreCheckIn={setPreCheckInSkill}
                   nameInput={nameInput}
                   setNameInput={setNameInput}
                   skillInput={skillInput}

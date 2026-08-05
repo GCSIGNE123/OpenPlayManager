@@ -231,6 +231,28 @@ export function changePlayerSkill(state, playerId, newSkill, reason = "Manual ov
   return { ...state, players, nextMatchups, skillChangeLog };
 }
 
+// Pre-Check-In Skill Correction — see PROJECT.md/FEATURES.md. A one-click
+// facilitator correction to a registered player's roster skill level,
+// available only in the Check-In tab's "not yet here" list, BEFORE the
+// player checks in. This is an initial data correction, not a mid-session
+// promotion/relegation, so — deliberately, unlike changePlayerSkill above
+// — it does NOT touch skillChangeLog (that log, and the Session Analytics
+// promotion/relegation stats derived from it, are for in-session changes
+// only), does NOT reset streak/lossStreak (a not-yet-checked-in player has
+// none to reset), and does NOT call dissolveMatchupIfReserved (an
+// unchecked-in player can never be reserved in nextMatchups). A no-op —
+// same state reference — once the player is checked in; from that point
+// on, changePlayerSkill (via PickleballOpenPlay.jsx's wrapper) is the one
+// and only skill-change path, per explicit direction against a second,
+// competing implementation.
+export function setPreCheckInSkill(state, playerId, newSkill) {
+  const p = state.players[playerId];
+  if (!p || p.checkedIn || (newSkill !== "beginner" && newSkill !== "intermediate") || p.skill === newSkill) {
+    return state;
+  }
+  return { ...state, players: { ...state.players, [playerId]: { ...p, skill: newSkill } } };
+}
+
 // Smart Queue Management — see PROJECT.md/FEATURES.md. Reusable, pure
 // status derivation for a checked-in player — never stored on the player
 // record itself (it's always computed fresh from state, so it can never

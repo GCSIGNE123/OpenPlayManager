@@ -8,6 +8,7 @@ import SkillToggle from "./SkillToggle.jsx";
 export default function CheckinView({
   registeredNotHere,
   checkInExisting,
+  onChangeSkillPreCheckIn,
   nameInput,
   setNameInput,
   skillInput,
@@ -33,7 +34,17 @@ export default function CheckinView({
             <li key={p.id} style={styles.rosterItem}>
               <Avatar player={p} size={26} />
               <span style={styles.queueName}>{p.name}</span>
-              {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
+              {p.skill && (
+                <button
+                  style={styles.skillTagButton(p.skill)}
+                  onClick={() =>
+                    onChangeSkillPreCheckIn(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")
+                  }
+                  title={`Tap to change to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"} before check-in`}
+                >
+                  {p.skill === "intermediate" ? "INT" : "BEG"}
+                </button>
+              )}
               <button style={styles.checkInTapBtn} onClick={() => checkInExisting(p.id)}>
                 <LogIn size={12} strokeWidth={2.5} />
                 Check in
