@@ -52,6 +52,7 @@ import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
 import { applyWaitingTimeTracking, computeSessionAnalyticsReport } from "./lib/sessionAnalytics.js";
 import { saveSessionReport } from "./lib/sessionReportModel.js";
+import { recordSessionCreated, recordSessionEnded } from "./lib/sessionIndexModel.js";
 import { RatingEngine } from "./engines/RatingEngine.js";
 import { fetchAllCourts as fetchAllClubCourts } from "./lib/courtDatabase.js";
 import { fetchAllBookings } from "./lib/bookingModel.js";
@@ -726,6 +727,21 @@ export default function PickleballOpenPlay() {
         updatedAt: Date.now(),
       };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
+
+      // All Sessions — see PROJECT.md/FEATURES.md. Best-effort: a failure
+      // here shouldn't block the session that was just successfully
+      // created from actually starting.
+      try {
+        await recordSessionCreated({
+          sessionCode: code,
+          venue,
+          rotationMode,
+          sessionType,
+          createdAt: initial.sessionStartedAt,
+        });
+      } catch (e) {
+        // index bookkeeping failure shouldn't block the session from starting
+      }
 
       // consume the access code now that a session was actually created —
       // if the organizer backed out earlier, the code stays unused/reusable.
@@ -1796,6 +1812,13 @@ export default function PickleballOpenPlay() {
       await window.storage.delete(`${STORAGE_PREFIX}${sessionCode}`, true);
     } catch (e) {
       // deletion failure shouldn't block leaving — session data may already be gone
+    }
+    // All Sessions — see PROJECT.md/FEATURES.md. Best-effort, same as the
+    // report save above — a failure here shouldn't block leaving.
+    try {
+      await recordSessionEnded(sessionCode, { reason: "Ended by facilitator" });
+    } catch (e) {
+      // index bookkeeping failure shouldn't block leaving
     }
     setSessionReport(null);
     leaveSession();

@@ -73,7 +73,7 @@ export default function LandingScreen({ onCreate, onAdmin, onDeveloper, onTempla
         View tournament history →
       </button>
       <button style={styles.adminLink} onClick={onSessionHistory}>
-        View session history →
+        View all sessions →
       </button>
       <button style={styles.adminLink} onClick={onDeveloper}>
         Developer? Run the rotation simulator →
