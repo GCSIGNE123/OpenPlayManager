@@ -398,8 +398,7 @@ export default function PickleballOpenPlay() {
           next.nextMatchups || [],
           engine,
           phase,
-          maxUpcomingMatchups(next.courts),
-          next.alwaysPairPlayers
+          maxUpcomingMatchups(next.courts)
         ),
       };
       // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
@@ -1173,8 +1172,7 @@ export default function PickleballOpenPlay() {
       protectedMatchups,
       engine,
       phase,
-      maxUpcomingMatchups(state.courts),
-      state.alwaysPairPlayers
+      maxUpcomingMatchups(state.courts)
     );
 
     let remainingIds = [...state.queueIds];
@@ -1654,10 +1652,10 @@ export default function PickleballOpenPlay() {
     save(cancelLiveMatchAction(state, courtNumber));
   };
 
-  // Permanent Partner Mode — thin wrappers around the pure
+  // Partner Requests — thin wrappers around the pure
   // setFixedPartner/clearFixedPartner (lib/queueManagement.js). Facilitator
-  // action in the Waiting Players panel; has no effect on matchmaking
-  // unless the alwaysPairPlayers session setting is also on.
+  // action in the Waiting Players panel; takes effect immediately for that
+  // pair, at any point during the session, no session-wide setting needed.
   const setFixedPartner = (playerIdA, playerIdB) => {
     const next = setFixedPartnerAction(state, playerIdA, playerIdB);
     if (next === state) return;

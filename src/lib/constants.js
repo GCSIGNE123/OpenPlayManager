@@ -201,13 +201,5 @@ export const defaultState = {
     voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
     announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
   },
-  // Permanent Partner Mode — see PROJECT.md/FEATURES.md. OFF by default —
-  // existing sessions/behavior are completely unchanged. ON: any player
-  // with a designated partner (see setFixedPartner, lib/queueManagement.js)
-  // is always teamed with that partner; only opponents rotate. Read only
-  // by BalancedRotationEngine.buildTeams (and, via composition, every
-  // rotation mode/division that shares that team-forming step) — never a
-  // separate rotation mode of its own.
-  alwaysPairPlayers: false,
   updatedAt: 0,
 };

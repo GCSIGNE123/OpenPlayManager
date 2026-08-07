@@ -71,18 +71,16 @@ export default function WaitingPlayersPanel({
                   )}
                   {onSetPayment && <PaymentBadge player={p} onSetPayment={onSetPayment} />}
                   {onSetPartner && (
-                    // Permanent Partner Mode — see PROJECT.md/FEATURES.md.
-                    // Only rendered while the alwaysPairPlayers session
-                    // setting is on (ScorerView gates onSetPartner/
-                    // onClearPartner to null otherwise). Options are every
-                    // OTHER currently-waiting player — picking one who
+                    // Partner Requests — see PROJECT.md/FEATURES.md. Always
+                    // available, per-pair; no session-wide setting gates it.
+                    // Options are every OTHER currently-waiting player — picking one who
                     // already has a different partner cleanly reassigns
                     // both sides (see setFixedPartner, lib/queueManagement.js).
                     <select
                       style={styles.partnerSelect}
                       value={p.partnerId || ""}
                       onChange={(e) => (e.target.value ? onSetPartner(p.id, e.target.value) : onClearPartner(p.id))}
-                      title="Fixed partner — always teamed together while Always Pair Players is on"
+                      title="Fixed partner — always teamed together for this pair"
                     >
                       <option value="">+ Partner</option>
                       {players

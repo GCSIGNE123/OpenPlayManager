@@ -105,21 +105,21 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // top of this ranked list instead of a division-ordered or single-score
   // one.
   generateMatchups(context) {
-    const { waitingIds, players, existingMatchups, alwaysPairPlayers } = context;
+    const { waitingIds, players, existingMatchups } = context;
     const reserved = new Set((existingMatchups || []).flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = waitingIds.filter((id) => !reserved.has(id) && players[id]);
 
     const beginnerIds = pool.filter((id) => players[id]?.skill !== "intermediate");
     const intermediateIds = pool.filter((id) => players[id]?.skill === "intermediate");
 
-    // Permanent Partner Mode — a fixed partner pair is only ever forced
-    // together WITHIN one division here (each division's pool is passed
-    // separately, see extractFixedPartnerTeams in BalancedRotationEngine),
-    // so a pair spanning Beginner and Intermediate is never force-paired —
-    // Adaptive Skill Rotation's Beginner/Intermediate separation is
-    // structurally untouched by this option.
-    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players, alwaysPairPlayers);
-    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players, alwaysPairPlayers);
+    // Partner Requests — a fixed partner pair is only ever forced together
+    // WITHIN one division here (each division's pool is passed separately,
+    // see extractFixedPartnerTeams in BalancedRotationEngine), so a pair
+    // spanning Beginner and Intermediate is never force-paired — Adaptive
+    // Skill Rotation's Beginner/Intermediate separation is structurally
+    // untouched by this option.
+    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players);
+    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players);
 
     // pool-wide baseline computed once per call, reused for every
     // candidate's tier-4 waiting tiebreak — see waitingBonusFor below
@@ -160,8 +160,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // BalancedRotationEngine's own mixed-pairing loop never finds a partner
   // in the OTHER skill bucket and always needs its same-skill leftover path
   // (pairLeftovers) to pair anyone at all. Nothing about that changes here.
-  generateDivisionMatchups(pool, players, alwaysPairPlayers = false) {
-    const teams = this.divisionEngine.buildTeams(pool, players, true, alwaysPairPlayers);
+  generateDivisionMatchups(pool, players) {
+    const teams = this.divisionEngine.buildTeams(pool, players, true);
     const rawMatchups = this.buildMatchupsFromTeams(teams, players);
     return rawMatchups.map(({ teamA, teamB }) => ({ id: uid(), teamA, teamB }));
   }

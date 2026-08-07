@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-08-07
 
+### Changed
+- **Partner Requests (renamed from "Permanent Partner Mode")** — organizers can request that two players stay teamed together for the rest of the session, set or cleared at any point during the session (check-in or mid-session), for that pair only. Removed the global "Always Pair Players" Session Settings toggle this previously depended on — a partner request now takes effect the moment it's set, with no session-wide setting to turn on first; clearing the request is how an organizer stops pairing that pair. Everyone else continues to rotate exactly as before.
+
 ### Added
 - **Substitute Recommendation** — the Substitute picker (live-court and next-matchup) now flags up to 3 candidates as "(recommended)", prioritized by longest waiting time and never a held player, so a facilitator can see at a glance who most deserves the next open spot without giving up the ability to pick anyone else.
 - **TV Mode Standings optimization** — the broadcast Standings column gains a +/- (point differential) column and relabels "SPR" to "RTG", matching the in-session Standings tab's own Player/W/L/+/-/RTG columns.

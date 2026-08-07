@@ -276,9 +276,8 @@ export const styles = {
     cursor: "pointer",
     flexShrink: 0,
   },
-  // Permanent Partner Mode — see PROJECT.md/FEATURES.md. Compact partner
-  // picker, Waiting Players panel only, shown while Always Pair Players is
-  // on. See WaitingPlayersPanel.jsx.
+  // Partner Requests — see PROJECT.md/FEATURES.md. Compact partner
+  // picker, always shown in the Waiting Players panel. See WaitingPlayersPanel.jsx.
   partnerSelect: {
     background: "var(--chalk)",
     color: "var(--color-text-muted)",

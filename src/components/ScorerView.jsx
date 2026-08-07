@@ -435,8 +435,8 @@ export default function ScorerView({
         onCheckout={checkoutPlayer}
         onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
         onSetPayment={setPlayerPayment}
-        onSetPartner={state.alwaysPairPlayers ? setFixedPartner : null}
-        onClearPartner={state.alwaysPairPlayers ? clearFixedPartner : null}
+        onSetPartner={setFixedPartner}
+        onClearPartner={clearFixedPartner}
         checkedOutPlayers={checkedOutPlayers}
       />
 
@@ -561,7 +561,6 @@ export default function ScorerView({
           showAdaptiveThresholds={rotationMode === "adaptiveSkill"}
           courtDispatchSettings={courtDispatchSettings}
           heldPlayerReminderSettings={state.heldPlayerReminderSettings}
-          alwaysPairPlayers={state.alwaysPairPlayers}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

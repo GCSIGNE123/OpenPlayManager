@@ -447,11 +447,11 @@ export function maxUpcomingMatchups(courts) {
 // scored by the same waiting-time/games-played/repeat-partner-avoidance
 // rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
 // only removes skill as a hard requirement, it doesn't make pairing random.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, alwaysPairPlayers = false) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
   const room = Math.max(0, maxUpcoming - existingMatchups.length);
   if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, alwaysPairPlayers }, true);
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
   return [...existingMatchups, ...newMatchups.slice(0, room)];
 }
 
@@ -469,13 +469,13 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // scorer manually dissolves a matchup), it just no longer differs from
 // refreshNextMatchups in fallback behavior, only in dissolving
 // unlocked/not-held matchups first.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, alwaysPairPlayers = false) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
   const protectedMatchups = existingMatchups.filter((m) => m.locked || m.held);
   const room = Math.max(0, maxUpcoming - protectedMatchups.length);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
-    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, alwaysPairPlayers }, true);
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase }, true);
   return [...protectedMatchups, ...newMatchups.slice(0, room)];
 }
 

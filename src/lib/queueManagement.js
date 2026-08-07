@@ -235,13 +235,12 @@ export function derivePaymentStats(players) {
   return { totalPlayers: checkedIn.length, paid: paid.length, unpaid, cash, gcash };
 }
 
-// Permanent Partner Mode ("Always Pair Players") — see PROJECT.md/
-// FEATURES.md. Facilitator designation of a fixed doubles partner, stored
-// as a mutual `partnerId` pointer on both player records (session-scoped
-// roster data, same precedent as skill/payment fields — never read by
-// anything except BalancedRotationEngine.extractFixedPartnerTeams, and
-// even that only when the alwaysPairPlayers session setting is on). Never
-// touches queueIds/nextMatchups/matchmaking directly — setting a partner
+// Partner Requests — see PROJECT.md/FEATURES.md. Facilitator designation
+// of a fixed doubles partner, stored as a mutual `partnerId` pointer on
+// both player records (session-scoped roster data, same precedent as
+// skill/payment fields — never read by anything except
+// BalancedRotationEngine.extractFixedPartnerTeams, which always honors it,
+// unconditionally, for that one pair). Never touches queueIds/nextMatchups/matchmaking directly — setting a partner
 // mid-session doesn't retroactively change an already-built upcoming
 // matchup, only future matchmaking calls.
 //
@@ -464,6 +463,6 @@ export function regenerate(state) {
     state.progressiveSkillThresholds
   );
   const cap = maxUpcomingMatchups(state.courts);
-  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap, state.alwaysPairPlayers);
+  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap);
   return { ...state, nextMatchups };
 }
