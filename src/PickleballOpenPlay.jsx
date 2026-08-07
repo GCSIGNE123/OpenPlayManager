@@ -192,22 +192,24 @@ export default function PickleballOpenPlay() {
   const [loaded, setLoaded] = useState(false);
 
   // Session Persistence Across Refresh — see PROJECT.md/FEATURES.md. On
-  // mount, restores whatever session was open in THIS tab before an F5/
-  // refresh, instead of dropping back to the landing page and forcing the
-  // facilitator to re-type the join code mid-session. Skipped whenever any
-  // of the URL-driven screens above (?display=, ?openPlayDisplay=,
-  // ?portal=, the /openplay/:code/tv path) already claimed this load —
-  // those are explicit navigations and always take priority. Reads
-  // sessionStorage (ACTIVE_SESSION_STORAGE_KEY) directly rather than a
-  // state variable since this runs once, before any state depending on it
-  // exists yet.
+  // mount, restores whatever session was open on this device before an F5/
+  // refresh (including a mobile pull-to-refresh, or the browser tab being
+  // backgrounded/killed by the OS and reopened later), instead of dropping
+  // back to the landing page and forcing the facilitator to re-type the
+  // join code mid-session. Skipped whenever any of the URL-driven screens
+  // above (?display=, ?openPlayDisplay=, ?portal=, the /openplay/:code/tv
+  // path) already claimed this load — those are explicit navigations and
+  // always take priority. Reads localStorage (ACTIVE_SESSION_STORAGE_KEY —
+  // see its own comment in lib/constants.js for why this is localStorage,
+  // not sessionStorage) directly rather than a state variable since this
+  // runs once, before any state depending on it exists yet.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hasUrlOverride =
       params.get("display") || params.get("openPlayDisplay") || params.get("portal") ||
       window.location.pathname.match(/^\/openplay\/([^/]+)\/tv\/?$/i);
     if (hasUrlOverride) return;
-    const savedCode = sessionStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    const savedCode = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
     if (!savedCode) return;
     (async () => {
       try {
@@ -218,15 +220,15 @@ export default function PickleballOpenPlay() {
           setLoaded(true);
           setScreen("app");
         } else {
-          sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+          localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
         }
       } catch (e) {
-        sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+        localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
       }
     })();
   }, []);
 
-  // Keeps sessionStorage in sync with whichever session is actually open —
+  // Keeps localStorage in sync with whichever session is actually open —
   // one place, rather than writing it at every join/create call site.
   // leaveSession (below) is the one place that clears it, so ending a
   // session or explicitly switching sessions doesn't leave a stale code
@@ -234,7 +236,7 @@ export default function PickleballOpenPlay() {
   // just fails the fetch above and clears itself) try to resume.
   useEffect(() => {
     if (screen === "app" && sessionCode) {
-      sessionStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionCode);
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionCode);
     }
   }, [screen, sessionCode]);
 
@@ -809,7 +811,7 @@ export default function PickleballOpenPlay() {
   };
 
   const leaveSession = () => {
-    sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     setScreen("landing");
     setSessionCode(null);
     setState(defaultState);

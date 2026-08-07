@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Substitute Right Away** — picking a name in the Substitute picker now performs the swap immediately; the separate "Confirm sub" click is gone.
 - **End Match Early continues waiting time** — ending a match that never reached "finished" no longer resets the 4 players' waiting clock to right now; it continues from their true last stopping point instead of making an interrupted match look like a fresh finish.
 
+### Fixed
+- **Mobile refresh/pull-to-refresh reverting to the login page** — session persistence originally used `sessionStorage`, which mobile browsers routinely clear when a backgrounded tab is discarded to reclaim memory, so a facilitator pulling down to refresh (or just switching apps and back) on a phone lost their session. Switched to `localStorage`, which survives that; the earlier staleness concern is now handled instead by Auto-End Aged Sessions, which already ends any session left running 3+ days regardless of what a device remembers locally.
+
 ## 2026-08-06
 
 ### Added
