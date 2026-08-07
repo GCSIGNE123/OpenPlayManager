@@ -727,6 +727,20 @@ export const tvStyles = {
     whiteSpace: "nowrap",
     width: "3.8em",
   },
+  // +/- (point differential) — Standings optimization: color-coded the
+  // same way W/L already are (positive green, negative red, zero neutral)
+  // so it reads at a glance from a distance, same as the other stat
+  // columns. `diff` comes straight off buildStandingsRows, same source
+  // the in-session Standings tab's own +/- column already uses.
+  standingsStatDiff: (diff) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    fontSize: "clamp(13px, 1vw, 16px)",
+    color: diff > 0 ? LIVE : diff < 0 ? LOSS : TEXT_FAINT,
+    textAlign: "right",
+    width: "2.6em",
+    flexShrink: 0,
+  }),
   // ---- Footer ----
   // Reserved ticker/announcement strip — see Future Compatibility in
   // PROJECT.md ("Now Calling" banner, sponsor ads, venue announcements).

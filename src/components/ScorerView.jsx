@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Minus, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
-import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
+import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds, getRecommendedSubstitutes } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
@@ -185,6 +185,11 @@ export default function ScorerView({
   // for elsewhere," which is exactly what this is (nothing to exclude by
   // matchup here — a live court's players aren't in nextMatchups at all)
   const courtCandidates = buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players);
+  // Substitute Recommendation — see PROJECT.md/FEATURES.md. Computed once
+  // here from the same unassignedPlayers pool both substitution surfaces
+  // (live-court and next-matchup) already draw from, so the recommendation
+  // can never disagree with who's actually offered as a candidate.
+  const recommendedSubstituteIds = getRecommendedSubstitutes(unassignedPlayers);
   // Smart Queue Management — a held matchup is reserved but must never be
   // auto-deployed or counted as protecting it from "Regenerate" the same
   // way a locked one is (see PickleballOpenPlay.jsx's
@@ -346,6 +351,7 @@ export default function ScorerView({
                 court={court}
                 players={state.players}
                 candidates={courtCandidates}
+                recommendedIds={recommendedSubstituteIds}
                 onFill={() => fillCourt(i)}
                 onScore={(team, delta) => adjustScore(i, team, delta)}
                 onDeclareWinner={(team) => declareWinner(i, team)}
@@ -405,6 +411,7 @@ export default function ScorerView({
               matchup={m}
               players={state.players}
               candidates={buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players, m.id)}
+              recommendedIds={recommendedSubstituteIds}
               label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
               onReassign={reassignMatchup}
               onSubstitute={substituteInMatchup}

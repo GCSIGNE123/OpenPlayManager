@@ -189,6 +189,43 @@ export function buildReplacementCandidates(nextMatchups, unassignedPlayers, play
   return { waiting: unassignedPlayers, upcoming };
 }
 
+// Substitute Recommendation — see PROJECT.md/FEATURES.md. Surfaces the
+// facilitator's best pick(s) when swapping a player out mid-match: whoever
+// from the waiting queue has been sitting out longest, since that's who
+// most deserves the next open spot. Never recommends a held player — Hold
+// Player means "temporarily excluded from matchmaking on purpose," so a
+// held player is exactly the opposite of someone who should be pulled in.
+// Reuses the exact same "since" fallback WaitingTimer.jsx already displays
+// with (lastMatchEndAt once a player has played, else checkedInAt) — no
+// new field, no new persisted state, and the ranking here can never
+// disagree with what the on-screen waiting timer shows for the same
+// player. Purely a UI ranking hint — doesn't touch queueIds/nextMatchups/
+// matchmaking, and a facilitator can still pick anyone else from the full
+// candidate list.
+// End Match Early — see PROJECT.md/FEATURES.md. Decides what a player's
+// `lastMatchEndAt` (the Waiting Queue Timer's basis, see WaitingTimer.jsx)
+// should become once a match ends: reset to right now for a normally-
+// completed match (the court already reached "finished" — Won/
+// declareWinner already ran, this is just "Confirm result"), or left
+// exactly as it was for an early-ended one (the court was still "live" —
+// the facilitator hit "End match early" directly) — so all 4 players'
+// waiting clock keeps counting from their true last stopping point
+// instead of restarting at zero. An early-ended match shouldn't make a
+// player look freshly rested when they were really just interrupted.
+export function nextLastMatchEndAt(player, matchEndedAt, isEarlyEnd) {
+  return isEarlyEnd ? player.lastMatchEndAt : matchEndedAt;
+}
+
+export function getRecommendedSubstitutes(waitingPlayers, count = 3) {
+  const since = (p) => p.lastMatchEndAt || p.checkedInAt || 0;
+  return (waitingPlayers || [])
+    .filter((p) => p && !p.held)
+    .slice()
+    .sort((a, b) => since(a) - since(b)) // oldest "since" first = longest waiting
+    .slice(0, count)
+    .map((p) => p.id);
+}
+
 // Dissolves whichever upcoming matchup `playerId` is currently reserved in
 // (if any), freeing all 4 of that matchup's players back to the unassigned
 // pool — a matchup can't exist with only 3 players, so pulling one out

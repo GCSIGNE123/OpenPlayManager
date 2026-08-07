@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-07
+
+### Added
+- **Substitute Recommendation** — the Substitute picker (live-court and next-matchup) now flags up to 3 candidates as "(recommended)", prioritized by longest waiting time and never a held player, so a facilitator can see at a glance who most deserves the next open spot without giving up the ability to pick anyone else.
+- **TV Mode Standings optimization** — the broadcast Standings column gains a +/- (point differential) column and relabels "SPR" to "RTG", matching the in-session Standings tab's own Player/W/L/+/-/RTG columns.
+- **Substitute Right Away** — picking a name in the Substitute picker now performs the swap immediately; the separate "Confirm sub" click is gone.
+- **End Match Early continues waiting time** — ending a match that never reached "finished" no longer resets the 4 players' waiting clock to right now; it continues from their true last stopping point instead of making an interrupted match look like a fresh finish.
+
 ## 2026-08-06
 
 ### Added

@@ -10,7 +10,7 @@ import { styles } from "../styles.js";
 // two labeled sections so it's always clear where a candidate is coming
 // from and, for an upcoming one, which matchup they'd be pulled out of.
 // Filters as-you-type by name, case-insensitive, across both sections.
-export default function PlayerPicker({ candidates, selectedId, onSelect, emptyMessage }) {
+export default function PlayerPicker({ candidates, recommendedIds, selectedId, onSelect, emptyMessage }) {
   const [search, setSearch] = useState("");
 
   const waiting = candidates?.waiting ?? [];
@@ -24,7 +24,22 @@ export default function PlayerPicker({ candidates, selectedId, onSelect, emptyMe
   const sortByName = (a, b) => a.name.localeCompare(b.name);
   const filterByQuery = (p) => !query || p.name.toLowerCase().includes(query);
 
-  const filteredWaiting = [...waiting].sort(sortByName).filter(filterByQuery);
+  // Substitute Recommendation — see PROJECT.md/FEATURES.md. `recommendedIds`
+  // (getRecommendedSubstitutes, lib/utils.js) is already priority-ordered
+  // (longest-waiting, never-held first) — those appear first, in that
+  // order, followed by everyone else alphabetically. A search query still
+  // filters across all of them the same as before.
+  const recommendedOrder = recommendedIds ?? [];
+  const recommendedSet = new Set(recommendedOrder);
+  const recommendedWaiting = recommendedOrder
+    .map((id) => waiting.find((p) => p.id === id))
+    .filter(Boolean)
+    .filter(filterByQuery);
+  const restWaiting = [...waiting]
+    .filter((p) => !recommendedSet.has(p.id))
+    .sort(sortByName)
+    .filter(filterByQuery);
+  const filteredWaiting = [...recommendedWaiting, ...restWaiting];
   const filteredUpcoming = [...upcoming].sort(sortByName).filter(filterByQuery);
 
   return (
@@ -49,7 +64,10 @@ export default function PlayerPicker({ candidates, selectedId, onSelect, emptyMe
                     style={{ ...styles.editChip, ...(selectedId === p.id ? styles.editChipA : {}) }}
                     onClick={() => onSelect(p.id)}
                   >
-                    <span style={styles.editChipName}>{p.name}</span>
+                    <span style={styles.editChipName}>
+                      {p.name}
+                      {recommendedSet.has(p.id) && <span style={styles.pickerScheduledTag}> (recommended)</span>}
+                    </span>
                   </button>
                 ))}
               </div>

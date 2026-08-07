@@ -19,6 +19,7 @@ import {
   renameCourt as renameCourtAction,
   courtDisplayName,
   getRegisteredNotHere,
+  nextLastMatchEndAt,
   uid,
   resizeImageToAvatar,
 } from "./lib/utils.js";
@@ -1230,6 +1231,19 @@ export default function PickleballOpenPlay() {
     const aWon = scoreA > scoreB;
     const bWon = scoreB > scoreA;
     const matchEndedAt = Date.now(); // Smart Queue Management — Waiting Queue Timer's source once a player has played
+    // End Match Early — see PROJECT.md/FEATURES.md. A court that never
+    // reached "finished" (no Won/declared winner — the facilitator just hit
+    // "End match early" on a still-"live" court) doesn't get its 4 players'
+    // waiting clock reset to right now. Their `lastMatchEndAt` (the
+    // Waiting Queue Timer's basis, see WaitingTimer.jsx) is left exactly as
+    // it was BEFORE this match started, so their wait continues counting
+    // from their true last stopping point instead of restarting at zero —
+    // an early-ended match shouldn't make 4 players look freshly rested
+    // when they were really just interrupted. A normally-completed match
+    // (status already "finished" — Won/declareWinner already ran, this is
+    // just "Confirm result") still resets the clock as before, since that
+    // player genuinely did just finish playing.
+    const isEarlyEnd = court.status !== "finished";
     teamA.forEach((id) => {
       if (!players[id]) return;
       const p = players[id];
@@ -1241,7 +1255,7 @@ export default function PickleballOpenPlay() {
         streak: aWon ? (p.streak || 0) + 1 : 0,
         lossStreak: bWon ? (p.lossStreak || 0) + 1 : 0,
         lastResult: aWon ? "win" : bWon ? "loss" : p.lastResult,
-        lastMatchEndAt: matchEndedAt,
+        lastMatchEndAt: nextLastMatchEndAt(p, matchEndedAt, isEarlyEnd),
         pointsFor: (p.pointsFor || 0) + scoreA,
         pointsAgainst: (p.pointsAgainst || 0) + scoreB,
       };
@@ -1257,7 +1271,7 @@ export default function PickleballOpenPlay() {
         streak: bWon ? (p.streak || 0) + 1 : 0,
         lossStreak: aWon ? (p.lossStreak || 0) + 1 : 0,
         lastResult: bWon ? "win" : aWon ? "loss" : p.lastResult,
-        lastMatchEndAt: matchEndedAt,
+        lastMatchEndAt: nextLastMatchEndAt(p, matchEndedAt, isEarlyEnd),
         pointsFor: (p.pointsFor || 0) + scoreB,
         pointsAgainst: (p.pointsAgainst || 0) + scoreA,
       };

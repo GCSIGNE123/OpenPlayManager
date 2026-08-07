@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Clock, Lock, Megaphone, Pencil, PhoneCall, Play, Repeat, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
+import { Check, Clock, Lock, Megaphone, Pencil, PhoneCall, Play, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { courtDisplayName } from "../lib/utils.js";
 import Avatar from "./Avatar.jsx";
@@ -10,6 +10,7 @@ export default function CourtCard({
   court,
   players,
   candidates,
+  recommendedIds,
   readOnly,
   onFill,
   onScore,
@@ -73,9 +74,14 @@ export default function CourtCard({
 
   const cancelSub = () => setSubbingId(null);
 
-  const confirmSub = () => {
-    if (!subChoice) return;
-    onSubstitute(subbingId, subChoice);
+  // Substitute Right Away — see PROJECT.md/FEATURES.md. Picking a name from
+  // PlayerPicker now performs the substitution immediately — no separate
+  // "Confirm sub" click required. `subChoice` is still tracked briefly
+  // (PlayerPicker highlights the just-picked chip) but the swap itself
+  // happens on this same click.
+  const chooseSub = (incomingId) => {
+    setSubChoice(incomingId);
+    onSubstitute(subbingId, incomingId);
     setSubbingId(null);
   };
 
@@ -387,11 +393,12 @@ export default function CourtCard({
 
       {isLive && subbingId && (
         <div>
-          <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
+          <p style={styles.editHint}>Substitute for {players[subbingId]?.name} — tap a name to sub in right away</p>
           <PlayerPicker
             candidates={candidates}
+            recommendedIds={recommendedIds}
             selectedId={subChoice}
-            onSelect={setSubChoice}
+            onSelect={chooseSub}
             emptyMessage="No one is available to sub in right now."
           />
           <p style={styles.subReturnLabel}>
@@ -400,14 +407,6 @@ export default function CourtCard({
           <div style={styles.editActions}>
             <button style={styles.secondaryBtn} onClick={cancelSub}>
               Cancel
-            </button>
-            <button
-              style={{ ...styles.primaryBtn, ...(!subChoice ? styles.btnDisabled : {}) }}
-              onClick={confirmSub}
-              disabled={!subChoice}
-            >
-              <Repeat size={14} strokeWidth={3} />
-              Confirm sub
             </button>
           </div>
         </div>

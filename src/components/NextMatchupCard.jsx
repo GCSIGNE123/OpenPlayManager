@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Lock, Pause, Play, Repeat, Shuffle, Unlock, X } from "lucide-react";
+import { Check, Lock, Pause, Play, Shuffle, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -11,6 +11,7 @@ export default function NextMatchupCard({
   matchup,
   players,
   candidates,
+  recommendedIds,
   label,
   onReassign,
   onSubstitute,
@@ -59,9 +60,13 @@ export default function NextMatchupCard({
 
   const cancelSub = () => setSubbingId(null);
 
-  const confirmSub = () => {
-    if (!subChoice) return;
-    onSubstitute(matchup.id, subbingId, subChoice);
+  // Substitute Right Away — see PROJECT.md/FEATURES.md. Picking a name from
+  // PlayerPicker performs the substitution immediately — no separate
+  // "Confirm sub" click required, same as the live-court substitution flow
+  // (CourtCard.jsx).
+  const chooseSub = (incomingId) => {
+    setSubChoice(incomingId);
+    onSubstitute(matchup.id, subbingId, incomingId);
     setSubbingId(null);
   };
 
@@ -147,11 +152,12 @@ export default function NextMatchupCard({
         </div>
       ) : subbingId ? (
         <div>
-          <p style={styles.editHint}>Substitute for {players[subbingId]?.name}</p>
+          <p style={styles.editHint}>Substitute for {players[subbingId]?.name} — tap a name to sub in right away</p>
           <PlayerPicker
             candidates={candidates}
+            recommendedIds={recommendedIds}
             selectedId={subChoice}
-            onSelect={setSubChoice}
+            onSelect={chooseSub}
             emptyMessage="No one else is available to sub in right now."
           />
           <p style={styles.subReturnLabel}>
@@ -160,14 +166,6 @@ export default function NextMatchupCard({
           <div style={styles.editActions}>
             <button style={styles.secondaryBtn} onClick={cancelSub}>
               Cancel
-            </button>
-            <button
-              style={{ ...styles.primaryBtn, ...(!subChoice ? styles.btnDisabled : {}) }}
-              onClick={confirmSub}
-              disabled={!subChoice}
-            >
-              <Repeat size={14} strokeWidth={3} />
-              Confirm sub
             </button>
           </div>
         </div>

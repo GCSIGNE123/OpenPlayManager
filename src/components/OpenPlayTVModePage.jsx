@@ -295,17 +295,18 @@ function UpNextColumn({ nextMatchups, players }) {
   );
 }
 
-// Right column, 30% — Standings. Rank, Photo, Name, W, L, SPR, with a
+// Right column, 30% — Standings. Rank, Photo, Name, W, L, +/-, Rtg, with a
 // labeled header row — TV Mode Standings Expansion reverses Sprint 3.1's
 // "W-L dropped, awareness not analytics" simplification per this sprint's
-// own explicit requirement. "SPR" (Session Performance Rating) is still
-// exactly this app's existing session-only Performance Rating
-// (lib/performanceRating.js, calculatePerformanceRating's `rating` field)
-// — reused verbatim, not recalculated; only the display gained its own
-// column instead of an inline "N SPR" suffix. TV Mode Scoreboard Redesign
-// then sized everything up (avatar 30->40px, every font size increased)
-// for a cleaner, more readable-from-a-distance scoreboard feel — visual
-// only, same data/columns as Standings Expansion introduced.
+// own explicit requirement. Standings optimization then added a +/- (point
+// differential) column between L and Rtg, and relabeled "SPR" to "RTG" for
+// clarity — same data either way: `diff`/`performance.rating` come
+// straight off `buildStandingsRows` (lib/performanceRating.js), the exact
+// same function the in-session Standings tab itself uses, so this
+// broadcast view can never disagree with what Standings shows live. TV
+// Mode Scoreboard Redesign sized everything up (avatar 30->40px, every
+// font size increased) for a cleaner, more readable-from-a-distance
+// scoreboard feel — visual only, unrelated to which columns are shown.
 const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 function StandingsColumn({ players }) {
@@ -323,12 +324,13 @@ function StandingsColumn({ players }) {
             <span style={{ ...ts.standingsHeaderLabel, ...ts.standingsHeaderName }}>Player</span>
             <span style={{ ...ts.standingsHeaderLabel, width: "1.8em", textAlign: "right", flexShrink: 0 }}>W</span>
             <span style={{ ...ts.standingsHeaderLabel, width: "1.8em", textAlign: "right", flexShrink: 0 }}>L</span>
-            <span style={{ ...ts.standingsHeaderLabel, width: "3.8em", textAlign: "right", flexShrink: 0 }}>SPR</span>
+            <span style={{ ...ts.standingsHeaderLabel, width: "2.6em", textAlign: "right", flexShrink: 0 }}>+/-</span>
+            <span style={{ ...ts.standingsHeaderLabel, width: "3.8em", textAlign: "right", flexShrink: 0 }}>RTG</span>
           </div>
           <div style={ts.standingsList}>
             {rows.map((row, i) => {
               const rank = i + 1;
-              const spr = row.performance.rating ?? "—";
+              const rtg = row.performance.rating ?? "—";
               return (
                 <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
                   <span style={ts.standingsRank}>{MEDALS[rank] ?? rank}</span>
@@ -338,7 +340,8 @@ function StandingsColumn({ players }) {
                   <span style={ts.standingsName}>{row.name}</span>
                   <span style={ts.standingsStatWin}>{row.wins}</span>
                   <span style={ts.standingsStatLoss}>{row.losses}</span>
-                  <span style={ts.standingsCompactStat}>{spr}</span>
+                  <span style={ts.standingsStatDiff(row.diff)}>{row.diff > 0 ? `+${row.diff}` : row.diff}</span>
+                  <span style={ts.standingsCompactStat}>{rtg}</span>
                 </div>
               );
             })}
