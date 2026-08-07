@@ -96,6 +96,22 @@ export const ROTATION_MODES = [
   { value: "adaptiveSkill", label: "Adaptive Skill Rotation" },
 ];
 
+// Session Matchmaking Priority — see PROJECT.md/FEATURES.md. NOT a rotation
+// mode: a reusable, optional candidate-ORDERING policy that works alongside
+// any of the ROTATION_MODES above. `null` (the default) means "no explicit
+// priority" — every existing session (and every new one that never touches
+// this setting) keeps its exact current tie-break behavior, unchanged. Only
+// once an organizer explicitly picks one of these does
+// lib/utils.js's sortMatchupsByPriority start reordering the already-fully-
+// formed matchups an engine produced — see that function's own comment for
+// why this never touches partner/opponent diversity, Winner-vs-Winner,
+// promotion/relegation, or division separation.
+export const MATCHMAKING_PRIORITIES = [
+  { value: "longestWaiting", label: "Longest Waiting Time" },
+  { value: "newlyCheckedIn", label: "Newly Checked-In" },
+  { value: "leastGamesPlayed", label: "Least Games Played" },
+];
+
 // chosen once at Create Session — see CreateSessionScreen.jsx. Gates which
 // selector shows next: "openPlay" shows Rotation Strategy (ROTATION_MODES,
 // stored as rotationMode); "tournament" hides it and shows Tournament
@@ -201,5 +217,8 @@ export const defaultState = {
     voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
     announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
   },
+  matchmakingPriority: null, // Session Matchmaking Priority — see MATCHMAKING_PRIORITIES above. null = no explicit priority (existing behavior, unaffected)
+  queueingStopped: false, // Stop Queueing — see PROJECT.md/FEATURES.md. While true: save() skips generating any NEW matchups and skips automatic dispatch; existing live matches and existing nextMatchups entries are completely unaffected, and the facilitator can still manually dispatch (Assign match / Fill all open courts) from whatever's already queued. Resume Queueing (flip back to false) restores normal automatic behavior instantly, next save().
+  pendingCourtRemovals: 0, // Dynamic Court Count — see PROJECT.md/FEATURES.md. Incremented by requestRemoveCourt (lib/queueManagement.js) when the organizer removes a court that isn't idle right now; applyPendingCourtRemovals (run every save(), same "reacts on every save" precedent as Smart Court Dispatch) removes the last court and decrements this the moment that specific court is actually open, never losing a live match and never dropping below 1 court total.
   updatedAt: 0,
 };

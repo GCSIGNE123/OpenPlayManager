@@ -2,7 +2,7 @@ import { Minus, Plus, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 
-export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout, hideAvatar, startIndex }) {
+export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout, hideAvatar, hidePayment, startIndex }) {
   return (
     <div style={styles.teamRow}>
       <div style={styles.teamPlayers}>
@@ -14,6 +14,7 @@ export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly
             onSubClick={onRequestSub ? () => onRequestSub(id) : null}
             onCheckoutClick={onRequestCheckout ? () => onRequestCheckout(id) : null}
             hideAvatar={hideAvatar}
+            hidePayment={hidePayment}
             index={typeof startIndex === "number" ? startIndex + i : undefined}
           />
         ))}

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Minus, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
-import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds, getRecommendedSubstitutes } from "../lib/utils.js";
+import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
@@ -126,10 +126,8 @@ export default function ScorerView({
   removePlayer,
   checkoutPlayer,
   changePlayerSkill,
-  setPlayerPayment,
   setFixedPartner,
   clearFixedPartner,
-  paymentStats,
   skillChangeMsg,
   skillChangeLog,
   queueActivityLog,
@@ -153,6 +151,10 @@ export default function ScorerView({
   endSession,
   updateSessionSettings,
   reservedCourtNumbers,
+  matchmakingPriority,
+  queueingStopped,
+  onToggleQueueing,
+  pendingCourtRemovals,
 }) {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   // Player Checkout During Open Play — see PROJECT.md. Confirming a
@@ -185,20 +187,20 @@ export default function ScorerView({
   // for elsewhere," which is exactly what this is (nothing to exclude by
   // matchup here — a live court's players aren't in nextMatchups at all)
   const courtCandidates = buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players);
-  // Substitute Recommendation — see PROJECT.md/FEATURES.md. Computed once
-  // here from the same unassignedPlayers pool both substitution surfaces
-  // (live-court and next-matchup) already draw from, so the recommendation
-  // can never disagree with who's actually offered as a candidate.
-  const recommendedSubstituteIds = getRecommendedSubstitutes(unassignedPlayers);
   // Smart Queue Management — a held matchup is reserved but must never be
   // auto-deployed or counted as protecting it from "Regenerate" the same
   // way a locked one is (see PickleballOpenPlay.jsx's
   // takeNextDeployableMatchup/regenerateNextMatchups).
   const canFillCourt = nextMatchups.some((m) => !m.held);
   const canRegenerate = nextMatchups.some((m) => !m.locked && !m.held);
-  const lastCourt = state.courts[state.courts.length - 1];
   const canAddCourt = state.courts.length < 8;
-  const canRemoveCourt = state.courts.length > 1 && lastCourt?.status === "open";
+  // Dynamic Court Count — see PROJECT.md/FEATURES.md. Removal is always
+  // available (down to 1 court) — it no longer requires the last court to
+  // already be idle right now: requestRemoveCourt (lib/queueManagement.js)
+  // removes it immediately if it's open, or queues the removal for
+  // save()'s applyPendingCourtRemovals to complete automatically the
+  // instant that court's live match ends.
+  const canRemoveCourt = state.courts.length > 1;
   const hasOpenAutomaticCourt = state.courts.some((c) => c.status === "open" && c.assignmentMode !== "manual");
   // rotation mode is now chosen once at session creation (Create Session
   // screen) — this is a read-only label, not a control, so the organizer
@@ -237,7 +239,7 @@ export default function ScorerView({
                 onClick={removeCourt}
                 disabled={!canRemoveCourt}
                 aria-label="remove a court"
-                title={canRemoveCourt ? "Remove last court" : "Can't remove a court that's in use"}
+                title="Remove last court — immediately if it's idle, otherwise as soon as its current match ends"
               >
                 <Minus size={12} strokeWidth={3} />
               </button>
@@ -252,6 +254,11 @@ export default function ScorerView({
                 <Plus size={12} strokeWidth={3} />
               </button>
             </span>
+            {pendingCourtRemovals > 0 && (
+              <span style={styles.pendingRemovalTag} title="Waiting for its current match to end before removing">
+                {pendingCourtRemovals} pending removal{pendingCourtRemovals === 1 ? "" : "s"}
+              </span>
+            )}
           </span>
         </div>
         <div style={styles.sessionInfoItem}>
@@ -299,12 +306,32 @@ export default function ScorerView({
             <Shuffle size={16} strokeWidth={2.5} />
             Fill all open courts
           </button>
+          {onToggleQueueing && (
+            <button
+              style={{ ...styles.secondaryBtn, margin: 0 }}
+              onClick={onToggleQueueing}
+              title={
+                queueingStopped
+                  ? "Resume Queueing — go back to generating new matchups and automatic dispatch"
+                  : "Stop Queueing — finish the matches already on court and queued, but stop creating new ones"
+              }
+            >
+              {queueingStopped ? <Play size={14} strokeWidth={2.5} /> : <Pause size={14} strokeWidth={2.5} />}
+              {queueingStopped ? "Resume Queueing" : "Stop Queueing"}
+            </button>
+          )}
           <button style={styles.dangerBtn} onClick={endSession}>
             <X size={14} strokeWidth={2.5} />
             End session
           </button>
         </div>
       </div>
+
+      {queueingStopped && (
+        <div style={styles.confirmMsg}>
+          Queueing is stopped — existing matches continue, but no new matchups will be created or auto-dispatched.
+        </div>
+      )}
 
       {skillChangeMsg && (
         <div style={styles.confirmMsg}>{skillChangeMsg}</div>
@@ -351,7 +378,6 @@ export default function ScorerView({
                 court={court}
                 players={state.players}
                 candidates={courtCandidates}
-                recommendedIds={recommendedSubstituteIds}
                 onFill={() => fillCourt(i)}
                 onScore={(team, delta) => adjustScore(i, team, delta)}
                 onDeclareWinner={(team) => declareWinner(i, team)}
@@ -395,10 +421,10 @@ export default function ScorerView({
                 </button>
               )}
               <button
-                style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate ? styles.btnDisabled : {}) }}
+                style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate || queueingStopped ? styles.btnDisabled : {}) }}
                 onClick={regenerateMatchups}
-                disabled={!canRegenerate}
-                title="Rebuild every not-locked matchup from scratch"
+                disabled={!canRegenerate || queueingStopped}
+                title={queueingStopped ? "Queueing is stopped — no new matchups can be generated" : "Rebuild every not-locked matchup from scratch"}
               >
                 <RefreshCw size={13} strokeWidth={2.5} />
                 Regenerate
@@ -411,7 +437,6 @@ export default function ScorerView({
               matchup={m}
               players={state.players}
               candidates={buildReplacementCandidates(nextMatchups, unassignedPlayers, state.players, m.id)}
-              recommendedIds={recommendedSubstituteIds}
               label={i === 0 ? "Next up" : `Then · matchup ${i + 1}`}
               onReassign={reassignMatchup}
               onSubstitute={substituteInMatchup}
@@ -434,28 +459,10 @@ export default function ScorerView({
         onRemove={removePlayer}
         onCheckout={checkoutPlayer}
         onChangeSkill={rotationMode === "adaptiveSkill" ? changePlayerSkill : null}
-        onSetPayment={setPlayerPayment}
         onSetPartner={setFixedPartner}
         onClearPartner={clearFixedPartner}
         checkedOutPlayers={checkedOutPlayers}
       />
-
-      {paymentStats && (
-        <div style={styles.paymentStatsPanel}>
-          <span style={styles.paymentStatsItem}>
-            Players Paid: <strong>{paymentStats.paid}</strong>
-          </span>
-          <span style={styles.paymentStatsItem}>
-            Players Unpaid: <strong>{paymentStats.unpaid}</strong>
-          </span>
-          <span style={styles.paymentStatsItem}>
-            Cash: <strong>{paymentStats.cash}</strong>
-          </span>
-          <span style={styles.paymentStatsItem}>
-            GCash: <strong>{paymentStats.gcash}</strong>
-          </span>
-        </div>
-      )}
 
       {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
         <>
@@ -561,6 +568,7 @@ export default function ScorerView({
           showAdaptiveThresholds={rotationMode === "adaptiveSkill"}
           courtDispatchSettings={courtDispatchSettings}
           heldPlayerReminderSettings={state.heldPlayerReminderSettings}
+          matchmakingPriority={matchmakingPriority}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

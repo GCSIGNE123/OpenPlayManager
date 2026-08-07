@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-08
+
+### Added
+- **Better Player Substitution** — every candidate in the Substitute picker now shows Skill, Games Played, and live Waiting Time, plus a "⭐⭐ Recommended" tag with a specific reason (Tournament partner / Longest waiting / Same skill level) for up to 3 candidates. Informational only — the facilitator always has the final decision.
+- **Session Matchmaking Priority** — a new Session Setting (Longest Waiting Time / Newly Checked-In / Least Games Played), not a rotation mode: a reusable ordering policy that works alongside any Rotation Mode, only affecting which already-built matchups get courts first when there isn't room for everyone. Defaults to no explicit priority — every existing session keeps its exact current behavior unless an organizer opts in.
+- **Persistent Tournament Partners** — a requested partner pair now explicitly stays linked through Hold/Resume, Checkout, a skill change, or a Promotion/Relegation, resuming automatically the instant both players are eligible again, until the facilitator removes the request (Create/Change/Remove Partner).
+- **Dynamic Court Count** — organizers can remove a court at any point during an active session; a removal is applied immediately if the court is idle, or queued until its live match ends — never losing a match in progress.
+- **Stop Queueing** — a new Session Control button: existing live and queued matches continue, but no new matchups are generated and no new automatic dispatch happens, until "Resume Queueing" is clicked. Manual dispatch of whatever's already queued still works.
+- **Dedicated Payment tab** — all payment management moved out of the Scorer tab into its own "Payment" tab, protected by the same PIN as Scorer with its own independent unlock.
+
+### Removed
+- **Held Player floating reminder banner** — the popup card is gone per facilitator feedback; the underlying safeguard (thresholds, timers, and its Queue Activity Log entry) is unchanged and still recorded, just no longer surfaced as an unprompted popup.
+
 ## 2026-08-07
 
 ### Changed

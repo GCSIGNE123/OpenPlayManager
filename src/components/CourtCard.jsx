@@ -10,7 +10,6 @@ export default function CourtCard({
   court,
   players,
   candidates,
-  recommendedIds,
   readOnly,
   onFill,
   onScore,
@@ -313,12 +312,12 @@ export default function CourtCard({
           <div style={styles.courtLiveRow}>
             <div style={styles.courtTeamHalf}>
               <span style={styles.courtTeamBadge}>Team A</span>
-              <TeamRow ids={court.teamA} players={players} score={0} readOnly hideAvatar={hideAvatar} startIndex={0} />
+              <TeamRow ids={court.teamA} players={players} score={0} readOnly hideAvatar={hideAvatar} hidePayment startIndex={0} />
             </div>
             <div style={styles.courtVerticalDivider} />
             <div style={styles.courtTeamHalf}>
               <span style={styles.courtTeamBadge}>Team B</span>
-              <TeamRow ids={court.teamB} players={players} score={0} readOnly hideAvatar={hideAvatar} startIndex={court.teamA.length} />
+              <TeamRow ids={court.teamB} players={players} score={0} readOnly hideAvatar={hideAvatar} hidePayment startIndex={court.teamA.length} />
             </div>
           </div>
           <p style={styles.awaitingPairText}>
@@ -396,7 +395,7 @@ export default function CourtCard({
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name} — tap a name to sub in right away</p>
           <PlayerPicker
             candidates={candidates}
-            recommendedIds={recommendedIds}
+            outgoingPlayer={players[subbingId]}
             selectedId={subChoice}
             onSelect={chooseSub}
             emptyMessage="No one is available to sub in right now."
@@ -417,12 +416,12 @@ export default function CourtCard({
           <div style={styles.courtLiveRow}>
             <div style={styles.courtTeamHalf}>
               <span style={styles.courtTeamBadge}>Team A</span>
-              <TeamRow ids={court.teamA} players={players} score={court.scoreA} readOnly leading={court.scoreA > court.scoreB} hideAvatar={hideAvatar} startIndex={0} />
+              <TeamRow ids={court.teamA} players={players} score={court.scoreA} readOnly leading={court.scoreA > court.scoreB} hideAvatar={hideAvatar} hidePayment={hideAvatar} startIndex={0} />
             </div>
             <div style={styles.courtVerticalDivider} />
             <div style={styles.courtTeamHalf}>
               <span style={styles.courtTeamBadge}>Team B</span>
-              <TeamRow ids={court.teamB} players={players} score={court.scoreB} readOnly leading={court.scoreB > court.scoreA} hideAvatar={hideAvatar} startIndex={court.teamA.length} />
+              <TeamRow ids={court.teamB} players={players} score={court.scoreB} readOnly leading={court.scoreB > court.scoreA} hideAvatar={hideAvatar} hidePayment={hideAvatar} startIndex={court.teamA.length} />
             </div>
           </div>
           <p style={styles.awaitingPairText}>
@@ -450,6 +449,7 @@ export default function CourtCard({
               onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
               onRequestCheckout={!readOnly ? onRequestCheckout : null}
               hideAvatar={hideAvatar}
+              hidePayment={hideAvatar}
               startIndex={0}
             />
           </div>
@@ -468,6 +468,7 @@ export default function CourtCard({
               onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
               onRequestCheckout={!readOnly ? onRequestCheckout : null}
               hideAvatar={hideAvatar}
+              hidePayment={hideAvatar}
               startIndex={court.teamA.length}
             />
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { styles } from "../styles.js";
+import { MATCHMAKING_PRIORITIES } from "../lib/constants.js";
 
 // Announcement Delay — see PROJECT.md/FEATURES.md. Immediate / 2s
 // (default) / 5s / 10s, stored as milliseconds.
@@ -26,6 +27,7 @@ export default function SessionSettingsDialog({
   showAdaptiveThresholds,
   courtDispatchSettings,
   heldPlayerReminderSettings,
+  matchmakingPriority,
   onSave,
   onClose,
 }) {
@@ -52,6 +54,11 @@ export default function SessionSettingsDialog({
   const [voiceURIDraft, setVoiceURIDraft] = useState(courtDispatchSettings?.voiceURI ?? "");
   const [announcementDelayDraft, setAnnouncementDelayDraft] = useState(courtDispatchSettings?.announcementDelayMs ?? 2000);
   const [availableVoices, setAvailableVoices] = useState([]);
+
+  // Session Matchmaking Priority — see PROJECT.md/FEATURES.md. Rotation-
+  // mode-agnostic, always shown — a reusable candidate-ordering policy, not
+  // a rotation mode itself, so it applies no matter which one is active.
+  const [matchmakingPriorityDraft, setMatchmakingPriorityDraft] = useState(matchmakingPriority || "");
 
   // Voice list — window.speechSynthesis.getVoices() is frequently empty
   // until the browser fires 'voiceschanged' (a well-known quirk), so this
@@ -102,6 +109,7 @@ export default function SessionSettingsDialog({
         thresholdRounds: Math.max(1, Number(heldThresholdRoundsDraft) || 3),
         repeatIntervalMinutes: Math.max(1, Number(heldRepeatIntervalDraft) || 10),
       },
+      matchmakingPriority: matchmakingPriorityDraft || null,
     });
     onClose();
   };
@@ -238,6 +246,25 @@ export default function SessionSettingsDialog({
               />
             </label>
           </div>
+        </div>
+
+        <div style={styles.dialogField}>
+          <label style={styles.dialogLabel}>Matchmaking Priority</label>
+          <p style={styles.dialogReadOnlyValue}>
+            A reusable ordering policy, not a rotation mode — works alongside whichever Rotation Mode is active. Only changes which already-built matchups get courts first when there isn't room for everyone; never changes who's teamed with whom.
+          </p>
+          <select
+            style={styles.input}
+            value={matchmakingPriorityDraft}
+            onChange={(e) => setMatchmakingPriorityDraft(e.target.value)}
+          >
+            <option value="">None (default order)</option>
+            {MATCHMAKING_PRIORITIES.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div style={styles.dialogField}>

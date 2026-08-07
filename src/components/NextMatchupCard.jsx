@@ -11,7 +11,6 @@ export default function NextMatchupCard({
   matchup,
   players,
   candidates,
-  recommendedIds,
   label,
   onReassign,
   onSubstitute,
@@ -155,7 +154,7 @@ export default function NextMatchupCard({
           <p style={styles.editHint}>Substitute for {players[subbingId]?.name} — tap a name to sub in right away</p>
           <PlayerPicker
             candidates={candidates}
-            recommendedIds={recommendedIds}
+            outgoingPlayer={players[subbingId]}
             selectedId={subChoice}
             onSelect={chooseSub}
             emptyMessage="No one else is available to sub in right now."
@@ -180,6 +179,7 @@ export default function NextMatchupCard({
                   onSubClick={() => startSub(id)}
                   onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
                   hideAvatar
+                  hidePayment
                   index={i}
                 />
               ))}
@@ -193,6 +193,7 @@ export default function NextMatchupCard({
                   onSubClick={() => startSub(id)}
                   onMoveToQueueClick={onMoveToQueue ? () => onMoveToQueue(id) : null}
                   hideAvatar
+                  hidePayment
                   index={matchup.teamA.length + i}
                 />
               ))}

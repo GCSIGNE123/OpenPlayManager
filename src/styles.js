@@ -888,6 +888,45 @@ export const styles = {
     color: "var(--color-text-muted)",
     marginTop: 1,
   },
+  // Better Player Substitution — see PROJECT.md/FEATURES.md. Skill/games/
+  // waiting-time row shown under every candidate name in PlayerPicker.
+  pickerCandidateMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  pickerCandidateStat: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10,
+    fontWeight: 600,
+    color: "var(--color-text-faint)",
+  },
+  pickerRecommendedTag: {
+    display: "block",
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "var(--color-success)",
+    marginTop: 2,
+  },
+  pickerRecommendedReason: {
+    display: "block",
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+    textTransform: "none",
+  },
+  // Dynamic Court Count — see PROJECT.md/FEATURES.md. Small indicator next
+  // to the court +/- stepper when a removal is queued waiting for its
+  // court to become idle.
+  pendingRemovalTag: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10,
+    fontWeight: 700,
+    color: "var(--coral)",
+    marginLeft: 6,
+  },
   editWarning: {
     fontSize: 11.5,
     color: "var(--coral)",

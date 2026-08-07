@@ -3,7 +3,7 @@ import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import PaymentBadge from "./PaymentBadge.jsx";
 
-export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick, hideAvatar, index }) {
+export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueueClick, onCheckoutClick, hideAvatar, hidePayment, index }) {
   if (!player) return null;
   return (
     <div style={styles.playerChip}>
@@ -18,7 +18,12 @@ export default function PlayerChip({ player, highlight, onSubClick, onMoveToQueu
       {player.skill && (
         <span style={styles.skillTag(player.skill)}>{player.skill === "intermediate" ? "INT" : "BEG"}</span>
       )}
-      {player.checkedIn && <PaymentBadge player={player} />}
+      {/* Dedicated Payment tab — see PROJECT.md/FEATURES.md. Payment
+          management moved entirely to its own tab; hidePayment (passed by
+          every Scorer-tab caller of this shared component) suppresses this
+          badge there while leaving it exactly as-is for BoardView/
+          TournamentCourtsView, which never pass it. */}
+      {!hidePayment && player.checkedIn && <PaymentBadge player={player} />}
       {onMoveToQueueClick && (
         <button
           style={styles.moveToQueueBtn}

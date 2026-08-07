@@ -226,6 +226,60 @@ export function getRecommendedSubstitutes(waitingPlayers, count = 3) {
     .map((p) => p.id);
 }
 
+// Since a player last stopped playing (or checked in, if they haven't played
+// yet) — the exact same fallback WaitingTimer.jsx displays with. Exported so
+// both getRecommendedSubstitutes/getSubstituteRecommendations and
+// PlayerPicker's own row rendering read from one shared definition.
+export function sinceWaiting(p) {
+  return p?.lastMatchEndAt || p?.checkedInAt || 0;
+}
+
+// Better Player Substitution — see PROJECT.md/FEATURES.md. Extends the
+// original longest-waiting-only Substitute Recommendation with two more
+// reasons a candidate might be worth recommending, each attached to the
+// SPECIFIC candidate(s) it actually applies to rather than blended into one
+// score: a facilitator sees exactly why each flagged name was suggested.
+// Still purely informational/a ranking hint — never touches queueIds/
+// nextMatchups/matchmaking, and the facilitator can pick anyone else from
+// the full list regardless of what's recommended here.
+//
+// Priority order when the cap is reached (count, default 3): (1) the
+// outgoing player's Tournament Partner (see setFixedPartner/
+// clearFixedPartner, lib/queueManagement.js), if they're currently eligible
+// to sub in — reinstating the requested pair immediately, if possible, is
+// the single most relevant recommendation; (2) longest-waiting, same
+// "since" fallback the on-screen waiting timer already uses; (3) same skill
+// level as the outgoing player, only used to fill any remaining slots. A
+// held player is never recommended for any reason — Hold Player means
+// deliberately excluded from matchmaking. Each returned candidate gets
+// exactly one reason (the highest-priority one that applied), matching the
+// "⭐⭐ Recommended / {reason}" mockup — a candidate is never shown with more
+// than one reason at once, even if several technically apply.
+export function getSubstituteRecommendations(waitingPlayers, outgoingPlayer, count = 3) {
+  const eligible = (waitingPlayers || []).filter((p) => p && !p.held);
+  const picked = new Map(); // id -> reason, insertion order = priority order
+
+  if (outgoingPlayer?.partnerId) {
+    const partner = eligible.find((p) => p.id === outgoingPlayer.partnerId);
+    if (partner) picked.set(partner.id, "Tournament partner");
+  }
+
+  const byWait = [...eligible].sort((a, b) => sinceWaiting(a) - sinceWaiting(b));
+  for (const p of byWait) {
+    if (picked.size >= count) break;
+    if (!picked.has(p.id)) picked.set(p.id, "Longest waiting");
+  }
+
+  if (outgoingPlayer?.skill) {
+    for (const p of eligible) {
+      if (picked.size >= count) break;
+      if (!picked.has(p.id) && p.skill === outgoingPlayer.skill) picked.set(p.id, "Same skill level");
+    }
+  }
+
+  return [...picked.entries()].map(([id, reason]) => ({ id, reason }));
+}
+
 // Dissolves whichever upcoming matchup `playerId` is currently reserved in
 // (if any), freeing all 4 of that matchup's players back to the unassigned
 // pool — a matchup can't exist with only 3 players, so pulling one out
@@ -447,12 +501,13 @@ export function maxUpcomingMatchups(courts) {
 // scored by the same waiting-time/games-played/repeat-partner-avoidance
 // rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
 // only removes skill as a hard requirement, it doesn't make pairing random.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null) {
   const room = Math.max(0, maxUpcoming - existingMatchups.length);
   if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
-  return [...existingMatchups, ...newMatchups.slice(0, room)];
+  const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
+  return [...existingMatchups, ...ordered.slice(0, room)];
 }
 
 // "Regenerate matchups": dissolves every not-locked-and-not-held upcoming
@@ -469,14 +524,56 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // scorer manually dissolves a matchup), it just no longer differs from
 // refreshNextMatchups in fallback behavior, only in dissolving
 // unlocked/not-held matchups first.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null) {
   const protectedMatchups = existingMatchups.filter((m) => m.locked || m.held);
   const room = Math.max(0, maxUpcoming - protectedMatchups.length);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
     : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase }, true);
-  return [...protectedMatchups, ...newMatchups.slice(0, room)];
+  const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
+  return [...protectedMatchups, ...ordered.slice(0, room)];
+}
+
+// Session Matchmaking Priority — see PROJECT.md/FEATURES.md and
+// MATCHMAKING_PRIORITIES (lib/constants.js). A reusable candidate-ORDERING
+// policy applied here, in the one shared choke point every rotation mode's
+// generated matchups already flow through (refreshNextMatchups/
+// regenerateNextMatchups above) — so Continuous, Winner Pool's general
+// queue, Progressive Skill, and Adaptive Skill Rotation all get this for
+// free, with zero engine-specific code and nothing added to any engine
+// file. Deliberately a POST-hoc re-sort of matchups an engine has ALREADY
+// fully decided (who's on which team, who's facing whom) — partner
+// diversity (scorePartner), opponent diversity (scoreOpponents),
+// Winner-vs-Winner, promotion/relegation, and Beginner/Intermediate
+// division separation are all untouched, since none of that math is
+// touched here; this only changes which of the already-built matchups ends
+// up at the FRONT of the list — which matters because that's what
+// determines who's dispatched first and who survives the queue-depth cap's
+// slice whenever there isn't room/courts for everyone waiting. `null`
+// (no priority set) returns the list completely unchanged — the exact
+// order the engine itself produced, same as before this feature existed.
+export function sortMatchupsByPriority(matchups, players, priority) {
+  if (!priority) return matchups;
+  return [...matchups].sort(
+    (a, b) => matchupPriorityValue(a, players, priority) - matchupPriorityValue(b, players, priority)
+  );
+}
+
+function matchupPriorityValue(matchup, players, priority) {
+  const ids = [...matchup.teamA, ...matchup.teamB];
+  if (priority === "leastGamesPlayed") {
+    return ids.reduce((sum, id) => sum + (players[id]?.games || 0), 0) / ids.length;
+  }
+  if (priority === "newlyCheckedIn") {
+    // most-recently-checked-in first -> negate so the sort's ascending
+    // comparator still means "best/first"
+    const avgCheckedInAt = ids.reduce((sum, id) => sum + (players[id]?.checkedInAt || 0), 0) / ids.length;
+    return -avgCheckedInAt;
+  }
+  // "longestWaiting" — oldest average "since" first, same fallback
+  // sinceWaiting()/WaitingTimer.jsx already use
+  return ids.reduce((sum, id) => sum + sinceWaiting(players[id]), 0) / ids.length;
 }
 
 // records partner/opponent/court history on all 4 players in a just-ended

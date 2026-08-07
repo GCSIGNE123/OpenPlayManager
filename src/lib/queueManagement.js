@@ -463,6 +463,61 @@ export function regenerate(state) {
     state.progressiveSkillThresholds
   );
   const cap = maxUpcomingMatchups(state.courts);
-  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap);
+  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap, state.matchmakingPriority);
   return { ...state, nextMatchups };
+}
+
+// Dynamic Court Count — see PROJECT.md/FEATURES.md. Removing a court that's
+// currently live would lose a match in progress, so this never removes one
+// immediately unless it's actually safe to: only ever the LAST court (same
+// numbering-stays-contiguous convention addCourt already relies on,
+// `number: courts.length + 1`), and only while it's genuinely idle
+// ("open" — not live/dispatching/finished). If it isn't idle right now, the
+// request is queued (pendingCourtRemovals) instead of blocked outright —
+// applyPendingCourtRemovals below completes it automatically the moment
+// that specific court frees up, with no further facilitator action needed.
+// Never removes the last remaining court (a session always keeps at least
+// one).
+export function requestRemoveCourt(state) {
+  const courts = state.courts || [];
+  if (courts.length <= 1) return state;
+  const last = courts[courts.length - 1];
+  if (last.status === "open") {
+    return { ...state, courts: courts.slice(0, -1) };
+  }
+  return { ...state, pendingCourtRemovals: (state.pendingCourtRemovals || 0) + 1 };
+}
+
+// Inverse of requestRemoveCourt — lets the organizer back out of a queued
+// (not-yet-applied) removal before it actually happens. A no-op if nothing
+// is currently queued.
+export function cancelPendingCourtRemoval(state) {
+  if (!state.pendingCourtRemovals) return state;
+  return { ...state, pendingCourtRemovals: state.pendingCourtRemovals - 1 };
+}
+
+// Dynamic Court Count — applies any still-queued court removal(s) the
+// moment it becomes safe to. Called from PickleballOpenPlay.jsx's save(),
+// the same single write path Smart Court Dispatch already reacts inside of
+// on every state change — so a removal requested while every court was
+// occupied completes automatically as soon as the LAST court's match ends
+// and that court resets to "open", with zero facilitator action needed.
+// Runs BEFORE dispatchAvailableCourts in save() so a freshly-freed court a
+// removal is waiting on gets removed instead of immediately re-filled by
+// automatic dispatch. Never drops below 1 court total; a still-pending
+// removal (the last court still isn't idle yet) is simply left queued for
+// the next save() to try again — Smart Court Dispatch, the queue-depth cap,
+// and voice announcements all read the (possibly now-shorter) courts array
+// fresh on every call, so nothing else needs separate wiring to "notice"
+// the removal.
+export function applyPendingCourtRemovals(state) {
+  let pending = state.pendingCourtRemovals || 0;
+  if (pending <= 0) return state;
+  let courts = state.courts || [];
+  while (pending > 0 && courts.length > 1 && courts[courts.length - 1].status === "open") {
+    courts = courts.slice(0, -1);
+    pending -= 1;
+  }
+  if (courts === state.courts && pending === (state.pendingCourtRemovals || 0)) return state;
+  return { ...state, courts, pendingCourtRemovals: pending };
 }

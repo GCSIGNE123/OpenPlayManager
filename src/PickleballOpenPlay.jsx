@@ -37,9 +37,10 @@ import {
   noteDissolvedHeldMatchups,
   getPlayersNeedingHeldReminder,
   markHeldReminderShown,
-  getLastCourtForPlayer,
   setPlayerPayment as setPlayerPaymentAction,
   derivePaymentStats,
+  requestRemoveCourt as requestRemoveCourtAction,
+  applyPendingCourtRemovals,
 } from "./lib/queueManagement.js";
 import {
   selectNextDispatchableMatchup,
@@ -72,8 +73,8 @@ import ScorerView from "./components/ScorerView.jsx";
 import StandingsView from "./components/StandingsView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
 import SessionAnalyticsReport from "./components/SessionAnalyticsReport.jsx";
-import HeldPlayerReminderBanner from "./components/HeldPlayerReminderBanner.jsx";
 import OpenPlaySessionHistoryScreen from "./components/OpenPlaySessionHistoryScreen.jsx";
+import PaymentView from "./components/PaymentView.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import OpenPlayTVModePage from "./components/OpenPlayTVModePage.jsx";
@@ -278,10 +279,18 @@ export default function PickleballOpenPlay() {
       clearInterval(interval);
     };
   }, [screen, loaded, state.sessionType]);
-  const [view, setView] = useState("board"); // board | checkin | standings | scorer
+  const [view, setView] = useState("board"); // board | checkin | standings | scorer | payment
   const [scorerAuthed, setScorerAuthed] = useState(false);
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState("");
+  // Dedicated Payment tab — see PROJECT.md/FEATURES.md. Protected with the
+  // exact same SCORER_PIN as the Scorer tab, but its OWN authed state — a
+  // facilitator who's already unlocked Scorer still has to unlock Payment
+  // separately, same security-boundary precedent as Scorer PIN auth itself
+  // (deliberately not persisted across a refresh either).
+  const [paymentAuthed, setPaymentAuthed] = useState(false);
+  const [paymentPin, setPaymentPin] = useState("");
+  const [paymentPinError, setPaymentPinError] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [skillInput, setSkillInput] = useState("beginner");
   const [photoDataUrl, setPhotoDataUrl] = useState(null);
@@ -301,17 +310,6 @@ export default function PickleballOpenPlay() {
   // preference is a per-device UI choice, not something to sync to every
   // other connected scorer device.
   const [queueActivityLogExpanded, setQueueActivityLogExpanded] = useState(false);
-  // Held Player Reminder — see PROJECT.md/FEATURES.md. Which currently-held
-  // players' reminders are visible right now, this device. Lifted up here
-  // (not local to ScorerView) for the same reason queueActivityLogExpanded
-  // above is: ScorerView unmounts on every tab switch, and a reminder that's
-  // already due shouldn't vanish just because the facilitator glanced at
-  // another tab. "Keep Held" only ever removes an id from this LOCAL set
-  // (see cancelHeldReminder below) — it never touches session state, so it
-  // can never affect matchmaking. The reminder becomes due again, on its
-  // own, once heldReminderLastShownAt's repeat interval elapses — see the
-  // ticking effect below.
-  const [heldReminderVisibleIds, setHeldReminderVisibleIds] = useState([]);
   const [saveError, setSaveError] = useState("");
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -365,6 +363,11 @@ export default function PickleballOpenPlay() {
   const save = useCallback(
     async (next) => {
       if (!sessionCode) return;
+      // Dynamic Court Count — see PROJECT.md/FEATURES.md. Runs first, before
+      // anything else in save(), so a court a pending removal is waiting on
+      // gets removed the instant it's idle, rather than automatic dispatch
+      // below immediately re-filling it with a fresh matchup first.
+      next = applyPendingCourtRemovals(next);
       // recomputed on every save: appends any newly-possible matchups from
       // players not already locked into one, leaving existing (possibly
       // scorer-edited) matchups untouched — see refreshNextMatchups. Which
@@ -390,16 +393,24 @@ export default function PickleballOpenPlay() {
       // for every listed event (check-in, checkout, resume, skip, held-
       // player-resume, matchup-cancelled): they all flow through this same
       // save(), so every one of them re-evaluates the cap for free.
+      // Stop Queueing — see PROJECT.md/FEATURES.md. While the session's
+      // queueing is stopped, save() must never append a newly-generated
+      // matchup — existing nextMatchups entries (and everything live) are
+      // left completely untouched, and the facilitator can still manually
+      // deploy whatever's already queued.
       const withMatchups = {
         ...next,
-        nextMatchups: refreshNextMatchups(
-          autoQueueIds,
-          next.players,
-          next.nextMatchups || [],
-          engine,
-          phase,
-          maxUpcomingMatchups(next.courts)
-        ),
+        nextMatchups: next.queueingStopped
+          ? next.nextMatchups || []
+          : refreshNextMatchups(
+              autoQueueIds,
+              next.players,
+              next.nextMatchups || [],
+              engine,
+              phase,
+              maxUpcomingMatchups(next.courts),
+              next.matchmakingPriority
+            ),
       };
       // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
       // service that reacts here, in the single save() write path, to "a
@@ -417,7 +428,11 @@ export default function PickleballOpenPlay() {
         nextMatchups: withMatchups.nextMatchups,
         queueIds: withMatchups.queueIds,
         players: withMatchups.players,
-        autoFillCourts: withMatchups.courtDispatchSettings?.autoFillCourts !== false,
+        // Stop Queueing — see PROJECT.md/FEATURES.md. "NO NEW auto dispatch"
+        // while stopped, regardless of the Auto-fill Courts setting;
+        // manual dispatch (fillCourt/fillAllCourts/generateRemainingCourts)
+        // is untouched and keeps working from whatever's already queued.
+        autoFillCourts: !withMatchups.queueingStopped && withMatchups.courtDispatchSettings?.autoFillCourts !== false,
         isCourtReserved,
       });
       let withDispatch = {
@@ -522,18 +537,21 @@ export default function PickleballOpenPlay() {
     scheduleAnnouncementsRef.current = scheduleAnnouncements;
   }, [scheduleAnnouncements]);
 
-  // Held Player Reminder — see PROJECT.md/FEATURES.md. A facilitator
-  // safeguard, not a matchmaking feature: on a slow tick (15s, same cadence
-  // WaitingTimer.jsx already uses for its own display), checks which held
-  // players have newly crossed the configurable minutes/rounds threshold
-  // and haven't been reminded within the configurable repeat interval (see
-  // lib/queueManagement.js's getPlayersNeedingHeldReminder — the only
-  // reader of these settings). For each one, marks it shown (persists
-  // heldReminderLastShownAt + logs one Queue Activity Log entry, so it
-  // won't re-fire until the repeat interval elapses again on any device)
-  // and adds it to this device's visible set. Only runs once a session is
-  // loaded and the facilitator has actually unlocked Scorer — no session,
-  // no reminders.
+  // Held Player Reminder — see PROJECT.md/FEATURES.md. The floating
+  // reminder banner has been removed per direct facilitator feedback (it
+  // was one more thing competing for attention during a busy session), but
+  // the underlying safeguard bookkeeping is kept exactly as it was: on a
+  // slow tick (15s, same cadence WaitingTimer.jsx already uses for its own
+  // display), checks which held players have newly crossed the
+  // configurable minutes/rounds threshold and haven't been reminded within
+  // the configurable repeat interval (see lib/queueManagement.js's
+  // getPlayersNeedingHeldReminder — the only reader of these settings), and
+  // marks each one shown — which persists heldReminderLastShownAt AND logs
+  // a "Held Player Reminder" entry to the same Queue Activity Log every
+  // other Held Player action already writes to (see ScorerView's
+  // QUEUE_ACTIVITY_KIND_META), so a facilitator can still see it there.
+  // Held status, held timers (heldAt/heldAtRound), and this log are all
+  // completely unchanged — only the floating popup UI is gone.
   useEffect(() => {
     if (!loaded || !scorerAuthed) return undefined;
     const tick = () => {
@@ -544,22 +562,11 @@ export default function PickleballOpenPlay() {
         next = markHeldReminderShown(next, playerId, { minutesHeld, roundsHeld });
       });
       save(next);
-      setHeldReminderVisibleIds((prev) => [...new Set([...prev, ...due.map((d) => d.playerId)])]);
     };
     tick(); // check immediately on entering Scorer, don't wait a full interval
     const interval = setInterval(tick, 15000);
     return () => clearInterval(interval);
   }, [loaded, scorerAuthed, save]);
-
-  // "Resume" on a reminder just reuses the exact same Resume Player action
-  // as the Waiting Players panel's own button — no separate code path.
-  // "Keep Held" only ever touches this device's local visible set (see
-  // heldReminderVisibleIds above) — the player stays held, session state is
-  // completely untouched, and the reminder naturally becomes eligible again
-  // once the repeat interval elapses.
-  const dismissHeldReminder = (playerId) => {
-    setHeldReminderVisibleIds((prev) => prev.filter((id) => id !== playerId));
-  };
 
   // Manually starts a dispatched ("Calling Players...") court — for when
   // Auto Start Match is off, or a facilitator wants to start early instead
@@ -819,6 +826,9 @@ export default function PickleballOpenPlay() {
     setScorerAuthed(false);
     setPin("");
     setPinError("");
+    setPaymentAuthed(false);
+    setPaymentPin("");
+    setPaymentPinError("");
     setJoinCode("");
     setJoinError("");
     clearOneShotSnapshots();
@@ -1166,14 +1176,21 @@ export default function PickleballOpenPlay() {
       state.expectedGamesPerPlayer,
       state.progressiveSkillThresholds
     );
-    const generated = regenerateNextMatchups(
-      queueIds,
-      state.players,
-      protectedMatchups,
-      engine,
-      phase,
-      maxUpcomingMatchups(state.courts)
-    );
+    // Stop Queueing — see PROJECT.md/FEATURES.md. "Generate remaining
+    // courts" explicitly rebuilds nextMatchups from scratch; while queueing
+    // is stopped it must not create anything new either, so it falls back
+    // to just deploying whatever's already queued onto open courts below.
+    const generated = state.queueingStopped
+      ? state.nextMatchups || []
+      : regenerateNextMatchups(
+          queueIds,
+          state.players,
+          protectedMatchups,
+          engine,
+          phase,
+          maxUpcomingMatchups(state.courts),
+          state.matchmakingPriority
+        );
 
     let remainingIds = [...state.queueIds];
     let remainingMatchups = [...generated];
@@ -1547,9 +1564,22 @@ export default function PickleballOpenPlay() {
   // actual work — this is just its thin UI wrapper (snapshot bookkeeping +
   // save).
   const regenerateMatchups = () => {
+    // Stop Queueing — "Regenerate matchups" explicitly builds NEW matchups
+    // from scratch, so it's a no-op while queueing is stopped (see the
+    // matching disabled state in ScorerView).
+    if (state.queueingStopped) return;
     const before = state.nextMatchups || [];
     setRegenerateSnapshot(before);
     save(regenerateQueue(state));
+  };
+
+  // Stop Queueing — see PROJECT.md/FEATURES.md. A Session Control, not a
+  // Session Setting: toggled directly from the Scorer toolbar, takes effect
+  // on the very next save() (see save()'s own queueingStopped checks
+  // above). Existing live matches and existing nextMatchups entries are
+  // never touched by this flip either way.
+  const toggleQueueing = () => {
+    save({ ...state, queueingStopped: !state.queueingStopped });
   };
 
   // restores nextMatchups to how it looked right before the last
@@ -1774,6 +1804,17 @@ export default function PickleballOpenPlay() {
     }
   };
 
+  // Dedicated Payment tab — same SCORER_PIN as Scorer, own authed state —
+  // see the paymentAuthed comment above.
+  const tryPaymentLogin = () => {
+    if (paymentPin === SCORER_PIN) {
+      setPaymentAuthed(true);
+      setPaymentPinError("");
+    } else {
+      setPaymentPinError("Wrong PIN. Try again.");
+    }
+  };
+
   // ---- court management ----
 
   const addCourt = () => {
@@ -1782,11 +1823,16 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
+  // Dynamic Court Count — see PROJECT.md/FEATURES.md. Thin wrapper around
+  // the pure requestRemoveCourt (lib/queueManagement.js): removes the last
+  // court immediately if it's idle right now, otherwise queues the removal
+  // (pendingCourtRemovals) for save()'s own applyPendingCourtRemovals to
+  // complete automatically the instant that court frees up — never loses a
+  // live match, never drops below 1 court.
   const removeCourt = () => {
-    const last = state.courts[state.courts.length - 1];
-    if (state.courts.length <= 1 || !last || last.status !== "open") return;
-    const courts = state.courts.slice(0, -1);
-    save({ ...state, courts });
+    const next = requestRemoveCourtAction(state);
+    if (next === state) return;
+    save(next);
   };
 
   // Court Renaming — thin wrapper around the pure renameCourt (lib/utils.js).
@@ -1848,42 +1894,6 @@ export default function PickleballOpenPlay() {
 
       {sessionReport && (
         <SessionAnalyticsReport report={sessionReport} onConfirm={confirmEndSession} onCancel={cancelEndSession} />
-      )}
-
-      {scorerAuthed && (
-        <HeldPlayerReminderBanner
-          reminders={heldReminderVisibleIds
-            .filter((id) => state.players[id]?.held)
-            .map((id) => {
-              const p = state.players[id];
-              const currentRound = (state.matchHistory || []).length;
-              // facilitator convenience only — does not read or affect
-              // heldAt/heldAtRound/heldReminderLastShownAt, the reminder's
-              // own timing fields, and never touches queueIds/nextMatchups.
-              const lastMatch = getLastCourtForPlayer(state, id);
-              let lastPlayedText;
-              if (lastMatch) {
-                lastPlayedText = `Court ${lastMatch.court}`;
-              } else {
-                const sessionStart = state.sessionStartedAt || 0;
-                const isMidSessionJoin = p.checkedInAt && sessionStart && p.checkedInAt - sessionStart > 5 * 60000;
-                lastPlayedText = isMidSessionJoin ? "Waiting for first match" : "Not yet played";
-              }
-              return {
-                playerId: id,
-                playerName: p.name,
-                skill: p.skill === "intermediate" ? "Intermediate" : "Beginner",
-                lastPlayedText,
-                minutesHeld: Math.floor((Date.now() - p.heldAt) / 60000),
-                roundsHeld: Math.max(0, currentRound - (p.heldAtRound ?? currentRound)),
-              };
-            })}
-          onResume={(id) => {
-            resumePlayer(id);
-            dismissHeldReminder(id);
-          }}
-          onKeepHeld={dismissHeldReminder}
-        />
       )}
 
       {screen === "landing" && (
@@ -2073,6 +2083,7 @@ export default function PickleballOpenPlay() {
                   { id: "checkin", label: "Check In" },
                   { id: "standings", label: "Standings" },
                   { id: "scorer", label: "Scorer" },
+                  { id: "payment", label: "Payment" },
                   { id: "history", label: "History" },
                   ...(state.sessionType === "tournament" ? [{ id: "tournament", label: "Tournament" }] : []),
                 ].map((t) => (
@@ -2121,6 +2132,26 @@ export default function PickleballOpenPlay() {
 
               {loaded && view === "history" && (
                 <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
+              )}
+
+              {loaded && view === "payment" && !paymentAuthed && (
+                <ScorerLogin
+                  pin={paymentPin}
+                  setPin={setPaymentPin}
+                  tryScorerLogin={tryPaymentLogin}
+                  pinError={paymentPinError}
+                  title="Payment access"
+                  subtitle="Enter the scorer PIN to manage player payments."
+                  buttonLabel="Enter Payment"
+                />
+              )}
+
+              {loaded && view === "payment" && paymentAuthed && (
+                <PaymentView
+                  players={state.players}
+                  onSetPayment={setPlayerPayment}
+                  paymentStats={derivePaymentStats(state.players)}
+                />
               )}
 
               {loaded && view === "tournament" && state.sessionType === "tournament" && (
@@ -2173,10 +2204,8 @@ export default function PickleballOpenPlay() {
                   removePlayer={removePlayer}
                   checkoutPlayer={checkoutPlayer}
                   changePlayerSkill={changePlayerSkill}
-                  setPlayerPayment={setPlayerPayment}
                   setFixedPartner={setFixedPartner}
                   clearFixedPartner={clearFixedPartner}
-                  paymentStats={derivePaymentStats(state.players)}
                   skillChangeMsg={skillChangeMsg}
                   skillChangeLog={state.skillChangeLog || []}
                   queueActivityLog={state.queueActivityLog || []}
@@ -2205,6 +2234,10 @@ export default function PickleballOpenPlay() {
                   endSession={endSession}
                   updateSessionSettings={updateSessionSettings}
                   reservedCourtNumbers={reservedCourtNumbers}
+                  matchmakingPriority={state.matchmakingPriority}
+                  queueingStopped={state.queueingStopped}
+                  onToggleQueueing={toggleQueueing}
+                  pendingCourtRemovals={state.pendingCourtRemovals || 0}
                 />
               )}
 
