@@ -7,7 +7,8 @@
 // engines/RoundRobinScheduler.js (the scheduling algorithm itself, called
 // once per pool — it has no idea pools exist), which don't need to know
 // anything about session players.
-import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch, findMatch, deleteTournament } from "./tournamentModel.js";
+import { makeEntrant, makeTournament, makeTournamentPool, makeCourt, saveTournament, startMatch, findMatch, deleteTournament, computeTournamentStatus } from "./tournamentModel.js";
+import { uid } from "./random.js";
 import { TournamentHistoryService } from "../engines/TournamentHistoryService.js";
 import { generateRoundRobinSchedule, pairIntoTeams } from "../engines/RoundRobinScheduler.js";
 import { assignPools, poolLabel } from "../engines/PoolAssignment.js";
@@ -55,6 +56,12 @@ export function resolvePlayerIds(tournament, team) {
   for (const pool of tournament.pools || []) {
     const entrant = pool.entrants.find((e) => e.id === participantId);
     if (entrant) return entrant.playerIds;
+  }
+  // Standalone Double Elimination — see buildAndSaveDoubleEliminationTournament
+  // below. No pools exist to search; entrants live directly on the
+  // tournament instead (tournamentModel.js's makeTournament `entrants` field).
+  for (const entrant of tournament.entrants || []) {
+    if (entrant.id === participantId) return entrant.playerIds;
   }
   return [];
 }
@@ -145,6 +152,88 @@ export async function buildAndSaveRoundRobinTournament({
     courtNames,
     matchScoringRules,
   });
+  return saveTournament(tournament);
+}
+
+// Standalone Double Elimination — see PROJECT.md/FEATURES.md. Deliberately
+// NOT built on RoundRobinScheduler/pools at all: a Double Elimination
+// bracket is generated directly from registered/checked-in entrants, with
+// NO Round Robin pool stage first (that's the explicit design decision —
+// contrast with tournament.bracketFormat === "doubleElimination", which
+// still requires Round Robin pools to complete and qualify first). Both
+// paths share the exact same DoubleEliminationEngine/tournament.
+// doubleEliminationBracket shape and progression logic — this function only
+// handles getting straight from a roster to a real Winners+Losers Bracket +
+// Grand Final, with no qualification step in between.
+//
+// Seeding — reuses the existing seeding strategies (BracketSeeding.js)
+// exactly as instructed, not a new mechanism: "Standard Cross-Pool" and
+// "Snake" both require pool rank/poolLabel data that doesn't exist without
+// a pool stage, so only the three pool-agnostic strategies are valid here —
+// "random" (the default), "rating" (seeds by each entrant's current Club
+// Rating, falling back to random if none exist), and "manual" (organizer-
+// assigned seed numbers, same ManualSeedingStrategy/validateSeeds the
+// post-Round-Robin playoff path already uses).
+export async function buildAndSaveDoubleEliminationTournament({
+  sessionCode,
+  players,
+  mode,
+  courtsCount,
+  seedingMethod = "random",
+  seedContext = {},
+}) {
+  const entrants = buildEntrants(players, mode);
+  const size = entrants.length;
+  if (size < 4 || (size & (size - 1)) !== 0) {
+    throw new Error(`Double Elimination requires a power-of-two team count of at least 4 (4, 8, 16, ...) — currently ${size}.`);
+  }
+  if (!["random", "rating", "manual"].includes(seedingMethod)) {
+    throw new Error(`Seeding method "${seedingMethod}" needs pool data a standalone Double Elimination bracket doesn't have — use "random", "rating", or "manual".`);
+  }
+
+  // Same QualifiedTeam shape PoolQualificationService.determineQualifiers
+  // produces (rank/poolLabel are simply null here — nothing about a
+  // standalone bracket has pools to derive them from), so BracketSeeding.js's
+  // existing strategies work completely unchanged.
+  const seedableTeams = entrants.map((e) => ({
+    poolId: null,
+    poolLabel: null,
+    rank: null,
+    participantId: e.id,
+    label: e.label,
+    qualificationType: "standalone",
+  }));
+  const strategy = getSeedingStrategy(seedingMethod);
+  const validation = strategy.validateSeeds(seedableTeams, seedContext);
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(" "));
+  }
+
+  const winnersRounds = doubleEliminationEngine.createWinnersBracket(seedableTeams, seedingMethod, seedContext);
+  const losersRounds = doubleEliminationEngine.createLosersBracket(size);
+  const grandFinal = doubleEliminationEngine.createGrandFinal();
+
+  const tournament = makeTournament({
+    sessionCode,
+    format: "doubleElimination",
+    mode,
+    courtsCount,
+    poolCount: 0,
+    assignmentMethod: "random",
+    pools: [],
+    entrants,
+    advancesPerPool: 0,
+    seedingMethod,
+  });
+  tournament.doubleEliminationBracket = {
+    id: uid(),
+    status: "ready",
+    completedAt: null,
+    winnersBracket: { id: uid(), size, status: "ready", rounds: winnersRounds, champion: null, runnerUp: null },
+    losersBracket: { id: uid(), size, status: "ready", rounds: losersRounds, champion: null, runnerUp: null },
+    grandFinal,
+  };
+  tournament.status = computeTournamentStatus(tournament);
   return saveTournament(tournament);
 }
 
@@ -539,16 +628,23 @@ export async function saveGenerateDoubleEliminationBracket(tournament) {
 
 export async function saveDoubleEliminationMatchStart(tournament, matchId) {
   const winnersBracket = playoffEngine.startMatch(tournament.doubleEliminationBracket.winnersBracket, matchId);
-  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } });
+  const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket };
+  return saveTournament(stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket }));
 }
 
+// Winners Bracket Progression — real seating (see DoubleEliminationEngine.
+// updateWinnersBracket): the loser is actually written into the Losers
+// Bracket, not just given a placeholder descriptor, and Grand Final Game 1
+// auto-populates the moment both bracket champions are known. Court
+// auto-fill and rating/achievement credit are unchanged from before.
 export async function saveDoubleEliminationMatchResult(tournament, matchId, result) {
-  const { winnersBracket: before, losersBracket } = tournament.doubleEliminationBracket;
-  const winnersBracket = doubleEliminationEngine.updateWinnersBracket(before, losersBracket, matchId, result);
+  const { winnersBracket: beforeWinners, losersBracket: beforeLosers, grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const { winnersBracket, losersBracket, grandFinal } = doubleEliminationEngine.updateWinnersBracket(beforeWinners, beforeLosers, beforeGrandFinal, matchId, result);
   const match = winnersBracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
-  const updated = { ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket } };
+  const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket, losersBracket, grandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
-  if (match) await rateMatch(updated, match, "tournament");
+  if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -564,22 +660,154 @@ export async function saveDoubleEliminationResumeMatch(tournament, matchId) {
 
 // Same "decided by forfeit rather than play" overlay saveWalkover already
 // applies for the championship bracket — winner still advances and the
-// loser still gets a Losers Bracket destination placeholder, exactly like
-// a normal completed match, just with a null score and a walkover flag.
+// loser is really seated into the Losers Bracket, exactly like a normal
+// completed match, just with a null score and a walkover flag.
 export async function saveDoubleEliminationWalkover(tournament, matchId, winnerId) {
-  const { winnersBracket: before, losersBracket } = tournament.doubleEliminationBracket;
-  const found = before.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
-  const winnersBracket = doubleEliminationEngine.updateWinnersBracket(before, losersBracket, matchId, { scoreA: 0, scoreB: 0, winnerId });
+  const { winnersBracket: beforeWinners, losersBracket: beforeLosers, grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const found = beforeWinners.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const { winnersBracket, losersBracket, grandFinal } = doubleEliminationEngine.updateWinnersBracket(beforeWinners, beforeLosers, beforeGrandFinal, matchId, { scoreA: 0, scoreB: 0, winnerId });
   const overlay = { score: { teamA: null, teamB: null }, walkover: true };
   const finalWinnersBracket = {
     ...winnersBracket,
     rounds: winnersBracket.rounds.map((r) => ({ ...r, matches: r.matches.map((m) => (m.id === matchId ? { ...m, ...overlay } : m)) })),
   };
   const match = { ...found, ...overlay };
-  const updated = { ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, winnersBracket: finalWinnersBracket } };
+  const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket: finalWinnersBracket, losersBracket, grandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
-  if (match) await rateMatch(updated, match, "tournament");
+  if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
+}
+
+// ---- Losers Bracket Progression ----
+// Same "call the engine, persist what it returns" shape as every Winners
+// Bracket wrapper above.
+
+export async function saveDoubleEliminationLosersMatchStart(tournament, matchId) {
+  const losersBracket = playoffEngine.startMatch(tournament.doubleEliminationBracket.losersBracket, matchId);
+  const deBracket = { ...tournament.doubleEliminationBracket, losersBracket };
+  return saveTournament(stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket }));
+}
+
+export async function saveDoubleEliminationLosersMatchResult(tournament, matchId, result) {
+  const { winnersBracket, losersBracket: beforeLosers, grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const { losersBracket, grandFinal } = doubleEliminationEngine.updateLosersBracket(beforeLosers, winnersBracket, beforeGrandFinal, matchId, result);
+  const match = losersBracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const deBracket = { ...tournament.doubleEliminationBracket, losersBracket, grandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(withAutoFill, match, "tournament");
+  return saveTournament(withAutoFill);
+}
+
+export async function saveDoubleEliminationLosersPauseMatch(tournament, matchId) {
+  const losersBracket = playoffEngine.pauseMatch(tournament.doubleEliminationBracket.losersBracket, matchId);
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, losersBracket } });
+}
+
+export async function saveDoubleEliminationLosersResumeMatch(tournament, matchId) {
+  const losersBracket = playoffEngine.resumeMatch(tournament.doubleEliminationBracket.losersBracket, matchId);
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, losersBracket } });
+}
+
+export async function saveDoubleEliminationLosersWalkover(tournament, matchId, winnerId) {
+  const { winnersBracket, losersBracket: beforeLosers, grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const found = beforeLosers.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
+  const { losersBracket, grandFinal } = doubleEliminationEngine.updateLosersBracket(beforeLosers, winnersBracket, beforeGrandFinal, matchId, { scoreA: 0, scoreB: 0, winnerId });
+  const overlay = { score: { teamA: null, teamB: null }, walkover: true };
+  const finalLosersBracket = {
+    ...losersBracket,
+    rounds: losersBracket.rounds.map((r) => ({ ...r, matches: r.matches.map((m) => (m.id === matchId ? { ...m, ...overlay } : m)) })),
+  };
+  const match = { ...found, ...overlay };
+  const deBracket = { ...tournament.doubleEliminationBracket, losersBracket: finalLosersBracket, grandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(withAutoFill, match, "tournament");
+  return saveTournament(withAutoFill);
+}
+
+// ---- Grand Final (including Grand Final Reset) ----
+// The Grand Final is a small container (game1 always, game2 only if a
+// reset was triggered — see DoubleEliminationEngine.createGrandFinal's own
+// comment), not a plain bracket of rounds, so it doesn't reuse
+// PlayoffEngine.startMatch/pauseMatch/resumeMatch the way Winners/Losers
+// Bracket matches do — those assume a `{ rounds: [...] }` shape. Start/
+// pause/resume here are simple, self-contained status flips on whichever
+// game (game1 or game2) matchId refers to.
+function findGrandFinalGame(grandFinal, matchId) {
+  if (grandFinal.game1.id === matchId) return "game1";
+  if (grandFinal.game2 && grandFinal.game2.id === matchId) return "game2";
+  return null;
+}
+
+export async function saveGrandFinalMatchStart(tournament, matchId) {
+  const grandFinal = tournament.doubleEliminationBracket.grandFinal;
+  const gameKey = findGrandFinalGame(grandFinal, matchId);
+  if (!gameKey) throw new Error("Match not found.");
+  const nextGrandFinal = {
+    ...grandFinal,
+    status: "running",
+    [gameKey]: { ...grandFinal[gameKey], status: "inProgress", startedAt: Date.now() },
+  };
+  return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, grandFinal: nextGrandFinal } });
+}
+
+export async function saveGrandFinalMatchResult(tournament, matchId, result) {
+  const { grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const grandFinal = doubleEliminationEngine.updateGrandFinal(beforeGrandFinal, matchId, result);
+  const gameKey = findGrandFinalGame(grandFinal, matchId);
+  const match = gameKey ? grandFinal[gameKey] : null;
+  const deBracket = { ...tournament.doubleEliminationBracket, grandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(withAutoFill, match, "tournament");
+  // Tournament Champion — awarded the moment the Grand Final (including a
+  // Game 2 reset, if one happened) actually decides a champion.
+  if (grandFinal.status === "completed" && grandFinal.champion) {
+    const championIds = resolvePlayerIds(withAutoFill, grandFinal.champion);
+    for (const playerId of championIds) {
+      const player = await fetchPlayer(playerId);
+      if (player) await achievementService.awardTournamentChampion(playerId, tournament.id);
+    }
+  }
+  return saveTournament(withAutoFill);
+}
+
+// Same "decided by forfeit rather than play" overlay every other walkover
+// wrapper in this file already applies — the game still runs through the
+// exact same updateGrandFinal logic (Game 1 win/loss decides reset-or-not,
+// Game 2 win decides the champion outright), just with a null score and a
+// walkover flag once decided.
+export async function saveGrandFinalWalkover(tournament, matchId, winnerId) {
+  const { grandFinal: beforeGrandFinal } = tournament.doubleEliminationBracket;
+  const gameKeyBefore = findGrandFinalGame(beforeGrandFinal, matchId);
+  const grandFinal = doubleEliminationEngine.updateGrandFinal(beforeGrandFinal, matchId, { scoreA: 0, scoreB: 0, winnerId });
+  const overlay = { score: { teamA: null, teamB: null }, walkover: true };
+  const finalGrandFinal = { ...grandFinal, [gameKeyBefore]: { ...grandFinal[gameKeyBefore], ...overlay } };
+  const match = finalGrandFinal[gameKeyBefore];
+  const deBracket = { ...tournament.doubleEliminationBracket, grandFinal: finalGrandFinal };
+  let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
+  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (finalGrandFinal.status === "completed" && finalGrandFinal.champion) {
+    const championIds = resolvePlayerIds(withAutoFill, finalGrandFinal.champion);
+    for (const playerId of championIds) {
+      const player = await fetchPlayer(playerId);
+      if (player) await achievementService.awardTournamentChampion(playerId, tournament.id);
+    }
+  }
+  return saveTournament(withAutoFill);
+}
+
+// Keeps tournament.status in sync with the bracket's own rollup after every
+// Double Elimination save — same role RoundRobinEngine.updateMatchResult's
+// own `next.status = computeTournamentStatus(next)` line plays for Round
+// Robin, just called explicitly here since Double Elimination's several
+// save wrappers (Winners/Losers Bracket, Grand Final) each only touch one
+// piece of the bracket at a time.
+function stampDoubleEliminationStatus(tournament) {
+  return { ...tournament, status: computeTournamentStatus(tournament) };
 }
 
 // ---- Manual Qualification Override ----

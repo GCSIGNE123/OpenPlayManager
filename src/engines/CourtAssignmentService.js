@@ -62,6 +62,34 @@ export function collectMatches(tournament) {
       matches.push({ match: tournament.consolationBracket.bronzeMatch, source: "consolationBracket", sourceLabel: "7th Place Match" });
     }
   }
+  // Double Elimination — see PROJECT.md/FEATURES.md/DoubleEliminationEngine.js.
+  // A sibling of tournament.bracket, walked the same way: Winners Bracket,
+  // Losers Bracket, and the Grand Final's game1 (always) / game2 (only once
+  // a reset is triggered) all need to be visible to court assignment, or a
+  // Double Elimination match could never be assigned a court at all. A
+  // round/game whose teamA/teamB aren't both populated yet still gets
+  // walked here — the actual "can this be assigned/played" gate is
+  // getPlayableMatches' `teamA && teamB` filter below, same as every other
+  // bracket shape in this app; walking it here just makes it visible to
+  // occupancy checks (isCourtOccupied/currentMatchForCourt) too, which need
+  // to see every match regardless of whether it's playable yet.
+  if (tournament.doubleEliminationBracket) {
+    const deBracket = tournament.doubleEliminationBracket;
+    for (const round of deBracket.winnersBracket.rounds) {
+      for (const match of round.matches) {
+        matches.push({ match, source: "winnersBracket", sourceLabel: round.name });
+      }
+    }
+    for (const round of deBracket.losersBracket.rounds) {
+      for (const match of round.matches) {
+        matches.push({ match, source: "losersBracket", sourceLabel: round.name });
+      }
+    }
+    matches.push({ match: deBracket.grandFinal.game1, source: "grandFinal", sourceLabel: "Grand Final" });
+    if (deBracket.grandFinal.game2) {
+      matches.push({ match: deBracket.grandFinal.game2, source: "grandFinal", sourceLabel: "Grand Final Reset" });
+    }
+  }
   return matches;
 }
 
@@ -108,7 +136,39 @@ function updateMatchIn(tournament, matchId, updater) {
       : bracket;
   const bracket = updateBracketRecord(tournament.bracket);
   const consolationBracket = updateBracketRecord(tournament.consolationBracket);
-  return { ...tournament, pools, bracket, consolationBracket };
+
+  // Double Elimination — same find-and-replace, across all three
+  // sub-brackets (Winners/Losers/Grand Final). A no-op (returns the
+  // doubleEliminationBracket completely unchanged) when matchId doesn't
+  // belong to any of them, same as every other branch above.
+  let doubleEliminationBracket = tournament.doubleEliminationBracket;
+  if (doubleEliminationBracket) {
+    const winnersBracket = {
+      ...doubleEliminationBracket.winnersBracket,
+      rounds: doubleEliminationBracket.winnersBracket.rounds.map((round) => ({
+        ...round,
+        matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
+      })),
+    };
+    const losersBracket = {
+      ...doubleEliminationBracket.losersBracket,
+      rounds: doubleEliminationBracket.losersBracket.rounds.map((round) => ({
+        ...round,
+        matches: round.matches.map((m) => (m.id === matchId ? updater(m) : m)),
+      })),
+    };
+    const grandFinal = {
+      ...doubleEliminationBracket.grandFinal,
+      game1: doubleEliminationBracket.grandFinal.game1.id === matchId ? updater(doubleEliminationBracket.grandFinal.game1) : doubleEliminationBracket.grandFinal.game1,
+      game2:
+        doubleEliminationBracket.grandFinal.game2 && doubleEliminationBracket.grandFinal.game2.id === matchId
+          ? updater(doubleEliminationBracket.grandFinal.game2)
+          : doubleEliminationBracket.grandFinal.game2,
+    };
+    doubleEliminationBracket = { ...doubleEliminationBracket, winnersBracket, losersBracket, grandFinal };
+  }
+
+  return { ...tournament, pools, bracket, consolationBracket, doubleEliminationBracket };
 }
 
 export class CourtAssignmentService {

@@ -126,13 +126,21 @@ export const SESSION_TYPES = [
   { value: "tournament", label: "Tournament" },
 ];
 
-// placeholder options only — no bracket generation, round-robin scheduling,
-// or elimination logic reads this field yet. Selecting one just records the
-// organizer's intent on the session for a future tournament-mode feature.
+// Tournament Format — wired into actual tournament creation as of Double
+// Elimination (see PickleballOpenPlay.jsx's generateTournamentSchedule /
+// lib/tournament.js). `implemented: false` (Single Elimination) means
+// selecting it in Create Session is disabled entirely — see
+// CreateSessionScreen.jsx — rather than silently recording an inert value
+// on the session the way EVERY option here used to (the exact bug that
+// caused a real Double Elimination event to silently run as plain Round
+// Robin — see CHANGELOG.md). Round Robin continues exactly as before
+// (buildAndSaveRoundRobinTournament, pool-based); Double Elimination is now
+// a real, standalone bracket (buildAndSaveDoubleEliminationTournament, no
+// pool stage) — see DoubleEliminationEngine.js.
 export const TOURNAMENT_FORMATS = [
-  { value: "roundRobin", label: "Round Robin" },
-  { value: "singleElimination", label: "Single Elimination" },
-  { value: "doubleElimination", label: "Double Elimination" },
+  { value: "roundRobin", label: "Round Robin", implemented: true },
+  { value: "doubleElimination", label: "Double Elimination", implemented: true },
+  { value: "singleElimination", label: "Single Elimination (Coming Soon)", implemented: false },
 ];
 
 // Player Checkout During Open Play — see PROJECT.md. A session player's

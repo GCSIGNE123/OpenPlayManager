@@ -1,25 +1,28 @@
-// Double Elimination Foundation — see PROJECT.md. `generateSchedule`
-// (round-robin-style pool scheduling) is a different concern this class
-// deliberately still leaves as NOT_IMPLEMENTED — this file is instead the
-// PLAYOFF bracket generator selected by tournament.bracketFormat ===
-// "doubleElimination" (a sibling of PlayoffBracketGenerator, not a
-// replacement for it — see TournamentSettings.js's BRACKET_FORMATS). Pool
-// play, qualification, and everything else upstream of "which bracket gets
-// built" are completely untouched by this feature.
+// Double Elimination — see PROJECT.md / FEATURES.md. Two ways a bracket
+// gets built: (1) STANDALONE — a Double Elimination tournament
+// (tournament.format === "doubleElimination") seeded directly from
+// registered/checked-in entrants, no pool stage at all (see
+// lib/tournament.js's buildAndSaveDoubleEliminationTournament); or (2) as
+// the PLAYOFF stage after a Round Robin pool stage (tournament.bracketFormat
+// === "doubleElimination", a sibling of PlayoffBracketGenerator/single-
+// elimination — see TournamentSettings.js's BRACKET_FORMATS). Both paths
+// build and progress the exact same tournament.doubleEliminationBracket
+// shape via this one engine, so completing it here makes both real at once.
 //
-// Structure only, per this milestone — updateMatchResult/getStandings/
-// getNextMatches stay the existing inert placeholders. No winner
-// advancement, no losers-bracket routing (a first-round Winners Bracket
-// loser is NOT seated into the Losers Bracket yet — every round past
-// Winners Round 1, every Losers Bracket round, and the Grand Final are
-// empty team-less placeholders), no Grand Final Reset. That's all later
-// progression-sprint work, deliberately built on top of the shapes this
-// file establishes rather than requiring a redesign (see Future
-// Compatibility in PROJECT.md).
+// Full progression, real elimination: every Winners Bracket loser is
+// actually seated into its Losers Bracket destination (not just a
+// placeholder descriptor); Losers Bracket matches advance their winner and
+// eliminate their loser (no further seat exists for them anywhere — the
+// same "elimination is implicit in bracket shape" precedent the existing
+// single-elimination bracket already established, deliberately not a
+// stored boolean); the Grand Final seats both brackets' champions the
+// moment they're both known and implements the standard "bracket reset"
+// rule (see updateGrandFinal below).
 import { TournamentEngine } from "./TournamentEngine.js";
 import { PlayoffBracketGenerator, makeBracketMatch } from "./PlayoffBracketGenerator.js";
 import { PoolQualificationService } from "./PoolQualificationService.js";
 import { WinnersBracketAdvancementService } from "./WinnersBracketAdvancementService.js";
+import { LosersBracketAdvancementService } from "./LosersBracketAdvancementService.js";
 import { uid } from "../lib/random.js";
 
 const NOT_IMPLEMENTED = { implemented: false, message: "Double Elimination is not implemented yet — architecture only (Tournament Engine Foundation)." };
@@ -27,6 +30,7 @@ const NOT_IMPLEMENTED = { implemented: false, message: "Double Elimination is no
 const qualificationService = new PoolQualificationService();
 const bracketGenerator = new PlayoffBracketGenerator();
 const winnersAdvancementService = new WinnersBracketAdvancementService();
+const losersAdvancementService = new LosersBracketAdvancementService();
 
 const NOT_READY = { ready: false, reason: "not_ready", size: 0, winnersBracket: null, losersBracket: null, grandFinal: null };
 
@@ -126,11 +130,140 @@ export class DoubleEliminationEngine extends TournamentEngine {
     return rounds;
   }
 
-  // One empty match — both participants are TBD until the Winners
-  // Bracket's champion and Losers Bracket's champion are both known, which
-  // (per this sprint's scope) never happens yet.
+  // Grand Final — a small container (not a single match) since standard
+  // Double Elimination rules require a CONDITIONAL second game: `game1`
+  // always exists (empty until both bracket champions are known — see
+  // populateGrandFinal); `game2` stays null unless the Losers Bracket
+  // champion wins game1, in which case a fresh, empty second match is
+  // created (see updateGrandFinal) — the "bracket reset," since the
+  // Winners Bracket champion entering with zero losses now has exactly one,
+  // same as the Losers Bracket champion, so a single decisive game is
+  // needed. `status` mirrors a bracket's own ('pending' until game1 has
+  // both teams, 'running' once game1 starts, 'completed' once a true
+  // champion is decided — either game1 outright, or game2 if it exists).
   createGrandFinal() {
-    return makeBracketMatch({ round: "grandFinal", matchNumber: 1, matchType: "grandFinal" });
+    return {
+      id: uid(),
+      status: "pending",
+      game1: makeBracketMatch({ round: "grandFinal", matchNumber: 1, matchType: "grandFinal" }),
+      game2: null,
+      resetTriggered: false,
+      champion: null,
+      runnerUp: null,
+      completedAt: null,
+    };
+  }
+
+  // Seats both bracket champions into Grand Final Game 1 the moment both
+  // are known (winnersBracket.champion enters with 0 losses, losersBracket.
+  // champion with 1 — team A/B order is purely cosmetic, the actual
+  // 0-loss-vs-1-loss logic lives in updateGrandFinal below, not in seat
+  // order). A no-op (returns grandFinal unchanged) if either champion isn't
+  // decided yet, or Game 1 is already seated — safe to call after every
+  // Winners/Losers Bracket match result without the caller needing to
+  // track "did this already happen."
+  populateGrandFinal(grandFinal, winnersChampion, losersChampion) {
+    if (!winnersChampion || !losersChampion) return grandFinal;
+    if (grandFinal.game1.teamA && grandFinal.game1.teamB) return grandFinal;
+    return {
+      ...grandFinal,
+      status: "ready",
+      game1: { ...grandFinal.game1, teamA: winnersChampion, teamB: losersChampion },
+    };
+  }
+
+  // Grand Final result handling — see PROJECT.md's explicit ruleset:
+  //   - Game 1 won by the Winners Bracket champion (teamA) -> tournament
+  //     ends immediately, no reset. teamA both entered AND left with 0
+  //     losses; teamB (Losers Bracket champion) takes their second loss
+  //     and is eliminated, same as any other Losers Bracket elimination.
+  //   - Game 1 won by the Losers Bracket champion (teamB) -> that's the
+  //     Winners Bracket champion's FIRST loss, so both sides now have
+  //     exactly one — a single deciding game ("Grand Final Reset" / Game 2,
+  //     same two teams) is created. Never created when teamA wins Game 1.
+  //   - Game 2 (if it exists) is winner-takes-all — whoever wins it is the
+  //     tournament champion, regardless of which side they were.
+  // matchId must be either grandFinal.game1.id or grandFinal.game2.id.
+  // Returns the updated grandFinal (never mutates the one passed in).
+  updateGrandFinal(grandFinal, matchId, result) {
+    const isGame1 = grandFinal.game1.id === matchId;
+    const isGame2 = grandFinal.game2 && grandFinal.game2.id === matchId;
+    if (!isGame1 && !isGame2) {
+      throw new Error("Invalid Grand Final mapping — this match doesn't belong to this Grand Final.");
+    }
+    if (grandFinal.status === "completed") {
+      throw new Error("The Grand Final is already completed — no further edits are allowed.");
+    }
+    const targetGame = isGame1 ? grandFinal.game1 : grandFinal.game2;
+    if (targetGame.status === "completed") {
+      throw new Error("This game already has a recorded result — advancing it again would decide the champion twice.");
+    }
+    if (!targetGame.teamA || !targetGame.teamB) {
+      throw new Error("Both teams must be known before this game can be played.");
+    }
+
+    const { scoreA, scoreB, winnerId } = result;
+    if (scoreA === "" || scoreB === "" || scoreA == null || scoreB == null) {
+      throw new Error("Enter a score for both teams.");
+    }
+    const numA = Number(scoreA);
+    const numB = Number(scoreB);
+    if (!Number.isFinite(numA) || !Number.isFinite(numB) || numA < 0 || numB < 0) {
+      throw new Error("Scores can't be negative.");
+    }
+    if (winnerId !== targetGame.teamA.participantId && winnerId !== targetGame.teamB.participantId) {
+      throw new Error("Winner must be one of this match's two teams.");
+    }
+
+    const winnerTeam = winnerId === targetGame.teamA.participantId ? targetGame.teamA : targetGame.teamB;
+    const loserTeam = winnerTeam === targetGame.teamA ? targetGame.teamB : targetGame.teamA;
+    const completedGame = {
+      ...targetGame,
+      score: { teamA: numA, teamB: numB },
+      winner: winnerId,
+      status: "completed",
+      completedAt: Date.now(),
+    };
+
+    if (isGame1) {
+      const winnersChampionWon = winnerId === grandFinal.game1.teamA.participantId;
+      if (winnersChampionWon) {
+        // no reset — the Winners Bracket champion wins the whole tournament
+        return {
+          ...grandFinal,
+          game1: completedGame,
+          status: "completed",
+          champion: winnerTeam,
+          runnerUp: loserTeam,
+          completedAt: Date.now(),
+        };
+      }
+      // Losers Bracket champion won Game 1 — bracket reset, same two teams,
+      // fresh empty Game 2, tournament not yet decided
+      return {
+        ...grandFinal,
+        game1: completedGame,
+        status: "running",
+        resetTriggered: true,
+        game2: makeBracketMatch({
+          round: "grandFinalReset",
+          matchNumber: 2,
+          teamA: grandFinal.game1.teamA,
+          teamB: grandFinal.game1.teamB,
+          matchType: "grandFinal",
+        }),
+      };
+    }
+
+    // Game 2 (the reset) — winner-takes-all, decides the champion outright
+    return {
+      ...grandFinal,
+      game2: completedGame,
+      status: "completed",
+      champion: winnerTeam,
+      runnerUp: loserTeam,
+      completedAt: Date.now(),
+    };
   }
 
   // Same two-tier validation precedent PlayoffBracketGenerator established:
@@ -210,20 +343,23 @@ export class DoubleEliminationEngine extends TournamentEngine {
     };
   }
 
-  // Winners Bracket Progression — see PROJECT.md. The Winners Bracket
-  // equivalent of PlayoffEngine.updateBracket, scoped to exactly one
-  // concern: record a result, advance the winner into the next Winners
-  // Bracket match, and stamp a Losers Bracket destination PLACEHOLDER onto
-  // the loser (never write the loser into losersBracket itself — that's
-  // Losers Bracket Progression, a later sprint). winnersBracket.champion/
-  // runnerUp are stamped the moment the Winners Final completes — future
-  // compatibility for Grand Final population (a later sprint reads these
-  // rather than re-deriving them), without this sprint doing anything with
-  // them itself.
-  // winnersBracket/losersBracket: the sub-records of
+  // Winners Bracket Progression — the Winners Bracket equivalent of
+  // PlayoffEngine.updateBracket: records a result, advances the winner into
+  // the next Winners Bracket match, and — the piece that used to be a
+  // placeholder — actually SEATS the loser into their real Losers Bracket
+  // destination (LosersBracketAdvancementService.seatWinnersBracketLoser).
+  // winnersBracket.champion/runnerUp are stamped the moment the Winners
+  // Final completes; once BOTH champions are known, Grand Final Game 1 is
+  // populated automatically (same "populate on completion" precedent
+  // RoundRobinEngine.updateMatchResult already uses for the single-
+  // elimination bracket).
+  // winnersBracket/losersBracket/grandFinal: the sub-records of
   // tournament.doubleEliminationBracket; result: { scoreA, scoreB, winnerId }
-  // returns: the updated winnersBracket (never mutates the one passed in).
-  updateWinnersBracket(winnersBracket, losersBracket, matchId, result) {
+  // returns: { winnersBracket, losersBracket, grandFinal } — all three,
+  // since seating a loser writes into losersBracket and a completed
+  // Winners Final may populate grandFinal — never mutates any of the
+  // objects passed in.
+  updateWinnersBracket(winnersBracket, losersBracket, grandFinal, matchId, result) {
     const validation = winnersAdvancementService.validateAdvancement(winnersBracket, matchId, result);
     if (!validation.valid) {
       throw new Error(validation.errors.join(" "));
@@ -274,19 +410,128 @@ export class DoubleEliminationEngine extends TournamentEngine {
     });
     rounds = winnersAdvancementService.advanceWinner({ rounds }, matchId, winnerTeam);
 
-    let next = { ...winnersBracket, rounds };
+    let nextWinnersBracket = { ...winnersBracket, rounds };
     const finalRound = rounds[rounds.length - 1];
     if (winnersAdvancementService.isRoundComplete(finalRound) && found.roundIndex === rounds.length - 1) {
-      next = { ...next, champion: winnerTeam, runnerUp: loserTeam };
+      nextWinnersBracket = { ...nextWinnersBracket, champion: winnerTeam, runnerUp: loserTeam };
     }
 
     const allMatches = rounds.flatMap((r) => r.matches);
     if (allMatches.every((m) => m.status === "completed")) {
-      next = { ...next, status: "completed", completedAt: Date.now() };
+      nextWinnersBracket = { ...nextWinnersBracket, status: "completed", completedAt: Date.now() };
     } else {
-      next = { ...next, status: allMatches.some((m) => m.status === "inProgress" || m.status === "completed") ? "running" : "ready" };
+      nextWinnersBracket = { ...nextWinnersBracket, status: allMatches.some((m) => m.status === "inProgress" || m.status === "completed") ? "running" : "ready" };
     }
 
-    return next;
+    // Real seating — every Winners Bracket loser (not just Round 1's) is
+    // now actually written into their computed Losers Bracket slot, never
+    // left as a placeholder.
+    const nextLosersBracket = losersAdvancementService.seatWinnersBracketLoser(losersBracket, winnersBracket, matchId, loserTeam);
+
+    const nextGrandFinal = this.populateGrandFinal(grandFinal, nextWinnersBracket.champion, nextLosersBracket?.champion ?? null);
+
+    return { winnersBracket: nextWinnersBracket, losersBracket: nextLosersBracket, grandFinal: nextGrandFinal };
+  }
+
+  // Losers Bracket Progression — records a result, advances the winner
+  // into the next Losers Bracket round (or, on the Losers Final, stamps
+  // losersBracket.champion), and eliminates the loser structurally: they're
+  // simply never written into any further match, anywhere — the same
+  // "elimination is implicit in bracket shape" precedent the existing
+  // single-elimination bracket already established. Once losersBracket.
+  // champion is known, populates Grand Final Game 1 if the Winners Bracket
+  // champion is also already known (same auto-populate precedent
+  // updateWinnersBracket above uses).
+  // returns: { losersBracket, grandFinal } (never mutates the objects passed in).
+  updateLosersBracket(losersBracket, winnersBracket, grandFinal, matchId, result) {
+    const validation = losersAdvancementService.validateAdvancement(losersBracket, matchId, result);
+    if (!validation.valid) {
+      throw new Error(validation.errors.join(" "));
+    }
+
+    let found = null;
+    for (let roundIndex = 0; roundIndex < losersBracket.rounds.length; roundIndex++) {
+      const match = losersBracket.rounds[roundIndex].matches.find((m) => m.id === matchId);
+      if (match) {
+        found = { match, roundIndex };
+        break;
+      }
+    }
+
+    const { scoreA, scoreB, winnerId } = result;
+    if (scoreA === "" || scoreB === "" || scoreA == null || scoreB == null) {
+      throw new Error("Enter a score for both teams.");
+    }
+    const numA = Number(scoreA);
+    const numB = Number(scoreB);
+    if (!Number.isFinite(numA) || !Number.isFinite(numB) || numA < 0 || numB < 0) {
+      throw new Error("Scores can't be negative.");
+    }
+    if (winnerId !== found.match.teamA.participantId && winnerId !== found.match.teamB.participantId) {
+      throw new Error("Winner must be one of this match's two teams.");
+    }
+    const winnerTeam = winnerId === found.match.teamA.participantId ? found.match.teamA : found.match.teamB;
+    const loserTeam = winnerTeam === found.match.teamA ? found.match.teamB : found.match.teamA;
+    // loserTeam is deliberately unused beyond this point — a Losers Bracket
+    // loss is a second loss, so this team is eliminated: no destination, no
+    // further seat, anywhere. That omission IS the elimination.
+
+    const updatedMatch = {
+      ...losersAdvancementService.updateMatchStatus(found.match, "completed"),
+      score: { teamA: numA, teamB: numB },
+      winner: winnerId,
+      completedAt: Date.now(),
+    };
+
+    let rounds = losersBracket.rounds.map((r, i) => {
+      if (i !== found.roundIndex) return r;
+      const matches = r.matches.map((m) => (m.id === updatedMatch.id ? updatedMatch : m));
+      return { ...r, matches };
+    });
+    rounds = losersAdvancementService.advanceWinner({ rounds }, matchId, winnerTeam);
+
+    let nextLosersBracket = { ...losersBracket, rounds };
+    const finalRound = rounds[rounds.length - 1];
+    if (losersAdvancementService.isRoundComplete(finalRound) && found.roundIndex === rounds.length - 1) {
+      nextLosersBracket = { ...nextLosersBracket, champion: winnerTeam, runnerUp: loserTeam };
+    }
+
+    const allMatches = rounds.flatMap((r) => r.matches);
+    if (allMatches.every((m) => m.status === "completed")) {
+      nextLosersBracket = { ...nextLosersBracket, status: "completed", completedAt: Date.now() };
+    } else {
+      nextLosersBracket = { ...nextLosersBracket, status: allMatches.some((m) => m.status === "inProgress" || m.status === "completed") ? "running" : "ready" };
+    }
+
+    const nextGrandFinal = this.populateGrandFinal(grandFinal, winnersBracket?.champion ?? null, nextLosersBracket.champion);
+
+    return { losersBracket: nextLosersBracket, grandFinal: nextGrandFinal };
+  }
+
+  // A team's elimination is structural (no seat exists for them anywhere
+  // once they take their second loss — see this file's header comment), so
+  // this is a pure, on-demand DERIVATION for display purposes only (the
+  // Bracket tab's "Eliminated" badge — see TournamentBracketView.jsx),
+  // never a stored field and never consulted by any advancement/seating
+  // logic above. Counts recorded losses per participant across every
+  // completed Winners Bracket, Losers Bracket, and Grand Final (game1 +
+  // game2) match — eliminated the moment a participant reaches 2. Returns
+  // a Set<participantId>.
+  getEliminatedParticipants(deBracket) {
+    const losses = new Map();
+    const tally = (match) => {
+      if (!match || match.status !== "completed" || !match.teamA || !match.teamB || !match.winner) return;
+      const loserId = match.winner === match.teamA.participantId ? match.teamB.participantId : match.teamA.participantId;
+      losses.set(loserId, (losses.get(loserId) || 0) + 1);
+    };
+    deBracket.winnersBracket.rounds.forEach((r) => r.matches.forEach(tally));
+    deBracket.losersBracket.rounds.forEach((r) => r.matches.forEach(tally));
+    tally(deBracket.grandFinal.game1);
+    tally(deBracket.grandFinal.game2);
+    const eliminated = new Set();
+    for (const [participantId, count] of losses) {
+      if (count >= 2) eliminated.add(participantId);
+    }
+    return eliminated;
   }
 }

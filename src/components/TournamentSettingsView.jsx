@@ -318,7 +318,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           label="Bracket format"
           fieldKey="bracketFormat"
           locked={locked}
-          hint={draft.bracketFormat === "doubleElimination" ? "Double Elimination is a foundation-only preview this milestone — the Winners/Losers Bracket and Grand Final structure generates, but there's no progression yet (a Winners Bracket loser doesn't advance into the Losers Bracket)." : undefined}
+          hint={draft.bracketFormat === "doubleElimination" ? "Every team starts in the Winners Bracket; a first loss drops to the Losers Bracket, a second loss eliminates the team. The Losers Bracket champion meets the Winners Bracket champion in the Grand Final — if the Losers Bracket champion wins Game 1, a Grand Final Reset (Game 2) decides the tournament." : undefined}
         >
           <select style={styles.rotationSelect} disabled={locked.has("bracketFormat")} value={draft.bracketFormat} onChange={(e) => set("bracketFormat", e.target.value)}>
             {BRACKET_FORMATS.map((m) => (

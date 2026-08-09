@@ -315,9 +315,9 @@ export default function CreateSessionScreen({
 
           <SectionLabel>5. Tournament format</SectionLabel>
           <p style={styles.editHint}>
-            Placeholder only for now — tournament scheduling/brackets aren't implemented yet. Selecting a format just
-            records it on the session; no bracket, seeding, or scoring logic exists until those are built as
-            separate features.
+            {tournamentFormat === "roundRobin"
+              ? "Every registered player/team plays every other once; the Schedule tab generates the pool schedule from whoever's registered."
+              : "A real, standalone bracket — Winners Bracket, Losers Bracket, and Grand Final — seeded directly from registered/checked-in players, no pool stage first. Generate it from the Schedule tab once your roster is set."}
           </p>
           <select
             style={styles.rotationSelect}
@@ -325,7 +325,7 @@ export default function CreateSessionScreen({
             onChange={(e) => setTournamentFormat(e.target.value)}
           >
             {tournamentFormats.map((f) => (
-              <option key={f.value} value={f.value}>
+              <option key={f.value} value={f.value} disabled={f.implemented === false}>
                 {f.label}
               </option>
             ))}

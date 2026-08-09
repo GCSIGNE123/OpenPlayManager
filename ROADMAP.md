@@ -17,9 +17,28 @@ them, not replace their core algorithms:
 - Smart Queue Management (Hold/Resume/Skip Player, Hold/Resume/Cancel Match)
 - Smart Court Dispatch (automatic dispatch, voice announcements)
 - Session Analytics & Fairness Report
+- Round Robin scheduling/scoring/standings/qualification (`RoundRobinEngine`,
+  `RoundRobinStandingsService`, `PoolQualificationService`) — audited and
+  confirmed production-ready 2026-08-08 (see `TESTING.md`); untouched by the
+  Double Elimination work below.
 
 ## Recently shipped
 
+- **2026-08-09 — Standalone Double Elimination** — root-caused from a real
+  event where a session configured with Tournament Format "Double
+  Elimination" silently ran as plain Round Robin (the format selector had
+  no effect on schedule generation), so eliminated teams kept receiving
+  matches. Fixed at the root: Create Session's format selector now actually
+  determines what gets built; Single Elimination is disabled/"Coming Soon"
+  until it's real. Implemented a genuine standalone Double Elimination
+  format — real Winners/Losers Bracket seating and advancement, structural
+  elimination (no stored flag), Grand Final + Reset — completing the
+  previously half-built `DoubleEliminationEngine.js` foundation rather than
+  retrofitting Round Robin's scheduler onto it. The same completed engine
+  also makes the pre-existing post-Round-Robin "Double Elimination" playoff
+  format real for the first time. 108 new regression checks, live-verified
+  end to end in the browser including a Grand Final Reset. See
+  `FEATURES.md`'s Tournament Manager section for the full writeup.
 - **2026-08-08 — Facilitator Workflow Improvements, Sprint 2** (real Open
   Play session observations): Better Player Substitution (richer candidate
   info + reasoned recommendations), Session Matchmaking Priority (a
@@ -49,6 +68,11 @@ Pulled from `FEATURES.md`'s High Priority backlog, in no particular order:
 - Player Replacement Improvements
 - Standings Improvements
 - PWA Support
+- Standalone Single Elimination (currently disabled/"Coming Soon" in Create
+  Session — `SingleEliminationEngine.js` is still a pure stub)
+- Double Elimination Reports (export/history for a completed standalone
+  Double Elimination tournament — Round Robin already has this via Session
+  Reports; Double Elimination doesn't yet)
 
 ## Working agreement
 

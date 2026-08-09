@@ -11,6 +11,21 @@ const STATUS_LABELS = { pending: "Pending", inProgress: "In Progress", completed
 const POOL_COUNT_OPTIONS = [1, 2, 3, 4];
 const ADVANCES_OPTIONS = [1, 2, 3, 4];
 
+// Standalone Double Elimination — see PROJECT.md/FEATURES.md. Only the
+// pool-agnostic seeding strategies apply (no pool rank/poolLabel data
+// exists without a pool stage — see BracketSeeding.js/lib/tournament.js's
+// buildAndSaveDoubleEliminationTournament for the full reasoning); Manual
+// isn't offered here yet either — it needs a pre-generation seed-assignment
+// UI this milestone doesn't add.
+const STANDALONE_SEEDING_METHODS = [
+  { value: "random", label: "Random (default)" },
+  { value: "rating", label: "Rating-Based" },
+];
+
+function playerCountIsPowerOfTwoAtLeast4(n) {
+  return n >= 4 && (n & (n - 1)) === 0;
+}
+
 // Start Match / Enter Scores / Save Result / Edit Result all live in this
 // one card: "Start Match" (pending) and "Edit Result" (completed) both open
 // the same score-entry form rather than being separate multi-step flows —
@@ -268,6 +283,8 @@ export default function TournamentScheduleView({
     template && !ADVANCES_OPTIONS.includes(template.advancesPerPool) ? String(template.advancesPerPool) : ""
   );
   const [expandedRounds, setExpandedRounds] = useState(() => new Set());
+  // Standalone Double Elimination — see PROJECT.md/FEATURES.md.
+  const [seedingMethod, setSeedingMethod] = useState("random");
 
   // Round 1 of every pool starts expanded, same as the single-pool view
   // used to default to Round 1 open — re-derived whenever a *different*
@@ -286,6 +303,66 @@ export default function TournamentScheduleView({
       return next;
     });
   };
+
+  // Standalone Double Elimination — see PROJECT.md/FEATURES.md. No pool
+  // stage at all: entrants come straight from this session's registered
+  // players, and the "schedule" is a real Winners/Losers Bracket + Grand
+  // Final generated in one action (buildAndSaveDoubleEliminationTournament).
+  // Once generated, match play happens on the Bracket tab (there are no
+  // pool rounds to show here) — this branch only ever renders the
+  // generation form itself.
+  if (state.tournamentFormat === "doubleElimination") {
+    const deTournamentGenerated = tournament?.format === "doubleElimination";
+    const isPowerOfTwo = playerCountIsPowerOfTwoAtLeast4(Object.keys(state.players || {}).length);
+    const deCanGenerate = isPowerOfTwo && !generating && !deTournamentGenerated;
+    return (
+      <div>
+        <SectionLabel>Tournament Schedule</SectionLabel>
+        <div style={styles.tournamentSetupCard}>
+          <p style={styles.editHint}>
+            {deTournamentGenerated
+              ? "Bracket already generated — manage matches from the Bracket tab."
+              : `Generates a standalone Double Elimination bracket directly from this session's ${Object.keys(state.players || {}).length} registered player${Object.keys(state.players || {}).length === 1 ? "" : "s"} — no Round Robin pool stage. Needs a power-of-two count of at least 4 (4, 8, 16, ...).`}
+          </p>
+          {!deTournamentGenerated && (
+            <>
+              <div style={styles.skillToggle}>
+                <button type="button" style={styles.skillToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
+                  Singles
+                </button>
+                <button type="button" style={styles.skillToggleBtn(mode === "doubles")} onClick={() => setMode("doubles")}>
+                  Doubles
+                </button>
+              </div>
+              <p style={styles.dialogLabel}>Seeding method</p>
+              <div style={styles.skillToggle}>
+                {STANDALONE_SEEDING_METHODS.map((m) => (
+                  <button key={m.value} type="button" style={styles.skillToggleBtn(seedingMethod === m.value)} onClick={() => setSeedingMethod(m.value)}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              {!isPowerOfTwo && (
+                <p style={styles.editWarning}>
+                  Double Elimination requires a power-of-two team count of at least 4 (4, 8, 16, ...) — currently{" "}
+                  {Object.keys(state.players || {}).length}.
+                </p>
+              )}
+              {generateError && <p style={styles.editWarning}>{generateError}</p>}
+              <button
+                style={{ ...styles.primaryBtn, ...(!deCanGenerate ? styles.btnDisabled : {}) }}
+                disabled={!deCanGenerate}
+                onClick={() => onGenerate(mode, null, null, seedingMethod)}
+              >
+                <Users size={16} strokeWidth={2.5} />
+                {generating ? "Generating…" : "Generate Double Elimination Bracket"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const isCustomPoolCount = !POOL_COUNT_OPTIONS.includes(poolCount);
   const effectivePoolCount = isCustomPoolCount ? Number(customPoolCount) || 0 : poolCount;

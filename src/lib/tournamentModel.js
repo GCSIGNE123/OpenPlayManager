@@ -138,11 +138,43 @@ export function computePoolStatus(pool) {
 // once ALL of them are; 'running' as soon as any one of them has started or
 // finished; 'ready' otherwise. There's no cross-pool combining here (that's
 // what a future Playoff Qualification feature would add).
+//
+// Standalone Double Elimination (tournament.format === "doubleElimination",
+// see lib/tournament.js's buildAndSaveDoubleEliminationTournament) has no
+// pools at all — `tournament.pools` is always `[]` for it, which would
+// otherwise make the check above vacuously "every pool completed" (an
+// empty array's `.every()` is true) the instant the tournament is created,
+// before a single match is played. Status is derived from
+// tournament.doubleEliminationBracket instead for that format; Round Robin
+// (and a Round Robin tournament that later attaches a Double Elimination
+// PLAYOFF bracket via tournament.bracketFormat) is completely unaffected —
+// this branch only ever applies to a standalone Double Elimination format.
 export function computeTournamentStatus(tournament) {
+  if (tournament.format === "doubleElimination") {
+    return computeDoubleEliminationBracketStatus(tournament.doubleEliminationBracket);
+  }
   const statuses = tournament.pools.map((p) => p.status);
   if (statuses.every((s) => s === "completed")) return "completed";
   if (statuses.some((s) => s === "running" || s === "completed")) return "running";
   return "ready";
+}
+
+// Standalone Double Elimination's own status rollup — 'ready' before the
+// bracket exists; 'running' once any Winners/Losers Bracket match has
+// started or finished, or Grand Final Game 1 is seated; 'completed' only
+// once the Grand Final (including a Game 2 reset, if one was triggered) has
+// a champion. Deliberately reads directly off the bracket's own three
+// sub-statuses rather than re-deriving from raw matches — those are already
+// correct (see DoubleEliminationEngine.updateWinnersBracket/
+// updateLosersBracket/updateGrandFinal), this only rolls them up one level.
+export function computeDoubleEliminationBracketStatus(bracket) {
+  if (!bracket) return "ready";
+  if (bracket.grandFinal.status === "completed") return "completed";
+  const anyStarted =
+    bracket.winnersBracket.status !== "ready" ||
+    bracket.losersBracket.status !== "ready" ||
+    bracket.grandFinal.status !== "pending";
+  return anyStarted ? "running" : "ready";
 }
 
 // ---- Tournament Match Management ----
@@ -202,10 +234,44 @@ export function getPoolProgress(pool) {
 // Tournament-wide progress — sums every pool's own progress. Used by the
 // Tournament Dashboard's Overview tab for the aggregate Total/Completed/
 // Remaining stats (pool-by-pool breakdowns use getPoolProgress directly).
+//
+// Standalone Double Elimination has no pools (see computeTournamentStatus's
+// own comment above for why) — delegates to getDoubleEliminationProgress
+// instead, which counts real (non-null-team) Winners/Losers Bracket
+// matches plus Grand Final Game 1/Game 2. Round Robin is unaffected.
 export function getTournamentProgress(tournament) {
+  if (tournament.format === "doubleElimination") {
+    return getDoubleEliminationProgress(tournament.doubleEliminationBracket);
+  }
   const totals = tournament.pools.map(getPoolProgress);
   const total = totals.reduce((sum, p) => sum + p.total, 0);
   const completed = totals.reduce((sum, p) => sum + p.completed, 0);
+  return {
+    total,
+    completed,
+    remaining: total - completed,
+    percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+  };
+}
+
+// Standalone Double Elimination's own progress derivation. Only counts
+// matches that actually exist to be played — a Losers Bracket/Grand Final
+// slot that hasn't been seated yet (both teams still null) isn't a real
+// match yet, the same "not playable until populated" invariant
+// CourtAssignmentService.getPlayableMatches already enforces for court
+// assignment; counting it here too would make "Total Matches" overstate
+// what's actually ever going to be played whenever a bracket doesn't reach
+// a Grand Final Reset.
+export function getDoubleEliminationProgress(bracket) {
+  if (!bracket) return { total: 0, completed: 0, remaining: 0, percent: 0 };
+  const realMatches = [
+    ...bracket.winnersBracket.rounds.flatMap((r) => r.matches),
+    ...bracket.losersBracket.rounds.flatMap((r) => r.matches),
+    bracket.grandFinal.game1,
+    ...(bracket.grandFinal.game2 ? [bracket.grandFinal.game2] : []),
+  ].filter((m) => m.teamA && m.teamB);
+  const total = realMatches.length;
+  const completed = realMatches.filter((m) => m.status === "completed").length;
   return {
     total,
     completed,
@@ -269,6 +335,7 @@ export function makeTournament({
   poolCount = 1,
   assignmentMethod = "random",
   pools,
+  entrants = null, // Standalone Double Elimination only — see lib/tournament.js's buildAndSaveDoubleEliminationTournament. Round Robin (and any tournament with pools) keeps its entrants nested per-pool exactly as before; this is null for every non-standalone-Double-Elimination tournament. Needed because resolvePlayerIds (lib/tournament.js) has to look SOMEWHERE for a bracket team's underlying playerIds when there are no pools to search.
   advancesPerPool = 1,
   courtNames = null, // Tournament Templates' "Default Court Names" — see engines/TournamentTemplateService.js. Applied 1:1 by index; any courts beyond courtNames.length still get the usual "Court N" default
   matchScoringRules = null, // Tournament Settings' Match Rules — { matchFormat, winningScore, winByTwo }, captured for reference only, nothing in this app enforces scoring rules yet. Defaults via TournamentSettings.defaultMatchScoringRules() if not given
@@ -298,6 +365,7 @@ export function makeTournament({
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js
     pools,
+    entrants,
     matchScoringRules: matchScoringRules ?? defaultMatchScoringRules(),
     playoffEnabled,
     autoDetectPlayoffStage,

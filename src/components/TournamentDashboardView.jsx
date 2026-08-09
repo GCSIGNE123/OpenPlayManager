@@ -31,6 +31,14 @@ import {
   saveDoubleEliminationPauseMatch,
   saveDoubleEliminationResumeMatch,
   saveDoubleEliminationWalkover,
+  saveDoubleEliminationLosersMatchStart,
+  saveDoubleEliminationLosersMatchResult,
+  saveDoubleEliminationLosersPauseMatch,
+  saveDoubleEliminationLosersResumeMatch,
+  saveDoubleEliminationLosersWalkover,
+  saveGrandFinalMatchStart,
+  saveGrandFinalMatchResult,
+  saveGrandFinalWalkover,
   saveQualificationPromote,
   saveQualificationEliminate,
   saveQualificationReplace,
@@ -192,7 +200,7 @@ function CompletedOverviewPanel({ tournament }) {
           </>
         )}
       </div>
-      {(tournament.bracketFormat ?? "singleElimination") === "doubleElimination" && (
+      {(tournament.format === "doubleElimination" || (tournament.bracketFormat ?? "singleElimination") === "doubleElimination") && (
         <div style={styles.sessionInfoCard}>
           <div style={styles.sessionInfoItem}>
             <span style={styles.sessionInfoLabel}>Tournament Format</span>
@@ -208,8 +216,20 @@ function CompletedOverviewPanel({ tournament }) {
           </div>
           <div style={styles.sessionInfoItem}>
             <span style={styles.sessionInfoLabel}>Grand Final</span>
-            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.grandFinal.status : "Not generated"}</span>
+            <span style={styles.sessionInfoValue}>
+              {tournament.doubleEliminationBracket
+                ? tournament.doubleEliminationBracket.grandFinal.resetTriggered
+                  ? `${tournament.doubleEliminationBracket.grandFinal.status} (Reset triggered)`
+                  : tournament.doubleEliminationBracket.grandFinal.status
+                : "Not generated"}
+            </span>
           </div>
+          {tournament.doubleEliminationBracket?.grandFinal.champion && (
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>🥇 Tournament Champion</span>
+              <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket.grandFinal.champion.label}</span>
+            </div>
+          )}
         </div>
       )}
       {/* Winners Bracket Progression — see PROJECT.md. Same "Current Round/
@@ -313,10 +333,81 @@ function Placeholder({ children }) {
 // Pool"/"Matches per Pool"/"Pool Leaders" each just show one entry — no
 // different in substance from the old single-pool Overview, just labeled
 // per-pool now that pools are the real unit of play.
+// Standalone Double Elimination — see PROJECT.md/FEATURES.md. No pools, no
+// qualification, so the Round-Robin-shaped Overview below (Number of
+// Pools/Total Qualified/an empty Pools table) would just be misleading
+// zeros. This is the Double Elimination-native Overview instead — Winners/
+// Losers Bracket/Grand Final status plus champion/runner-up, the same
+// summary the Bracket tab's own header card shows, kept in sync since both
+// read straight off tournament.doubleEliminationBracket.
+function DoubleEliminationOverviewPanel({ tournament }) {
+  const progress = getTournamentProgress(tournament);
+  const deBracket = tournament.doubleEliminationBracket;
+  return (
+    <div>
+      <div style={styles.sessionInfoCard}>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Format</span>
+          <span style={styles.sessionInfoValue}>Double Elimination (standalone)</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Total Teams</span>
+          <span style={styles.sessionInfoValue}>{tournament.entrants?.length ?? 0}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Matches Completed</span>
+          <span style={styles.sessionInfoValue}>{progress.completed}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>Matches Remaining</span>
+          <span style={styles.sessionInfoValue}>{progress.remaining}</span>
+        </div>
+        {deBracket && (
+          <>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Winners Bracket</span>
+              <span style={styles.sessionInfoValue}>{deBracket.winnersBracket.status}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Losers Bracket</span>
+              <span style={styles.sessionInfoValue}>{deBracket.losersBracket.status}</span>
+            </div>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>Grand Final</span>
+              <span style={styles.sessionInfoValue}>{deBracket.grandFinal.resetTriggered ? `${deBracket.grandFinal.status} (Reset triggered)` : deBracket.grandFinal.status}</span>
+            </div>
+          </>
+        )}
+      </div>
+      <div style={styles.tournamentProgressTrack}>
+        <div style={styles.tournamentProgressFill(progress.percent)} />
+      </div>
+      <p style={{ ...styles.editHint, marginTop: 10 }}>
+        {tournament.name} — {progress.percent}% complete, status: <strong>{tournament.status}</strong>.
+      </p>
+      {deBracket?.grandFinal.champion && (
+        <div style={styles.sessionInfoCard}>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>🥇 Tournament Champion</span>
+            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.champion.label}</span>
+          </div>
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
+            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.runnerUp?.label ?? "—"}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewPanel({ tournament, loading }) {
   if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
   if (!tournament) {
     return <Placeholder>Generate a schedule from the Schedule tab to see tournament progress here.</Placeholder>;
+  }
+  if (tournament.format === "doubleElimination") {
+    return <DoubleEliminationOverviewPanel tournament={tournament} />;
   }
   if (tournament.status === "completed" && tournament.format === "roundRobin") {
     return <CompletedOverviewPanel tournament={tournament} />;
@@ -497,14 +588,14 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     };
   }, [tournamentId]);
 
-  const handleGenerate = async (mode, poolCount, advancesPerPool) => {
+  const handleGenerate = async (mode, poolCount, advancesPerPool, seedingMethod) => {
     setMatchError("");
     if (tournament?.status === "completed") {
       setMatchError("This tournament is already completed — the schedule can't be regenerated.");
       return;
     }
     setSelectedPool("all");
-    await onGenerate(mode, poolCount, advancesPerPool);
+    await onGenerate(mode, poolCount, advancesPerPool, seedingMethod);
   };
 
   const handleStartMatch = async (matchId) => {
@@ -640,6 +731,89 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     setMatchError("");
     try {
       setTournament(await saveDoubleEliminationWalkover(tournament, matchId, winnerId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  // Losers Bracket Progression — same "call the lib function,
+  // setTournament(updated)" shape as every Winners Bracket handler above.
+  const handleDoubleEliminationLosersStartMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationLosersMatchStart(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationLosersSaveResult = async (matchId, result) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationLosersMatchResult(tournament, matchId, result));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationLosersPauseMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationLosersPauseMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationLosersResumeMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationLosersResumeMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleDoubleEliminationLosersWalkover = async (matchId, winnerId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveDoubleEliminationLosersWalkover(tournament, matchId, winnerId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  // Grand Final (including Grand Final Reset) — same shape again.
+  const handleGrandFinalStartMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveGrandFinalMatchStart(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleGrandFinalSaveResult = async (matchId, result) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveGrandFinalMatchResult(tournament, matchId, result));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  const handleGrandFinalWalkover = async (matchId, winnerId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveGrandFinalWalkover(tournament, matchId, winnerId));
     } catch (e) {
       setMatchError(e.message);
     }
@@ -1007,6 +1181,14 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onDoubleEliminationPauseMatch={handleDoubleEliminationPauseMatch}
           onDoubleEliminationResumeMatch={handleDoubleEliminationResumeMatch}
           onDoubleEliminationWalkover={handleDoubleEliminationWalkover}
+          onDoubleEliminationLosersStartMatch={handleDoubleEliminationLosersStartMatch}
+          onDoubleEliminationLosersSaveResult={handleDoubleEliminationLosersSaveResult}
+          onDoubleEliminationLosersPauseMatch={handleDoubleEliminationLosersPauseMatch}
+          onDoubleEliminationLosersResumeMatch={handleDoubleEliminationLosersResumeMatch}
+          onDoubleEliminationLosersWalkover={handleDoubleEliminationLosersWalkover}
+          onGrandFinalStartMatch={handleGrandFinalStartMatch}
+          onGrandFinalSaveResult={handleGrandFinalSaveResult}
+          onGrandFinalWalkover={handleGrandFinalWalkover}
         />
       )}
 

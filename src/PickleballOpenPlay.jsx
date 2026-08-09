@@ -51,7 +51,7 @@ import {
 import { buildAnnouncementText, speakAnnouncement, emitDispatchEvent, DISPATCH_EVENTS } from "./lib/announcer.js";
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
-import { buildAndSaveRoundRobinTournament } from "./lib/tournament.js";
+import { buildAndSaveRoundRobinTournament, buildAndSaveDoubleEliminationTournament } from "./lib/tournament.js";
 import { applyWaitingTimeTracking, computeSessionAnalyticsReport } from "./lib/sessionAnalytics.js";
 import { saveSessionReport } from "./lib/sessionReportModel.js";
 import { recordSessionCreated, recordSessionEnded } from "./lib/sessionIndexModel.js";
@@ -789,25 +789,44 @@ export default function PickleballOpenPlay() {
   // pointer to it, never the schedule itself. Regenerating is safe: it
   // creates a brand-new record with a new id rather than overwriting the
   // old one, since nothing (scoring, standings) references match ids yet.
-  const generateTournamentSchedule = async (mode, poolCount = 1, advancesPerPool = 1) => {
+  // Tournament Format — see PROJECT.md/FEATURES.md. Wired for real: which
+  // builder runs depends on state.tournamentFormat (set once at Create
+  // Session, see CreateSessionScreen.jsx), not just Round Robin
+  // unconditionally the way this used to silently ignore that selection
+  // entirely (the root cause of a real Double Elimination event running as
+  // plain Round Robin — see CHANGELOG.md). Round Robin's own path
+  // (buildAndSaveRoundRobinTournament, pool-based) is completely
+  // unchanged; Double Elimination is a new, separate, standalone builder
+  // (buildAndSaveDoubleEliminationTournament, no pool stage) — see
+  // lib/tournament.js/DoubleEliminationEngine.js.
+  const generateTournamentSchedule = async (mode, poolCount = 1, advancesPerPool = 1, seedingMethod = "random") => {
     setGeneratingSchedule(true);
     setScheduleError("");
     try {
       const players = Object.values(state.players);
-      const tournament = await buildAndSaveRoundRobinTournament({
-        sessionCode,
-        players,
-        mode,
-        courtsCount: state.courts.length,
-        poolCount,
-        advancesPerPool,
-        // Tournament Templates — carried through from Create Session if the
-        // organizer picked "Use Template" (see pendingTournamentTemplate
-        // above); undefined for every other session, which
-        // buildAndSaveRoundRobinTournament already treats as "no override."
-        courtNames: state.pendingTournamentTemplate?.defaultCourtNames ?? undefined,
-        matchScoringRules: state.pendingTournamentTemplate?.matchScoringRules ?? undefined,
-      });
+      const tournament =
+        state.tournamentFormat === "doubleElimination"
+          ? await buildAndSaveDoubleEliminationTournament({
+              sessionCode,
+              players,
+              mode,
+              courtsCount: state.courts.length,
+              seedingMethod,
+            })
+          : await buildAndSaveRoundRobinTournament({
+              sessionCode,
+              players,
+              mode,
+              courtsCount: state.courts.length,
+              poolCount,
+              advancesPerPool,
+              // Tournament Templates — carried through from Create Session if the
+              // organizer picked "Use Template" (see pendingTournamentTemplate
+              // above); undefined for every other session, which
+              // buildAndSaveRoundRobinTournament already treats as "no override."
+              courtNames: state.pendingTournamentTemplate?.defaultCourtNames ?? undefined,
+              matchScoringRules: state.pendingTournamentTemplate?.matchScoringRules ?? undefined,
+            });
       await save({ ...state, tournamentId: tournament.id });
     } catch (e) {
       setScheduleError(e.message || "Couldn't generate the schedule.");

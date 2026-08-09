@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-09
+
+### Fixed
+- **Double Elimination is now real** — previously, Create Session's "Tournament Format" selector recorded the choice but had zero effect: every tournament, regardless of format selected, generated as a plain Round Robin schedule (the root cause of a real event's teams still receiving matches after 2 losses). Selecting a format now actually determines what gets built.
+
+### Added
+- **Standalone Double Elimination tournaments** — a genuine Winners Bracket + Losers Bracket + Grand Final, seeded directly from registered/checked-in players, no Round Robin pool stage first. Every team starts in the Winners Bracket; a first loss drops them to the Losers Bracket; a second loss eliminates them — an eliminated team never receives another match, enforced structurally (no future bracket slot is ever generated for them) rather than by a stored flag. The Grand Final seats the Winners Bracket champion (0 losses) against the Losers Bracket champion (1 loss); if the Losers Bracket champion wins Game 1, a Grand Final Reset (Game 2, winner-takes-all) decides the tournament — if the Winners Bracket champion wins Game 1, the tournament ends immediately.
+- Single Elimination is disabled in Create Session's format selector, clearly marked "Coming Soon" — no longer selectable while it remains unimplemented.
+
+### Changed
+- The post-Round-Robin "Double Elimination" playoff bracket format (Tournament Settings → Bracket Format) is also now fully real — it shares the same completed engine, so a Winners Bracket loser is genuinely seated into the Losers Bracket, Losers Bracket matches advance/eliminate correctly, and the Grand Final (with Reset) works the same way. The "foundation-only preview" warning is removed.
+
 ## 2026-08-08
 
 ### Added
