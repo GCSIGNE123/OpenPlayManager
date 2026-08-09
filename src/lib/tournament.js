@@ -278,7 +278,33 @@ export async function saveMatchResult(tournament, matchId, result) {
   const { match } = findMatch(updated, matchId);
   const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
   if (!match.isBye) await rateMatch(updated, match, tournament.format === "league" ? "league" : "tournament");
-  return saveTournament(withAutoFill);
+  const withNextMatchCleared =
+    withAutoFill.nextMatchId === matchId ? { ...withAutoFill, nextMatchId: null } : withAutoFill;
+  return saveTournament(withNextMatchCleared);
+}
+
+// Next Match (facilitator announcement) — purely a facilitator designation
+// for the Round Robin match to announce next. Never touches scheduling,
+// standings, or match data itself; only stamps tournament.nextMatchId, the
+// same "call something small, saveTournament what it returns" shape every
+// other wrapper here uses. Only a pending match already found in the
+// schedule can be designated — picking a different match simply replaces
+// the field (only one value can ever be stored, so there is only ever one
+// Next Match). Cleared automatically once that match completes (see
+// saveMatchResult above) or becomes invalid (saveClearNextMatch, for the
+// organizer/UI to call defensively if the match disappears, e.g. a
+// schedule regeneration).
+export async function saveSetNextMatch(tournament, matchId) {
+  const found = findMatch(tournament, matchId);
+  if (!found || found.match.isBye || found.match.status !== "pending") {
+    throw new Error("Only a pending match can be set as Next Match.");
+  }
+  return saveTournament({ ...tournament, nextMatchId: matchId });
+}
+
+export async function saveClearNextMatch(tournament) {
+  if (tournament.nextMatchId == null) return tournament;
+  return saveTournament({ ...tournament, nextMatchId: null });
 }
 
 // ---- Playoff Match Management & Winner Advancement ----

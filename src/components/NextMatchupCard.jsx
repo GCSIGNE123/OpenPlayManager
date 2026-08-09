@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Lock, Pause, Play, Shuffle, Unlock, X } from "lucide-react";
+import { Check, Lock, Pause, Play, Shuffle, Star, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -19,6 +19,8 @@ export default function NextMatchupCard({
   onHold,
   onResume,
   onCancel,
+  isNext,
+  onSetNextMatchup,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -74,6 +76,18 @@ export default function NextMatchupCard({
       <div style={styles.matchupHeadRow}>
         <div style={styles.matchupHeader(label === "Next up")}>{label}</div>
         <div style={{ display: "flex", gap: 6 }}>
+          {onSetNextMatchup && (
+            <button
+              style={styles.lockToggleBtn(!!isNext)}
+              onClick={isNext ? undefined : onSetNextMatchup}
+              disabled={isNext}
+              aria-label={isNext ? "this is the designated Next Match" : "set as Next Match"}
+              title={isNext ? "This matchup is designated as Next Match" : "Designate this matchup as Next Match for announcement"}
+            >
+              <Star size={12} strokeWidth={2.5} />
+              {isNext ? "Next Match" : "Set as Next Match"}
+            </button>
+          )}
           <button
             style={styles.lockToggleBtn(!!matchup.locked)}
             onClick={() => onToggleLock(matchup.id)}

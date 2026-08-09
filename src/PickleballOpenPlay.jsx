@@ -48,7 +48,7 @@ import {
   confirmCourtLive as confirmCourtLiveAction,
   logDispatchEvent,
 } from "./lib/courtDispatch.js";
-import { buildAnnouncementText, speakAnnouncement, emitDispatchEvent, DISPATCH_EVENTS } from "./lib/announcer.js";
+import { buildAnnouncementText, buildNextMatchAnnouncementText, speakAnnouncement, emitDispatchEvent, DISPATCH_EVENTS } from "./lib/announcer.js";
 import { resolveWinnerPoolMatch, isPoolingRotation, getPairPartnerIndex } from "./lib/winnerPoolRound.js";
 import { progressiveSkillPhaseFor } from "./lib/progressiveSkillPhase.js";
 import { buildAndSaveRoundRobinTournament, buildAndSaveDoubleEliminationTournament } from "./lib/tournament.js";
@@ -614,6 +614,65 @@ export default function PickleballOpenPlay() {
     });
   };
 
+  // Next Match (facilitator announcement) — Open Play. Designates one
+  // already-generated nextMatchups entry for the organizer to announce next.
+  // Purely a display/announcement flag on session state (persists/refreshes
+  // exactly like nextMatchups/queueIds already do) — never removes the
+  // matchup from nextMatchups, never touches queueIds, never re-orders or
+  // regenerates anything. Only one designation can ever exist since this is
+  // a single field; selecting a different matchup simply overwrites it.
+  const setNextMatchup = (matchupId) => {
+    save({ ...state, nextMatchupId: matchupId });
+  };
+
+  const [announcingNextMatchup, setAnnouncingNextMatchup] = useState(false);
+
+  // Mirrors repeatAnnouncement's shape above — same buildNextMatchAnnouncementText
+  // sibling of buildAnnouncementText, same speakAnnouncement call, same
+  // queueActivityLog entry via logDispatchEvent so this shows up alongside
+  // every other dispatch/announcement event. Guards rapid repeated clicks by
+  // ignoring further clicks until the in-flight announcement's onDone fires.
+  const announceNextMatchup = () => {
+    const matchup = state.nextMatchups.find((m) => m.id === state.nextMatchupId);
+    if (!matchup || announcingNextMatchup) return;
+    const teamANames = matchup.teamA.map((id) => state.players[id]?.name || "Unknown player");
+    const teamBNames = matchup.teamB.map((id) => state.players[id]?.name || "Unknown player");
+    const text = buildNextMatchAnnouncementText(teamANames, teamBNames);
+    const cfg = state.courtDispatchSettings || defaultState.courtDispatchSettings;
+    const logAnnouncement = () => {
+      save(
+        logDispatchEvent(stateRef.current, {
+          kind: "nextMatchAnnounced",
+          matchupId: matchup.id,
+          teamANames,
+          teamBNames,
+          reason: "Next Match announced",
+        })
+      );
+    };
+    setAnnouncingNextMatchup(true);
+    if (!cfg.voiceEnabled) {
+      logAnnouncement();
+      setAnnouncingNextMatchup(false);
+      return;
+    }
+    speakAnnouncement(text, cfg, () => {
+      logAnnouncement();
+      setAnnouncingNextMatchup(false);
+    });
+  };
+
+  // Safely clears a stale Next Match designation — the matchup it pointed
+  // at left nextMatchups (dispatched to a court, cancelled, substituted
+  // away, or wiped by Regenerate) without ever going through
+  // setNextMatchup itself, so nothing else would otherwise notice.
+  useEffect(() => {
+    if (!state.nextMatchupId) return;
+    if (state.nextMatchups.some((m) => m.id === state.nextMatchupId)) return;
+    save({ ...stateRef.current, nextMatchupId: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.nextMatchups, state.nextMatchupId]);
+
   useEffect(() => {
     if (screen !== "app" || !sessionCode) return;
     load();
@@ -722,6 +781,7 @@ export default function PickleballOpenPlay() {
         players,
         queueIds: [],
         nextMatchups: [],
+        nextMatchupId: null,
         matchHistory: [],
         sessionType,
         tournamentFormat,
@@ -2257,6 +2317,10 @@ export default function PickleballOpenPlay() {
                   queueingStopped={state.queueingStopped}
                   onToggleQueueing={toggleQueueing}
                   pendingCourtRemovals={state.pendingCourtRemovals || 0}
+                  nextMatchupId={state.nextMatchupId}
+                  onSetNextMatchup={setNextMatchup}
+                  onAnnounceNextMatchup={announceNextMatchup}
+                  announcingNextMatchup={announcingNextMatchup}
                 />
               )}
 

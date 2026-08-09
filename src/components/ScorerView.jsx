@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Megaphone, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { ROTATION_MODES } from "../lib/constants.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
@@ -155,6 +155,10 @@ export default function ScorerView({
   queueingStopped,
   onToggleQueueing,
   pendingCourtRemovals,
+  nextMatchupId,
+  onSetNextMatchup,
+  onAnnounceNextMatchup,
+  announcingNextMatchup,
 }) {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   // Player Checkout During Open Play — see PROJECT.md. Confirming a
@@ -405,8 +409,41 @@ export default function ScorerView({
         })()}
       </div>
 
-      {nextMatchups.length > 0 && (
+      {nextMatchups.length > 0 && (() => {
+        const announcedMatchup = nextMatchups.find((m) => m.id === nextMatchupId);
+        return (
         <>
+          {announcedMatchup && (
+            <div style={{ ...styles.tournamentSetupCard, borderColor: "var(--ball)" }}>
+              <p style={styles.dialogLabel}>
+                <Megaphone size={13} strokeWidth={2.5} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+                NEXT MATCH
+              </p>
+              <div style={styles.matchupTeams}>
+                <div style={styles.matchupTeam}>
+                  {announcedMatchup.teamA.map((id) => (
+                    <span key={id} style={styles.editChipName}>{state.players[id]?.name}</span>
+                  ))}
+                </div>
+                <span style={styles.matchupVs}>VS</span>
+                <div style={styles.matchupTeam}>
+                  {announcedMatchup.teamB.map((id) => (
+                    <span key={id} style={styles.editChipName}>{state.players[id]?.name}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={styles.editActions}>
+                <button
+                  style={{ ...styles.primaryBtn, ...(announcingNextMatchup ? styles.btnDisabled : {}) }}
+                  disabled={announcingNextMatchup}
+                  onClick={onAnnounceNextMatchup}
+                >
+                  <Megaphone size={14} strokeWidth={2.5} />
+                  {announcingNextMatchup ? "Announcing…" : "Announce Next Match"}
+                </button>
+              </div>
+            </div>
+          )}
           <div style={styles.scorerToolbar}>
             <SectionLabel>Next matchups</SectionLabel>
             <div style={{ display: "flex", gap: 8 }}>
@@ -445,10 +482,13 @@ export default function ScorerView({
               onHold={() => holdMatch(m.id)}
               onResume={() => resumeMatch(m.id)}
               onCancel={() => cancelMatch(m.id)}
+              isNext={m.id === nextMatchupId}
+              onSetNextMatchup={() => onSetNextMatchup(m.id)}
             />
           ))}
         </>
-      )}
+        );
+      })()}
 
       <WaitingPlayersPanel
         players={unassignedPlayers}

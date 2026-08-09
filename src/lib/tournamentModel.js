@@ -436,6 +436,13 @@ export function makeTournament({
     // attaches one (only when bracketFormat === "doubleElimination", via an
     // explicit organizer action — no auto-generation this milestone).
     doubleEliminationBracket: null,
+    // Next Match (facilitator announcement) — see lib/tournament.js's
+    // saveSetNextMatch/saveClearNextMatch. Purely a facilitator designation
+    // for what to announce next; never read by scheduling, standings, or
+    // any engine. null until the organizer picks a pending match; cleared
+    // automatically once that match completes or stops being a valid
+    // pending match (see saveMatchResult/saveMatchStart).
+    nextMatchId: null,
     createdAt: now,
     updatedAt: now,
     // Tournament Reports & History — additive, default false. See

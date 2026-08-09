@@ -184,6 +184,7 @@ export const defaultState = {
   players: {},
   queueIds: [],
   nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
+  nextMatchupId: null, // Next Match (facilitator announcement) — id of the nextMatchups entry the organizer has designated to announce next. Purely a facilitator display/announcement flag; never read by matchmaking, queue, or court dispatch. null until set; cleared once that matchup is no longer in nextMatchups (dispatched, cancelled, regenerated) or the session ends.
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   sessionType: "openPlay", // see SESSION_TYPES
   tournamentFormat: null, // see TOURNAMENT_FORMATS — only set when sessionType is "tournament"; architecture-only, no tournament logic reads this yet

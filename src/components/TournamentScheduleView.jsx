@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Pencil, Play, RefreshCw, Users, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Megaphone, Pencil, Play, RefreshCw, Star, Users, X } from "lucide-react";
 import { styles } from "../styles.js";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -33,7 +33,7 @@ function playerCountIsPowerOfTwoAtLeast4(n) {
 // Robin Pool Support, editing locks per POOL (poolCompleted) rather than per
 // whole tournament — a match in a still-running pool stays editable even
 // once a sibling pool has finished.
-function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
+function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMatch, onSetNextMatch }) {
   const [editing, setEditing] = useState(false);
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
@@ -90,6 +90,12 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
       <div style={styles.historyMatchHead}>
         <span style={styles.courtBadge}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
         <span style={styles.matchStatusBadge(match.status)}>{STATUS_LABELS[match.status]}</span>
+        {isNextMatch && (
+          <span style={{ ...styles.courtBadge, background: "var(--ball)" }}>
+            <Star size={11} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 3 }} />
+            NEXT MATCH
+          </span>
+        )}
       </div>
 
       {!editing && (
@@ -124,6 +130,12 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
             </div>
           ) : (
             <div style={styles.editActions}>
+              {match.status === "pending" && !isNextMatch && (
+                <button type="button" style={styles.secondaryBtn} onClick={() => onSetNextMatch(match.id)}>
+                  <Star size={13} strokeWidth={2.5} />
+                  Set as Next Match
+                </button>
+              )}
               <button type="button" style={styles.primaryBtn} onClick={match.status === "pending" ? handleStart : openForm}>
                 <Play size={14} strokeWidth={2.5} />
                 {match.status === "pending" ? "Start match" : "Enter scores"}
@@ -191,7 +203,7 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult }) {
   );
 }
 
-function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onSaveResult }) {
+function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onSaveResult, nextMatchId, onSetNextMatch }) {
   return (
     <div style={styles.historyRoundCard}>
       <button style={styles.historyRoundHead} onClick={onToggle}>
@@ -205,7 +217,15 @@ function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onS
       {expanded && (
         <div style={styles.historyRoundBody}>
           {round.matches.map((m) => (
-            <MatchCard key={m.id} match={m} poolCompleted={poolCompleted} onStartMatch={onStartMatch} onSaveResult={onSaveResult} />
+            <MatchCard
+              key={m.id}
+              match={m}
+              poolCompleted={poolCompleted}
+              onStartMatch={onStartMatch}
+              onSaveResult={onSaveResult}
+              isNextMatch={m.id === nextMatchId}
+              onSetNextMatch={onSetNextMatch}
+            />
           ))}
         </div>
       )}
@@ -219,7 +239,7 @@ function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onS
 // whole tournament. Only shown with a "Pool X" heading when there's more
 // than one pool (poolCount === 1 renders identically to before Pool
 // Support — no extra chrome for the common case).
-function PoolSchedule({ pool, showHeading, expandedRounds, onToggleRound, onStartMatch, onSaveResult }) {
+function PoolSchedule({ pool, showHeading, expandedRounds, onToggleRound, onStartMatch, onSaveResult, nextMatchId, onSetNextMatch }) {
   const poolCompleted = pool.status === "completed";
   return (
     <div style={styles.poolScheduleBlock}>
@@ -238,6 +258,8 @@ function PoolSchedule({ pool, showHeading, expandedRounds, onToggleRound, onStar
           poolCompleted={poolCompleted}
           onStartMatch={onStartMatch}
           onSaveResult={onSaveResult}
+          nextMatchId={nextMatchId}
+          onSetNextMatch={onSetNextMatch}
         />
       ))}
     </div>
@@ -263,6 +285,9 @@ export default function TournamentScheduleView({
   onStartMatch,
   onSaveResult,
   selectedPool,
+  onSetNextMatch,
+  onAnnounceNextMatch,
+  announcingNextMatch,
 }) {
   // Tournament Templates — if the organizer picked "Use Template" at
   // Create Session, its config rides along as state.pendingTournamentTemplate
@@ -389,9 +414,54 @@ export default function TournamentScheduleView({
   const pools = tournament?.pools ?? [];
   const visiblePools = selectedPool === "all" ? pools : pools.filter((p) => p.id === selectedPool);
 
+  // Next Match (facilitator announcement) — find the designated match (if
+  // any) across every pool so the banner can render regardless of which
+  // pool tab is selected. Purely a display lookup; tournament.nextMatchId
+  // itself is owned by lib/tournament.js's saveSetNextMatch/saveMatchResult.
+  let nextMatch = null;
+  for (const pool of pools) {
+    for (const round of pool.rounds) {
+      const found = round.matches.find((m) => m.id === tournament?.nextMatchId);
+      if (found) {
+        nextMatch = found;
+        break;
+      }
+    }
+    if (nextMatch) break;
+  }
+
   return (
     <div>
       <SectionLabel>Tournament Schedule</SectionLabel>
+
+      {nextMatch && (
+        <div style={{ ...styles.tournamentSetupCard, borderColor: "var(--ball)" }}>
+          <p style={styles.dialogLabel}>
+            <Star size={13} strokeWidth={2.5} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+            NEXT MATCH
+          </p>
+          <div style={styles.historyMatchTeams}>
+            <div style={styles.historyTeamLine}>
+              <span>{nextMatch.teamA.label}</span>
+            </div>
+            <div style={styles.vsLine} />
+            <div style={styles.historyTeamLine}>
+              <span>{nextMatch.teamB.label}</span>
+            </div>
+          </div>
+          <div style={styles.editActions}>
+            <button
+              type="button"
+              style={{ ...styles.primaryBtn, ...(announcingNextMatch ? styles.btnDisabled : {}) }}
+              disabled={announcingNextMatch}
+              onClick={onAnnounceNextMatch}
+            >
+              <Megaphone size={14} strokeWidth={2.5} />
+              {announcingNextMatch ? "Announcing…" : "Announce Next Match"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={styles.tournamentSetupCard}>
         <p style={styles.editHint}>
@@ -497,6 +567,8 @@ export default function TournamentScheduleView({
               onToggleRound={toggleRound}
               onStartMatch={onStartMatch}
               onSaveResult={onSaveResult}
+              nextMatchId={tournament?.nextMatchId}
+              onSetNextMatch={onSetNextMatch}
             />
           ))}
         </div>

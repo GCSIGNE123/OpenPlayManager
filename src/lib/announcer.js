@@ -12,6 +12,18 @@ export function buildAnnouncementText(courtNumber, teamANames, teamBNames, court
   return `${label}. ${a} and ${b}, versus ${c} and ${d}. Please proceed to ${label}.`;
 }
 
+// Next Match (facilitator announcement) — Round Robin & Open Play. A
+// deliberately different announcement than buildAnnouncementText's: there is
+// no court yet (Round Robin: not dispatched; Open Play: still in
+// nextMatchups/queue), so this never says "proceed to court X" — it's purely
+// "get ready, you're up next." Pure/testable exactly like
+// buildAnnouncementText; same speakAnnouncement call underneath.
+export function buildNextMatchAnnouncementText(teamANames, teamBNames) {
+  const [a, b] = teamANames || [];
+  const [c, d] = teamBNames || [];
+  return `Next match. Prepare. ${a} and ${b}, versus ${c} and ${d}.`;
+}
+
 // Fires `onDone(result)` exactly once — "completed" (speech finished
 // normally), "muted" (voiceEnabled is off), or "skipped" (voice is
 // enabled, but this browser doesn't support/couldn't use SpeechSynthesis).

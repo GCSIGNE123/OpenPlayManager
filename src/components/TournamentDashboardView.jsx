@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
-import { fetchTournament, getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
+import { fetchTournament, getTournamentProgress, getPoolProgress, findMatch } from "../lib/tournamentModel.js";
+import { buildNextMatchAnnouncementText, speakAnnouncement } from "../lib/announcer.js";
 import {
   saveMatchStart,
   saveMatchResult,
+  saveSetNextMatch,
+  resolvePlayerIds,
   savePlayoffMatchStart,
   savePlayoffMatchResult,
   saveReopenBracket,
@@ -565,6 +568,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   const [seedError, setSeedError] = useState("");
   const [qualificationError, setQualificationError] = useState("");
   const [selectedPool, setSelectedPool] = useState("all");
+  const [announcingNextMatch, setAnnouncingNextMatch] = useState(false);
 
   useEffect(() => {
     if (!tournamentId) {
@@ -618,6 +622,38 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     } catch (e) {
       setMatchError(e.message);
     }
+  };
+
+  // Next Match (facilitator announcement) — Round Robin. Same
+  // "call the lib function, setTournament(updated)" shape as every other
+  // match handler above; nextMatchId is just a field on the tournament
+  // record, so it persists/refreshes the same way pools/courts already do.
+  const handleSetNextMatch = async (matchId) => {
+    if (!tournament) return;
+    setMatchError("");
+    try {
+      setTournament(await saveSetNextMatch(tournament, matchId));
+    } catch (e) {
+      setMatchError(e.message);
+    }
+  };
+
+  // Guards against rapid repeated clicks firing overlapping speech: while
+  // one announcement is in flight, further clicks are ignored until
+  // speakAnnouncement's onDone fires — same "don't double-fire" precedent
+  // Open Play's own dispatch pipeline relies on (no separate voice queue
+  // needed, since there's only ever one Next Match to announce at a time).
+  const handleAnnounceNextMatch = () => {
+    if (!tournament || tournament.nextMatchId == null || announcingNextMatch) return;
+    const found = findMatch(tournament, tournament.nextMatchId);
+    if (!found) return;
+    const { match } = found;
+    const teamANames = resolvePlayerIds(tournament, match.teamA).map((id) => state.players[id]?.name || "Unknown player");
+    const teamBNames = resolvePlayerIds(tournament, match.teamB).map((id) => state.players[id]?.name || "Unknown player");
+    const text = buildNextMatchAnnouncementText(teamANames, teamBNames);
+    const cfg = state.courtDispatchSettings || {};
+    setAnnouncingNextMatch(true);
+    speakAnnouncement(text, cfg, () => setAnnouncingNextMatch(false));
   };
 
   // Playoff Match Management & Winner Advancement — same "call the engine,
@@ -1131,6 +1167,9 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onStartMatch={handleStartMatch}
           onSaveResult={handleSaveResult}
           selectedPool={selectedPool}
+          onSetNextMatch={handleSetNextMatch}
+          onAnnounceNextMatch={handleAnnounceNextMatch}
+          announcingNextMatch={announcingNextMatch}
         />
       )}
 
