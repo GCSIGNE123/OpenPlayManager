@@ -332,6 +332,15 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
 
   return {
     generatedAt,
+    // Tournament Results (Session Review) — a live reference, not a
+    // snapshot: the separate Tournament KV record (lib/tournamentModel.js)
+    // is never deleted when a session ends, and already carries
+    // champion/runnerUp/standings once complete (RoundRobinCompletionService/
+    // DoubleEliminationEngine), so the report only needs to remember WHICH
+    // tournament to look up later — see SessionAnalyticsReport.jsx's
+    // TournamentResultsSection. null for every Open Play session.
+    sessionType: state.sessionType || "openPlay",
+    tournamentId: state.tournamentId || null,
     sessionSummary: {
       venue: state.venue || "",
       rotationMode: state.rotationMode,

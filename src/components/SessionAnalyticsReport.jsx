@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { AlertTriangle, Check, FileJson, FileSpreadsheet, Printer, X } from "lucide-react";
 import { styles } from "../styles.js";
 import SectionLabel from "./SectionLabel.jsx";
 import { ExportService } from "../engines/ExportService.js";
 import { buildSessionReportExportTable } from "../lib/sessionReportExport.js";
+import { fetchTournament } from "../lib/tournamentModel.js";
+import { getTournamentEngine } from "../lib/tournament.js";
 
 // Session Report Export (Sprint 4C) — reuses ExportService exactly as
 // Tournament Reports already does (see TournamentReportsView.jsx): CSV via
@@ -27,7 +30,7 @@ const exportService = new ExportService();
 // session those numbers came from is long over. Never both at once.
 export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose }) {
   if (!report) return null;
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, grade } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, grade, sessionType, tournamentId } = report;
   const isReopened = Boolean(onClose);
   const exportTitle = report.sessionSummary.venue
     ? `${report.sessionSummary.venue} — Session Analytics Report`
@@ -92,6 +95,8 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
             <Stat label="Players" value={sessionSummary.playersCount} />
           </div>
         </div>
+
+        {sessionType === "tournament" && tournamentId && <TournamentResultsSection tournamentId={tournamentId} />}
 
         <div style={styles.analyticsSection}>
           <SectionLabel>Participation</SectionLabel>
@@ -240,6 +245,151 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const PODIUM_MEDALS = { champion: "🥇", runnerUp: "🥈", thirdPlace: "🥉" };
+const PODIUM_LABELS = { champion: "Champion", runnerUp: "Runner-up", thirdPlace: "Third Place" };
+
+// One pool's (or the whole tournament's, for a single-pool Round Robin)
+// standings table — same columns/derivation as TournamentStandingsView's
+// own PoolStandingsTable, via the exact same getTournamentEngine(...).
+// getStandings call, so a reopened Session Review can never disagree with
+// what Standings showed live.
+function ResultsStandingsTable({ tournament, pool }) {
+  const standings = getTournamentEngine(tournament.format).getStandings(tournament, pool.id);
+  return (
+    <div style={styles.tournamentStandingsScroll}>
+      <table style={styles.tournamentStandingsTable}>
+        <thead>
+          <tr style={styles.tournamentStandingsHeadRow}>
+            <th style={styles.tournamentStandingsHeadCell}>#</th>
+            <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>
+              {tournament.mode === "doubles" ? "Team" : "Player"}
+            </th>
+            <th style={styles.tournamentStandingsHeadCell}>MP</th>
+            <th style={styles.tournamentStandingsHeadCell}>W</th>
+            <th style={styles.tournamentStandingsHeadCell}>L</th>
+            <th style={styles.tournamentStandingsHeadCell}>+/-</th>
+          </tr>
+        </thead>
+        <tbody>
+          {standings.map((row) => (
+            <tr key={row.participantId} style={styles.tournamentStandingsRow(row.rank)}>
+              <td style={styles.tournamentStandingsCell}>{row.rank}</td>
+              <td style={styles.tournamentStandingsNameCell}>{row.label}</td>
+              <td style={styles.tournamentStandingsCell}>{row.matchesPlayed}</td>
+              <td style={styles.tournamentStandingsCell}>{row.wins}</td>
+              <td style={styles.tournamentStandingsCell}>{row.losses}</td>
+              <td style={styles.tournamentStandingsDiffCell(row.pointDiff)}>
+                {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PodiumRow({ champion, runnerUp, thirdPlace }) {
+  const slots = thirdPlace !== undefined ? ["champion", "runnerUp", "thirdPlace"] : ["champion", "runnerUp"];
+  const values = { champion, runnerUp, thirdPlace };
+  return (
+    <div style={styles.sessionInfoCard}>
+      {slots.map((slot) => (
+        <div key={slot} style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>
+            {PODIUM_MEDALS[slot]} {PODIUM_LABELS[slot]}
+          </span>
+          <span style={styles.sessionInfoValue}>{values[slot]?.label ?? "—"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Tournament Results (Session Review) — see lib/sessionAnalytics.js's
+// computeSessionAnalyticsReport, which stamps report.tournamentId as a live
+// reference (the separate Tournament KV record is never deleted when a
+// session ends). Fetched on demand here rather than embedded in the saved
+// report, so this always reflects the tournament's actual final state —
+// champion/runnerUp/standings are read straight off it, the same fields/
+// functions TournamentDashboardView's own Overview/Standings tabs already
+// use, never re-derived. Shows a champion/runner-up podium per completed
+// pool (Round Robin has no single tournament-wide winner across pools — see
+// TournamentDashboardView's PoolPodium for the same reasoning) or, when a
+// playoff bracket/Double Elimination Grand Final decided an overall winner,
+// that instead — plus every other pool's/team's own standings underneath so
+// nothing is left showing only the winner.
+function TournamentResultsSection({ tournamentId }) {
+  const [tournament, setTournament] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchTournament(tournamentId).then((t) => {
+      if (!cancelled) {
+        setTournament(t);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId]);
+
+  if (loading) {
+    return (
+      <div style={styles.analyticsSection}>
+        <SectionLabel>Tournament Results</SectionLabel>
+        <p style={styles.editHint}>Loading tournament results…</p>
+      </div>
+    );
+  }
+  if (!tournament) {
+    return (
+      <div style={styles.analyticsSection}>
+        <SectionLabel>Tournament Results</SectionLabel>
+        <p style={styles.analyticsEmptyNote}>This tournament's record is no longer available.</p>
+      </div>
+    );
+  }
+
+  // An overall winner only exists once a playoff bracket or Double
+  // Elimination Grand Final decides one — pool play alone (plain Round
+  // Robin, no playoff stage) never crowns a single tournament-wide champion
+  // across multiple pools, so that case falls through to per-pool podiums
+  // instead, same distinction PoolPodium/CompletedOverviewPanel already draw.
+  const overall =
+    tournament.format === "doubleElimination"
+      ? tournament.doubleEliminationBracket?.grandFinal
+      : tournament.bracket?.champion
+        ? tournament.bracket
+        : null;
+
+  const pools = tournament.pools || [];
+  const hasStandings = tournament.format === "roundRobin";
+
+  return (
+    <div style={styles.analyticsSection}>
+      <SectionLabel>Tournament Results</SectionLabel>
+
+      {overall?.champion && <PodiumRow champion={overall.champion} runnerUp={overall.runnerUp} />}
+
+      {!overall && pools.length === 0 && (
+        <p style={styles.analyticsEmptyNote}>This tournament hasn't finished yet.</p>
+      )}
+
+      {pools.map((pool) => (
+        <div key={pool.id} style={styles.poolScheduleBlock}>
+          {pools.length > 1 && <h3 style={styles.poolHeading}>{pool.label}</h3>}
+          {!overall && pool.champion && <PodiumRow champion={pool.champion} runnerUp={pool.runnerUp} thirdPlace={pool.thirdPlace} />}
+          {hasStandings && <ResultsStandingsTable tournament={tournament} pool={pool} />}
+        </div>
+      ))}
     </div>
   );
 }

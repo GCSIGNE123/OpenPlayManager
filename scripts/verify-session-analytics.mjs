@@ -186,5 +186,22 @@ console.log("\n11. Session Summary — duration computed from sessionStartedAt")
   assert("venue is passed through", report.sessionSummary.venue === "Saturday Open Play");
 }
 
+console.log("\n12. Tournament Results — sessionType/tournamentId pass through as a live reference");
+{
+  const openPlayReport = computeSessionAnalyticsReport({ players: {}, courts: [], rotationMode: "continuous" });
+  assert("Open Play session defaults sessionType to 'openPlay'", openPlayReport.sessionType === "openPlay");
+  assert("Open Play session has no tournamentId", openPlayReport.tournamentId === null);
+
+  const tournamentReport = computeSessionAnalyticsReport({
+    players: {},
+    courts: [],
+    rotationMode: "continuous",
+    sessionType: "tournament",
+    tournamentId: "tourn-123",
+  });
+  assert("Tournament session's sessionType is carried through", tournamentReport.sessionType === "tournament");
+  assert("Tournament session's tournamentId is carried through (live reference, not a snapshot)", tournamentReport.tournamentId === "tourn-123");
+}
+
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

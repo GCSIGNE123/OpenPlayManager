@@ -19,7 +19,9 @@ globalThis.window = {
   },
 };
 
-import { buildAndSaveRoundRobinTournament, saveSetNextMatch, saveClearNextMatch, saveMatchStart, saveMatchResult, resolvePlayerIds } from "../src/lib/tournament.js";
+import { buildAndSaveRoundRobinTournament, saveSetNextMatch, saveClearNextMatch, saveMatchStart, saveMatchResult, saveCourtAssignment, resolvePlayerIds } from "../src/lib/tournament.js";
+import { CourtAssignmentEngine } from "../src/engines/CourtAssignmentEngine.js";
+import { collectMatches } from "../src/engines/CourtAssignmentService.js";
 import { buildNextMatchAnnouncementText } from "../src/lib/announcer.js";
 
 let pass = 0, fail = 0;
@@ -124,6 +126,39 @@ console.log("\nRound Robin — completing a DIFFERENT match does not clear Next 
   updated = await saveMatchStart(updated, matchB.id);
   updated = await saveMatchResult(updated, matchB.id, { scoreA: 11, scoreB: 5, winnerId: matchB.teamA.id });
   assert("Next Match (Match A) is untouched by completing Match B", updated.nextMatchId === matchA.id);
+}
+
+console.log("\nRound Robin — Next Match actually auto-fills a freed court next (the reported bug)");
+{
+  // 7 players/1 court/1 pool -> round 1 has 3 real matches + 1 bye, all
+  // pending and eligible, competing for the same single court. Designating
+  // one of the LATER matches (not the natural priority-order winner) as
+  // Next Match must make it the one CourtAssignmentEngine.autoAssign picks
+  // once the court frees — this is CourtPriorityService.compare's new
+  // override, exercised through the exact same saveMatchResult ->
+  // courtAssignmentEngine.autoAssign(court) path the Courts tab's "End
+  // Match"/live-match completion already goes through.
+  const tournament = await makeRRTournament();
+  const pending = tournament.pools[0].rounds[0].matches.filter((m) => !m.isBye);
+  const [matchA, matchB, matchC] = pending;
+
+  // Without any Next Match designation, natural priority order (same tier,
+  // oldest-waiting-first) would auto-fill with matchA first once the court
+  // frees — sanity-check that baseline before proving the override.
+  const engine = new CourtAssignmentEngine();
+  const naturalNext = engine.getNextMatch(tournament, { forCourtNumber: 1 });
+  assert("sanity: without Next Match, matchA is naturally next in queue order", naturalNext.match.id === matchA.id);
+
+  // Designate matchC (NOT the natural next) as Next Match, start+finish
+  // matchA on the only court, and confirm the freed court auto-fills with
+  // matchC — not matchB, which natural priority order would otherwise pick.
+  let t = await saveSetNextMatch(tournament, matchC.id);
+  t = await saveCourtAssignment(t, matchA.id, 1);
+  t = await saveMatchStart(t, matchA.id);
+  t = await saveMatchResult(t, matchA.id, { scoreA: 11, scoreB: 5, winnerId: matchA.teamA.id });
+  const court1Match = collectMatches(t).find((e) => e.match.court === 1 && e.match.status !== "completed");
+  assert("the designated Next Match (matchC) auto-fills the freed court", court1Match?.match.id === matchC.id);
+  assert("matchB (natural next) is still waiting, untouched", collectMatches(t).find((e) => e.match.id === matchB.id).match.court === null);
 }
 
 console.log("\nRound Robin — saveClearNextMatch safely clears (invalid/unavailable case)");

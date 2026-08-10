@@ -66,6 +66,19 @@ export class CourtPriorityService {
   // inside it — this comparator only ever expresses the two rules the spec
   // actually names here.
   compare(entryA, entryB, tournament) {
+    // Next Match (facilitator announcement) — see lib/tournament.js's
+    // saveSetNextMatch. Originally a pure display/announcement flag with no
+    // effect on the real queue, but once it was exposed right next to
+    // Pin/Delay in the Courts tab's Match Queue, organizers reasonably
+    // expect it to actually go next — so it now also outranks every
+    // priority tier here (finals/pool/etc.) the same way a pin overrides
+    // eligibility. Still just a queue-ordering nudge: it does nothing if
+    // the match is delayed or pinned to a different court (those checks
+    // happen upstream in CourtQueueService.getEligibleMatches, unchanged).
+    if (tournament?.nextMatchId != null) {
+      if (entryA.match.id === tournament.nextMatchId) return -1;
+      if (entryB.match.id === tournament.nextMatchId) return 1;
+    }
     const priorityDiff = this.calculatePriority(entryA) - this.calculatePriority(entryB);
     if (priorityDiff !== 0) return priorityDiff;
     return this.getWaitingSince(entryA, tournament) - this.getWaitingSince(entryB, tournament);
