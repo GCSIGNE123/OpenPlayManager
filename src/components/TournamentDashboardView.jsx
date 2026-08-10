@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { styles } from "../styles.js";
-import { fetchTournament, getTournamentProgress, getPoolProgress, findMatch } from "../lib/tournamentModel.js";
-import { buildNextMatchAnnouncementText, speakAnnouncement } from "../lib/announcer.js";
+import { fetchTournament, getTournamentProgress, getPoolProgress } from "../lib/tournamentModel.js";
+import { buildNextMatchAnnouncementText, buildAnnouncementText, speakAnnouncement } from "../lib/announcer.js";
+import { courtDisplayName } from "../lib/utils.js";
+import { collectMatches } from "../engines/CourtAssignmentService.js";
 import {
   saveMatchStart,
   saveMatchResult,
@@ -14,6 +16,8 @@ import {
   saveResumeMatch,
   saveWalkover,
   saveCourtAssignment,
+  saveAdjustMatchScore,
+  saveDeclareCourtWinner,
   saveCourtRelease,
   saveCourtReassignment,
   saveAddCourt,
@@ -54,6 +58,7 @@ import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { MATCH_FORMATS } from "../engines/TournamentSettings.js";
 import SectionLabel from "./SectionLabel.jsx";
+import TournamentParticipantsView from "./TournamentParticipantsView.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
 import TournamentQualificationView from "./TournamentQualificationView.jsx";
@@ -645,7 +650,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   // needed, since there's only ever one Next Match to announce at a time).
   const handleAnnounceNextMatch = () => {
     if (!tournament || tournament.nextMatchId == null || announcingNextMatch) return;
-    const found = findMatch(tournament, tournament.nextMatchId);
+    // collectMatches (not the pools-only findMatch) — the Next Match
+    // designation can now come from the Courts tab's Match Queue too, which
+    // surfaces bracket/Double Elimination matches, not just Round Robin pool
+    // matches.
+    const found = collectMatches(tournament).find((e) => e.match.id === tournament.nextMatchId);
     if (!found) return;
     const { match } = found;
     const teamANames = resolvePlayerIds(tournament, match.teamA).map((id) => state.players[id]?.name || "Unknown player");
@@ -872,11 +881,112 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   // function, setTournament(updated)" shape as every other handler above,
   // now routed through CourtAssignmentService (via lib/tournament.js's
   // saveCourt* helpers).
+  // Court Board voice announcement — mirrors Open Play's Smart Court
+  // Dispatch pipeline (PickleballOpenPlay.jsx's scheduleAnnouncements):
+  // reuses buildAnnouncementText/speakAnnouncement directly rather than a
+  // separate voice system, and is purely a side effect of assignment —
+  // never blocks or undoes it if speech is muted/unsupported.
+  const announceCourtMatch = (currentTournament, matchId, courtNumber) => {
+    const entry = collectMatches(currentTournament).find((e) => e.match.id === matchId);
+    if (!entry) return;
+    const { match } = entry;
+    const teamANames = resolvePlayerIds(currentTournament, match.teamA).map((id) => state.players[id]?.name || "Unknown player");
+    const teamBNames = resolvePlayerIds(currentTournament, match.teamB).map((id) => state.players[id]?.name || "Unknown player");
+    const court = currentTournament.courts.find((c) => c.number === courtNumber);
+    const text = buildAnnouncementText(courtNumber, teamANames, teamBNames, courtDisplayName(court));
+    const cfg = state.courtDispatchSettings || {};
+    speakAnnouncement(text, cfg, () => {});
+  };
+
   const handleAssignMatch = async (matchId, courtNumber) => {
     if (!tournament) return;
     setCourtError("");
     try {
       const updated = await saveCourtAssignment(tournament, matchId, courtNumber);
+      setTournament(updated);
+      announceCourtMatch(updated, matchId, courtNumber);
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  // Re-announce — available on any occupied court, same "recompute from the
+  // court's CURRENT match, never regenerate anything" precedent as Open
+  // Play's Repeat Announcement.
+  const handleReannounceCourt = (matchId, courtNumber) => {
+    if (!tournament) return;
+    announceCourtMatch(tournament, matchId, courtNumber);
+  };
+
+  // Court Board Live Scoring — same "call the lib function,
+  // setTournament(updated)" shape as every other court handler here.
+  const handleAdjustScore = async (matchId, side, delta) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveAdjustMatchScore(tournament, matchId, side, delta));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  // Court Board "Won" — same shape as handleAdjustScore above.
+  const handleDeclareWinner = async (matchId, side) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveDeclareCourtWinner(tournament, matchId, side));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  // End Match — finalizes whatever match currently occupies a court, using
+  // its live score (adjusted via +/- or Won above) and the higher-scoring
+  // side as winner. A single dispatcher over every save*MatchResult this
+  // file already imports, keyed by the match's `source` from collectMatches
+  // — pool matches finalize through RoundRobinEngine, bracket/
+  // consolationBracket through PlayoffEngine (savePlayoffMatchResult
+  // resolves which of the two itself), and each Double Elimination
+  // sub-bracket through its own existing save wrapper. Nothing new is
+  // invented here — this only picks which of the existing, already-tested
+  // finalize paths applies to this match.
+  const handleEndMatch = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    const entry = collectMatches(tournament).find((e) => e.match.id === matchId);
+    if (!entry) return;
+    const { match, source } = entry;
+    const scoreA = match.score?.teamA ?? 0;
+    const scoreB = match.score?.teamB ?? 0;
+    if (scoreA === scoreB) {
+      setCourtError("Scores are tied — adjust the score or use Won to declare a winner before ending the match.");
+      return;
+    }
+    const winnerId = scoreA > scoreB ? match.teamA.id ?? match.teamA.participantId : match.teamB.id ?? match.teamB.participantId;
+    const result = { scoreA, scoreB, winnerId };
+    try {
+      let updated;
+      switch (source) {
+        case "pool":
+          updated = await saveMatchResult(tournament, matchId, result);
+          break;
+        case "bracket":
+        case "consolationBracket":
+          updated = await savePlayoffMatchResult(tournament, matchId, result);
+          break;
+        case "winnersBracket":
+          updated = await saveDoubleEliminationMatchResult(tournament, matchId, result);
+          break;
+        case "losersBracket":
+          updated = await saveDoubleEliminationLosersMatchResult(tournament, matchId, result);
+          break;
+        case "grandFinal":
+          updated = await saveGrandFinalMatchResult(tournament, matchId, result);
+          break;
+        default:
+          throw new Error("Unknown match type — can't end this match.");
+      }
       setTournament(updated);
     } catch (e) {
       setCourtError(e.message);
@@ -1151,9 +1261,7 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
 
       {tab === "overview" && <OverviewPanel tournament={tournament} loading={loading} />}
 
-      {tab === "participants" && (
-        <Placeholder>Manage tournament participants and seeding. Coming soon.</Placeholder>
-      )}
+      {tab === "participants" && <TournamentParticipantsView state={state} tournament={tournament} loading={loading} />}
 
       {tab === "schedule" && (
         <TournamentScheduleView
@@ -1249,6 +1357,12 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onSetCourtStatus={handleSetCourtStatus}
           onStartPoolMatch={handleStartMatch}
           onStartPlayoffMatch={handlePlayoffStartMatch}
+          onReannounce={handleReannounceCourt}
+          onAdjustScore={handleAdjustScore}
+          onDeclareWinner={handleDeclareWinner}
+          onEndMatch={handleEndMatch}
+          nextMatchId={tournament?.nextMatchId}
+          onSetNextMatch={handleSetNextMatch}
         />
       )}
 

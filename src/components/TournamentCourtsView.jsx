@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Plus, X, ArrowLeftRight, Pause, PlayCircle, Pin, PinOff } from "lucide-react";
+import { Play, Plus, Minus, X, ArrowLeftRight, Pause, PlayCircle, Pin, PinOff, Megaphone, Trophy, CheckCircle2, Star } from "lucide-react";
 import { styles } from "../styles.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { CourtQueueService } from "../engines/CourtQueueService.js";
@@ -25,7 +25,7 @@ function formatElapsed(startedAt) {
 // Match Queue Engine spec. Time Running/Estimated Finish read off
 // match.startedAt (new this task, see lib/tournamentModel.js) — "—" for a
 // match started before that field existed, or not yet started at all.
-function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReassign, onSwap, onStartMatch, onSetStatus, onRemove, assumedDurationMinutes }) {
+function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReassign, onSwap, onStartMatch, onSetStatus, onRemove, onReannounce, onAdjustScore, onDeclareWinner, onEndMatch, assumedDurationMinutes }) {
   const [reassignTo, setReassignTo] = useState("");
   const [swapWith, setSwapWith] = useState("");
 
@@ -54,21 +54,75 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
               Running: {formatElapsed(current.startedAt)} · Est. finish: {estimatedFinishLabel}
             </p>
           )}
+          {current.status === "inProgress" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={styles.scoreControl}>
+                  <button type="button" style={styles.scoreBtn} onClick={() => onAdjustScore(current.id, "teamA", -1)} aria-label="decrease Team A score">
+                    <Minus size={14} strokeWidth={3} />
+                  </button>
+                  <span style={styles.scoreDigit}>{current.score?.teamA ?? 0}</span>
+                  <button type="button" style={styles.scoreBtn} onClick={() => onAdjustScore(current.id, "teamA", 1)} aria-label="increase Team A score">
+                    <Plus size={14} strokeWidth={3} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  style={styles.declareWinnerBtn}
+                  onClick={() => onDeclareWinner(current.id, "teamA")}
+                  title="Skip point-by-point scoring — mark Team A the winner, 11-0"
+                >
+                  <Trophy size={12} strokeWidth={2.5} />
+                  Won
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={styles.scoreControl}>
+                  <button type="button" style={styles.scoreBtn} onClick={() => onAdjustScore(current.id, "teamB", -1)} aria-label="decrease Team B score">
+                    <Minus size={14} strokeWidth={3} />
+                  </button>
+                  <span style={styles.scoreDigit}>{current.score?.teamB ?? 0}</span>
+                  <button type="button" style={styles.scoreBtn} onClick={() => onAdjustScore(current.id, "teamB", 1)} aria-label="increase Team B score">
+                    <Plus size={14} strokeWidth={3} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  style={styles.declareWinnerBtn}
+                  onClick={() => onDeclareWinner(current.id, "teamB")}
+                  title="Skip point-by-point scoring — mark Team B the winner, 11-0"
+                >
+                  <Trophy size={12} strokeWidth={2.5} />
+                  Won
+                </button>
+              </div>
+            </div>
+          )}
           <p style={styles.bracketTbdLabel}>{nextUp ? `Next: ${matchupLabel(nextUp.match)}` : "No match waiting next"}</p>
-          <div style={styles.editActions}>
-            {current.status === "pending" && (
-              <button type="button" style={styles.secondaryBtn} onClick={() => onStartMatch(current)}>
+          {current.status === "pending" && (
+            <div style={styles.editActions}>
+              <button type="button" style={{ ...styles.secondaryBtn, flex: 1 }} onClick={() => onStartMatch(current)}>
                 <Play size={13} strokeWidth={2.5} />
                 Start match
               </button>
-            )}
-            <button type="button" style={styles.secondaryBtn} onClick={() => onRelease(court.number)}>
-              <X size={13} strokeWidth={2.5} />
-              Release
+            </div>
+          )}
+          {current.status === "inProgress" && (
+            <div style={{ ...styles.editActions, marginBottom: 0 }}>
+              <button type="button" style={styles.endMatchBtn} onClick={() => onEndMatch(current.id)}>
+                <CheckCircle2 size={13} strokeWidth={2.5} />
+                End Match
+              </button>
+            </div>
+          )}
+          <div style={{ ...styles.editActions, flexWrap: "wrap" }}>
+            <button type="button" style={styles.secondaryBtn} onClick={() => onReannounce(current.id, court.number)}>
+              <Megaphone size={13} strokeWidth={2.5} />
+              Re-announce
             </button>
           </div>
           {otherAvailable.length > 0 && (
-            <div style={styles.editActions}>
+            <div style={{ ...styles.editActions, flexWrap: "wrap" }}>
               <select style={styles.courtSelect} value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}>
                 <option value="">Reassign to…</option>
                 {otherAvailable.map((c) => (
@@ -90,7 +144,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
               </button>
             </div>
           )}
-          <div style={styles.editActions}>
+          <div style={{ ...styles.editActions, flexWrap: "wrap" }}>
             <select style={styles.courtSelect} value={swapWith} onChange={(e) => setSwapWith(e.target.value)}>
               <option value="">Swap with…</option>
               {queue.allOccupiedCourts
@@ -152,7 +206,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
 // One Match Queue row — enriched with Queue Position/Match Type/Priority/
 // Estimated Wait (see CourtQueueService.getQueue), plus manual-override
 // Delay/Pin actions.
-function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin, onUnpin }) {
+function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin, onUnpin, isNextMatch, onSetNextMatch }) {
   const [courtNumber, setCourtNumber] = useState("");
   const delayed = entry.match.queueOverride?.delayed;
   const pinnedCourt = entry.match.queueOverride?.pinnedCourt;
@@ -166,8 +220,20 @@ function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin,
         <span style={styles.queueSourceTag}>~{entry.estimatedWaitMinutes}m wait</span>
         {delayed && <span style={styles.queueSourceTag}>DELAYED</span>}
         {pinnedCourt != null && <span style={styles.queueSourceTag}>PINNED: Court {pinnedCourt}</span>}
+        {isNextMatch && (
+          <span style={{ ...styles.courtBadge, background: "var(--ball)" }}>
+            <Star size={11} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 3 }} />
+            NEXT MATCH
+          </span>
+        )}
       </span>
       <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {!isNextMatch && (
+          <button type="button" style={styles.secondaryBtn} onClick={() => onSetNextMatch(entry.match.id)}>
+            <Star size={13} strokeWidth={2.5} />
+            Set as Next Match
+          </button>
+        )}
         <select style={styles.courtSelect} value={courtNumber} onChange={(e) => setCourtNumber(e.target.value)}>
           <option value="">Assign to…</option>
           {availableCourts.map((c) => (
@@ -241,6 +307,12 @@ export default function TournamentCourtsView({
   onSetCourtStatus,
   onStartPoolMatch,
   onStartPlayoffMatch,
+  onReannounce,
+  onAdjustScore,
+  onDeclareWinner,
+  onEndMatch,
+  nextMatchId,
+  onSetNextMatch,
 }) {
   const [newCourtName, setNewCourtName] = useState("");
 
@@ -304,6 +376,10 @@ export default function TournamentCourtsView({
             onStartMatch={handleStartMatch}
             onSetStatus={onSetCourtStatus}
             onRemove={onRemoveCourt}
+            onReannounce={onReannounce}
+            onAdjustScore={onAdjustScore}
+            onDeclareWinner={onDeclareWinner}
+            onEndMatch={onEndMatch}
             assumedDurationMinutes={20}
           />
         ))}
@@ -324,6 +400,8 @@ export default function TournamentCourtsView({
               onUndelay={onUndelayMatch}
               onPin={onPinMatch}
               onUnpin={onUnpinMatch}
+              isNextMatch={entry.match.id === nextMatchId}
+              onSetNextMatch={onSetNextMatch}
             />
           ))}
         </ul>

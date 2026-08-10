@@ -226,6 +226,44 @@ export class CourtAssignmentService {
     }));
   }
 
+  // Court Board Live Scoring — bumps one side's score by `delta` (clamped at
+  // 0) without touching status/winner. Deliberately separate from
+  // RoundRobinEngine/PlayoffEngine's updateMatchResult (which finalizes a
+  // match): this just keeps a running score while the match is in progress,
+  // exactly the same score field the Schedule/Bracket tabs' "Enter scores"
+  // form already reads from (match.score.teamA/teamB) and later finalizes
+  // with a winner — the two never conflict, they just write the same field
+  // at different times. Uses the same updateMatchIn find-and-replace as
+  // every other method here, so it works across pool/bracket/consolation/
+  // Double Elimination matches uniformly.
+  adjustScore(tournament, matchId, side, delta) {
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can have its score adjusted.");
+    if (side !== "teamA" && side !== "teamB") throw new Error("Invalid side.");
+    return updateMatchIn(tournament, matchId, (m) => {
+      const current = m.score?.[side] ?? 0;
+      return { ...m, score: { ...m.score, [side]: Math.max(0, current + delta) } };
+    });
+  }
+
+  // Court Board "Won" — quick path for a casual/skipped-scoring match, same
+  // precedent as Open Play's declareWinner: sets the score straight to 11-0
+  // for the declared side rather than requiring point-by-point +/-. Still
+  // just writes match.score (not status/winner) — "End Match" (a normal
+  // saveMatchResult/savePlayoffMatchResult/etc. call) is what actually
+  // finalizes the match, exactly as it already does after manual scoring.
+  declareWinner(tournament, matchId, side) {
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can declare a winner this way.");
+    if (side !== "teamA" && side !== "teamB") throw new Error("Invalid side.");
+    return updateMatchIn(tournament, matchId, (m) => ({
+      ...m,
+      score: { teamA: side === "teamA" ? 11 : 0, teamB: side === "teamB" ? 11 : 0 },
+    }));
+  }
+
   // Pure aggregate — the exact data the Court Board renders. Nothing here
   // is persisted; it's recomputed fresh from tournament.courts/pools/
   // bracket every time it's called, which is what makes the board "refresh

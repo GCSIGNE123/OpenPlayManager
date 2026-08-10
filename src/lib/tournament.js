@@ -16,7 +16,7 @@ import { RoundRobinEngine } from "../engines/RoundRobinEngine.js";
 import { SingleEliminationEngine } from "../engines/SingleEliminationEngine.js";
 import { DoubleEliminationEngine } from "../engines/DoubleEliminationEngine.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
-import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
+import { CourtAssignmentService, collectMatches } from "../engines/CourtAssignmentService.js";
 import { CourtAssignmentEngine } from "../engines/CourtAssignmentEngine.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 import { RatingEngine } from "../engines/RatingEngine.js";
@@ -294,9 +294,17 @@ export async function saveMatchResult(tournament, matchId, result) {
 // saveMatchResult above) or becomes invalid (saveClearNextMatch, for the
 // organizer/UI to call defensively if the match disappears, e.g. a
 // schedule regeneration).
+// Uses collectMatches (not the pools-only findMatch above) so a Next Match
+// designation works from anywhere a pending match can appear — the Schedule
+// tab's Round Robin pool matches AND the Courts tab's Match Queue, which
+// also surfaces bracket/consolation/Double Elimination matches once those
+// formats reach a live tournament with a Match Queue. teamA/teamB must both
+// already be known (same "actually playable" gate CourtAssignmentService.
+// getPlayableMatches uses) — a bracket slot that hasn't been seated yet
+// can't be announced as a name-bearing "Next Match".
 export async function saveSetNextMatch(tournament, matchId) {
-  const found = findMatch(tournament, matchId);
-  if (!found || found.match.isBye || found.match.status !== "pending") {
+  const entry = collectMatches(tournament).find((e) => e.match.id === matchId);
+  if (!entry || entry.match.isBye || entry.match.status !== "pending" || !entry.match.teamA || !entry.match.teamB) {
     throw new Error("Only a pending match can be set as Next Match.");
   }
   return saveTournament({ ...tournament, nextMatchId: matchId });
@@ -472,6 +480,20 @@ export async function saveCourtRelease(tournament, courtNumber) {
 export async function saveCourtReassignment(tournament, matchId, fromCourtNumber, toCourtNumber) {
   const released = courtAssignmentService.releaseCourt(tournament, fromCourtNumber);
   const updated = courtAssignmentService.assignMatchToCourt(released, matchId, toCourtNumber);
+  return saveTournament(updated);
+}
+
+// Court Board Live Scoring — same "call the CourtAssignmentService method,
+// saveTournament what it returns" shape as saveCourtAssignment/saveCourtRelease
+// above.
+export async function saveAdjustMatchScore(tournament, matchId, side, delta) {
+  const updated = courtAssignmentService.adjustScore(tournament, matchId, side, delta);
+  return saveTournament(updated);
+}
+
+// Court Board "Won" — same shape as saveAdjustMatchScore above.
+export async function saveDeclareCourtWinner(tournament, matchId, side) {
+  const updated = courtAssignmentService.declareWinner(tournament, matchId, side);
   return saveTournament(updated);
 }
 
