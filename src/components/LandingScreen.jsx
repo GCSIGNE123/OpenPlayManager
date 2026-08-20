@@ -476,18 +476,18 @@ function ProductMockup() {
         <div style={styles.mktMockupNextCard}>
           <div style={styles.mktMockupLabel}>Next Match</div>
           <div style={styles.mktMockupNextTeams}>
-            Alfred + Jovy
+            Guil + Jovy
             <br />
             vs
             <br />
-            Guil + Emitz
+            Emitz + Gab
           </div>
         </div>
 
         <div style={styles.mktMockupLabel}>Queue</div>
-        <div style={styles.mktMockupQueueRow}><span>1. Sam</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
-        <div style={styles.mktMockupQueueRow}><span>2. Ted</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
-        <div style={{ ...styles.mktMockupQueueRow, borderBottom: "none" }}><span>3. Uma</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
+        <div style={styles.mktMockupQueueRow}><span>1. John</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
+        <div style={styles.mktMockupQueueRow}><span>2. Melit</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
+        <div style={{ ...styles.mktMockupQueueRow, borderBottom: "none" }}><span>3. Zee</span><span style={{ color: "var(--color-text-faint)" }}>Waiting</span></div>
       </div>
     </div>
   );
