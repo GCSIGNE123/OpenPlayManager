@@ -22,6 +22,7 @@ import {
   nextLastMatchEndAt,
   uid,
   resizeImageToAvatar,
+  computeLatecomerPriorityPreview,
 } from "./lib/utils.js";
 import {
   holdPlayer as holdPlayerAction,
@@ -328,9 +329,19 @@ export default function PickleballOpenPlay() {
   // see clearOneShotSnapshots — so it can never resurrect a round whose
   // players have since moved on to something else.
   const [lastRoundSnapshot, setLastRoundSnapshot] = useState(null);
+  // one-shot, this-device-only undo for the most recently applied Latecomer
+  // Priority substitution — see applyLatecomerPriority/undoLatecomerPriority
+  // below. Same "quick oops" precedent as regenerateSnapshot/lastRoundSnapshot:
+  // captures state.nextMatchups from right before the substitution, restored
+  // verbatim on Undo rather than by re-running any rotation engine (which
+  // could produce a different matchup). Invalidated by the same
+  // clearOneShotSnapshots every other mutating action already calls, plus
+  // its own self-healing effect once the substituted matchup dispatches.
+  const [latecomerPrioritySnapshot, setLatecomerPrioritySnapshot] = useState(null);
   const clearOneShotSnapshots = () => {
     setRegenerateSnapshot(null);
     setLastRoundSnapshot(null);
+    setLatecomerPrioritySnapshot(null);
   };
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -673,6 +684,143 @@ export default function PickleballOpenPlay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.nextMatchups, state.nextMatchupId]);
 
+  // Latecomer Priority — see PROJECT.md/FEATURES.md and lib/utils.js's
+  // computeLatecomerPriorityPreview (the pure proposal logic; nothing below
+  // duplicates or overrides it). A facilitator-control override layer
+  // around the existing nextMatchups system, deliberately separate from
+  // "Set as Next Match"/"Announce Next Match" above — this designates which
+  // LATECOMER(S) get inserted into the next matchup, not which already-built
+  // matchup to announce.
+  //
+  // `latecomerPreview` is local, ephemeral UI state (not persisted, not even
+  // one-shot-snapshotted) — just "what dialog is currently open," holding
+  // the selected player ids and the last-computed proposal so the dialog can
+  // render Current/Proposed/Displaced or a failure reason.
+  const [latecomerPreview, setLatecomerPreview] = useState(null);
+
+  // Opens the preview dialog — purely a read: computes the proposal fresh
+  // from current state and stores it for rendering. No save(), so Cancel
+  // (or just re-opening this) can never have modified anything.
+  const previewLatecomerPriority = (latecomerIds) => {
+    const result = computeLatecomerPriorityPreview(state.nextMatchups, state.players, latecomerIds);
+    setLatecomerPreview({ latecomerIds, result });
+  };
+
+  const cancelLatecomerPriority = () => setLatecomerPreview(null);
+
+  // Applies the previewed substitution — but re-derives the proposal fresh
+  // from the CURRENT (not the possibly-stale previewed) state first, per
+  // explicit stale-state requirements: another facilitator action may have
+  // changed the queue in the time between Preview and this click. Only
+  // applies if the fresh proposal is still `ok` AND targets the exact same
+  // matchup with the exact same displaced/inserted players the dialog is
+  // showing — any drift re-renders the dialog with the fresh proposal
+  // instead of silently applying something the facilitator never actually
+  // confirmed, and leaves the queue completely untouched.
+  const applyLatecomerPriority = () => {
+    if (!latecomerPreview) return;
+    const fresh = computeLatecomerPriorityPreview(state.nextMatchups, state.players, latecomerPreview.latecomerIds);
+    const shown = latecomerPreview.result;
+    const matches =
+      fresh.ok &&
+      shown.ok &&
+      fresh.matchupId === shown.matchupId &&
+      JSON.stringify(fresh.displacedPlayerIds) === JSON.stringify(shown.displacedPlayerIds) &&
+      JSON.stringify(fresh.insertedPlayerIds) === JSON.stringify(shown.insertedPlayerIds);
+    if (!matches) {
+      setLatecomerPreview({ latecomerIds: latecomerPreview.latecomerIds, result: fresh, stale: true });
+      return;
+    }
+
+    const before = state.nextMatchups;
+    // One substitution per displaced/inserted pair, applied in sequence —
+    // the exact same primitive substituteInMatchup already uses
+    // (dissolveMatchupIfReserved with exceptMatchupId so the matchup being
+    // built up doesn't dissolve itself), just looped for however many
+    // latecomers this proposal inserts.
+    let nextMatchups = before;
+    fresh.insertedPlayerIds.forEach((incomingId, i) => {
+      const outgoingId = fresh.displacedPlayerIds[i];
+      const dissolved = dissolveMatchupIfReserved(nextMatchups, incomingId, fresh.matchupId);
+      nextMatchups = dissolved.map((m) => {
+        if (m.id !== fresh.matchupId) return m;
+        const teamA = m.teamA.map((id) => (id === outgoingId ? incomingId : id));
+        const teamB = m.teamB.map((id) => (id === outgoingId ? incomingId : id));
+        return { ...m, teamA, teamB };
+      });
+    });
+
+    clearOneShotSnapshots();
+    const names = fresh.insertedPlayerIds.map((id) => state.players[id]?.name || "A player").join(", ");
+    const reason = `${names} were prioritized into the next matchup`;
+    const latecomerPriority = {
+      matchupId: fresh.matchupId,
+      insertedPlayerIds: fresh.insertedPlayerIds,
+      displacedPlayerIds: fresh.displacedPlayerIds,
+      appliedAt: Date.now(),
+    };
+    const next = noteDissolvedHeldMatchups(
+      { ...state, nextMatchups, latecomerPriority },
+      before,
+      nextMatchups,
+      reason,
+      { players: state.players, affectedPlayer: names }
+    );
+    save(next);
+    notifyIfHeldMatchDissolved(next, reason);
+    // Set AFTER clearOneShotSnapshots (which just cleared it) — this is the
+    // one snapshot this action actually wants to keep. Records the exact
+    // applied `after` shape too, so Undo can verify nothing else has
+    // touched this matchup since (see undoLatecomerPriority below) by plain
+    // equality rather than re-deriving "intactness" from ids.
+    setLatecomerPrioritySnapshot({ nextMatchups: before, matchupId: fresh.matchupId, after: fresh.after });
+    setLatecomerPreview(null);
+  };
+
+  const [latecomerUndoError, setLatecomerUndoError] = useState("");
+
+  // Restores the EXACT prior nextMatchups array — never re-runs any
+  // rotation engine, which could produce a different matchup than the one
+  // being undone. Re-validates the live matchup's teamA/teamB still exactly
+  // match what was applied (nothing else has touched it since — another
+  // Fix Teams/Substitute, a further Priority application, etc.) before
+  // restoring; fails safely (clears the snapshot, leaves the queue
+  // untouched, shows a brief message) rather than risking a corrupted/
+  // duplicated matchup if it doesn't.
+  const undoLatecomerPriority = () => {
+    if (!latecomerPrioritySnapshot) return;
+    setLatecomerUndoError("");
+    const current = state.nextMatchups.find((m) => m.id === latecomerPrioritySnapshot.matchupId);
+    const stillIntact =
+      current &&
+      JSON.stringify(current.teamA) === JSON.stringify(latecomerPrioritySnapshot.after.teamA) &&
+      JSON.stringify(current.teamB) === JSON.stringify(latecomerPrioritySnapshot.after.teamB);
+    if (!stillIntact) {
+      setLatecomerPrioritySnapshot(null);
+      setLatecomerUndoError("This matchup has changed since Priority was applied — Undo is no longer available.");
+      setTimeout(() => setLatecomerUndoError(""), 5000);
+      return;
+    }
+    save({ ...state, nextMatchups: latecomerPrioritySnapshot.nextMatchups, latecomerPriority: null });
+    setLatecomerPrioritySnapshot(null);
+  };
+
+  // Self-healing, identical in shape to nextMatchupId's own effect above:
+  // once the matchup a Latecomer Priority designation points at leaves
+  // nextMatchups for ANY reason (dispatched to a court — the "one-shot,
+  // clears after dispatch" rule — cancelled, substituted again, wiped by
+  // Regenerate), clear the designation AND the local Undo snapshot, since
+  // restoring it would either be a no-op (already gone) or, worse, resurrect
+  // a matchup that's since moved on. This is what makes Undo unavailable
+  // after dispatch/start without any special-case dispatch-path code.
+  useEffect(() => {
+    if (!state.latecomerPriority) return;
+    if (state.nextMatchups.some((m) => m.id === state.latecomerPriority.matchupId)) return;
+    save({ ...stateRef.current, latecomerPriority: null });
+    setLatecomerPrioritySnapshot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.nextMatchups, state.latecomerPriority]);
+
   useEffect(() => {
     if (screen !== "app" || !sessionCode) return;
     load();
@@ -782,6 +930,7 @@ export default function PickleballOpenPlay() {
         queueIds: [],
         nextMatchups: [],
         nextMatchupId: null,
+        latecomerPriority: null,
         matchHistory: [],
         sessionType,
         tournamentFormat,
@@ -2321,6 +2470,14 @@ export default function PickleballOpenPlay() {
                   onSetNextMatchup={setNextMatchup}
                   onAnnounceNextMatchup={announceNextMatchup}
                   announcingNextMatchup={announcingNextMatchup}
+                  latecomerPriority={state.latecomerPriority}
+                  latecomerPreview={latecomerPreview}
+                  onPreviewLatecomerPriority={previewLatecomerPriority}
+                  onCancelLatecomerPriority={cancelLatecomerPriority}
+                  onApplyLatecomerPriority={applyLatecomerPriority}
+                  canUndoLatecomerPriority={!!latecomerPrioritySnapshot}
+                  onUndoLatecomerPriority={undoLatecomerPriority}
+                  latecomerUndoError={latecomerUndoError}
                 />
               )}
 

@@ -185,6 +185,19 @@ export const defaultState = {
   queueIds: [],
   nextMatchups: [], // [{ id, teamA: [id, id], teamB: [id, id], locked? }] — pre-built upcoming matches, editable in Scorer before they're assigned to a court
   nextMatchupId: null, // Next Match (facilitator announcement) — id of the nextMatchups entry the organizer has designated to announce next. Purely a facilitator display/announcement flag; never read by matchmaking, queue, or court dispatch. null until set; cleared once that matchup is no longer in nextMatchups (dispatched, cancelled, regenerated) or the session ends.
+  // Latecomer Priority — a facilitator override layer around nextMatchups,
+  // NOT a matchmaking algorithm change (see PROJECT.md/FEATURES.md and
+  // lib/utils.js's computeLatecomerPriorityPreview). Records which matchup
+  // currently has a one-shot priority substitution applied to it, purely so
+  // every connected device can see the designation and so it can be
+  // detected/cleared once that matchup dispatches or otherwise leaves
+  // nextMatchups (see PickleballOpenPlay.jsx's self-healing effect,
+  // identical in shape to nextMatchupId's own). The actual UNDO snapshot is
+  // deliberately NOT part of this persisted field — same "quick oops,
+  // this-device-only" precedent as regenerateSnapshot/lastRoundSnapshot —
+  // so a browser refresh safely loses Undo capability rather than trying to
+  // resurrect a stale substitution. null until Apply Priority is used.
+  latecomerPriority: null, // { matchupId, insertedPlayerIds: [id,id], displacedPlayerIds: [id,id], appliedAt }
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
   sessionType: "openPlay", // see SESSION_TYPES
   tournamentFormat: null, // see TOURNAMENT_FORMATS — only set when sessionType is "tournament"; architecture-only, no tournament logic reads this yet

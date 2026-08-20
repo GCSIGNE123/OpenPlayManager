@@ -297,6 +297,100 @@ export function dissolveMatchupIfReserved(nextMatchups, playerId, exceptMatchupI
   );
 }
 
+// Latecomer Priority — see PROJECT.md/FEATURES.md. A facilitator-control
+// override layer around the existing next-matchup system, NOT a new
+// matchmaking algorithm — Adaptive/Progressive/Winner Pool Rotation still
+// decide every matchup's actual composition; this only decides "who to
+// bump, and with whom" for a preview the facilitator explicitly confirms.
+// Pure and side-effect-free (no save(), no mutation) so it can be called
+// once to render a preview and called AGAIN at Apply time to detect if the
+// queue changed in between (see PickleballOpenPlay.jsx's
+// applyLatecomerPriority) without any risk of the two calls disagreeing for
+// any reason other than the queue actually having changed.
+//
+// Picks the first not-locked, not-held entry in `nextMatchups` (the
+// earliest one Priority is allowed to touch — a locked matchup is
+// explicitly protected by the organizer, same protection Regenerate
+// already respects; a held matchup is deliberately reserved/paused and
+// shouldn't be quietly reshuffled). Bumps whichever of that matchup's 4
+// current players have played the MOST games (least in need of the next
+// match) — ties broken by fixed slot order (teamA[0], teamA[1], teamB[0],
+// teamB[1]) for determinism — one bumped slot per latecomer, in the order
+// `latecomerIds` was given. Never invents a skill-pairing/diversity rule
+// this codebase doesn't already enforce elsewhere (see
+// buildReplacementCandidates above — a manual Substitute already allows
+// any waiting player into any slot), so this doesn't weaken or duplicate
+// anything Adaptive Skill Rotation itself decides.
+//
+// Returns `{ ok: false, reason }` (nextMatchups completely unexamined
+// further, nothing to apply) when there's no eligible matchup, too many
+// latecomers for one matchup (max 4), or a latecomer is somehow already
+// reserved somewhere (shouldn't happen for a freshly checked-in player,
+// checked defensively). Returns `{ ok: true, matchupId, before: {teamA,
+// teamB}, after: {teamA,teamB}, displacedPlayerIds, insertedPlayerIds }`
+// otherwise — `insertedPlayerIds[i]` took the slot `displacedPlayerIds[i]`
+// vacated, matching `latecomerIds`' given order.
+export function computeLatecomerPriorityPreview(nextMatchups, players, latecomerIds) {
+  const ids = [...new Set(latecomerIds || [])].filter(Boolean);
+  if (ids.length === 0) return { ok: false, reason: "No player was selected to prioritize." };
+  if (ids.length > 4) {
+    return { ok: false, reason: "Too many players selected — a matchup only has 4 spots." };
+  }
+
+  const reserved = reservedMatchupIds(nextMatchups || []);
+  const alreadyReserved = ids.find((id) => reserved.has(id));
+  if (alreadyReserved) {
+    const name = players?.[alreadyReserved]?.name || "That player";
+    return { ok: false, reason: `${name} is already part of an upcoming matchup.` };
+  }
+
+  // Defense-in-depth against stale UI state — a player who was eligible
+  // when the "Prioritize Next Match" button rendered may have since been
+  // held, checked out, or removed entirely (e.g. another facilitator
+  // action landed first). Never silently proceed with someone who's no
+  // longer a valid, currently-waiting player.
+  const unavailable = ids.find((id) => {
+    const p = players?.[id];
+    return !p || p.held || p.status === "CHECKED_OUT";
+  });
+  if (unavailable) {
+    const name = players?.[unavailable]?.name || "That player";
+    return { ok: false, reason: `${name} is no longer available to prioritize (held, checked out, or removed).` };
+  }
+
+  const target = (nextMatchups || []).find((m) => !m.locked && !m.held);
+  if (!target) {
+    return { ok: false, reason: "No upcoming matchup is available to prioritize into — every one is locked or held." };
+  }
+
+  const slots = [
+    { side: "teamA", index: 0, playerId: target.teamA[0] },
+    { side: "teamA", index: 1, playerId: target.teamA[1] },
+    { side: "teamB", index: 0, playerId: target.teamB[0] },
+    { side: "teamB", index: 1, playerId: target.teamB[1] },
+  ];
+  const gamesOf = (id) => players?.[id]?.games ?? 0;
+  const bumpOrder = [...slots].sort((a, b) => gamesOf(b.playerId) - gamesOf(a.playerId));
+  const bumped = bumpOrder.slice(0, ids.length);
+
+  const teamA = [...target.teamA];
+  const teamB = [...target.teamB];
+  const displacedPlayerIds = [];
+  bumped.forEach((slot, i) => {
+    displacedPlayerIds.push(slot.playerId);
+    (slot.side === "teamA" ? teamA : teamB)[slot.index] = ids[i];
+  });
+
+  return {
+    ok: true,
+    matchupId: target.id,
+    before: { teamA: target.teamA, teamB: target.teamB },
+    after: { teamA, teamB },
+    displacedPlayerIds,
+    insertedPlayerIds: ids,
+  };
+}
+
 // Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Reusable manual
 // skill-override action: a single pure function so every UI entry point
 // (Waiting Players panel today; Standings and any future Player Details

@@ -11,6 +11,7 @@ import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
+import LatecomerPriorityDialog from "./LatecomerPriorityDialog.jsx";
 
 // Queue Activity Log — see PROJECT.md/FEATURES.md. One shared, generic log
 // (state.queueActivityLog) holds every kind of entry Queue Management and
@@ -159,6 +160,14 @@ export default function ScorerView({
   onSetNextMatchup,
   onAnnounceNextMatchup,
   announcingNextMatchup,
+  latecomerPriority,
+  latecomerPreview,
+  onPreviewLatecomerPriority,
+  onCancelLatecomerPriority,
+  onApplyLatecomerPriority,
+  canUndoLatecomerPriority,
+  onUndoLatecomerPriority,
+  latecomerUndoError,
 }) {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   // Player Checkout During Open Play — see PROJECT.md. Confirming a
@@ -343,6 +352,7 @@ export default function ScorerView({
       {queueMsg && (
         <div style={styles.confirmMsg}>{queueMsg}</div>
       )}
+      {latecomerUndoError && <div style={styles.confirmMsg}>{latecomerUndoError}</div>}
 
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
@@ -457,6 +467,16 @@ export default function ScorerView({
                   Undo regenerate
                 </button>
               )}
+              {canUndoLatecomerPriority && (
+                <button
+                  style={{ ...styles.secondaryBtn, margin: 0 }}
+                  onClick={onUndoLatecomerPriority}
+                  title="Restore the matchup from before the last Latecomer Priority substitution — unavailable once that matchup is dispatched"
+                >
+                  <Undo2 size={13} strokeWidth={2.5} />
+                  Undo Priority
+                </button>
+              )}
               <button
                 style={{ ...styles.secondaryBtn, margin: 0, ...(!canRegenerate || queueingStopped ? styles.btnDisabled : {}) }}
                 onClick={regenerateMatchups}
@@ -484,6 +504,7 @@ export default function ScorerView({
               onCancel={() => cancelMatch(m.id)}
               isNext={m.id === nextMatchupId}
               onSetNextMatchup={() => onSetNextMatchup(m.id)}
+              isLatecomerPriority={m.id === latecomerPriority?.matchupId}
             />
           ))}
         </>
@@ -502,6 +523,8 @@ export default function ScorerView({
         onSetPartner={setFixedPartner}
         onClearPartner={clearFixedPartner}
         checkedOutPlayers={checkedOutPlayers}
+        showLatecomerPriority={rotationMode === "adaptiveSkill"}
+        onPrioritizeLatecomer={onPreviewLatecomerPriority ? (id) => onPreviewLatecomerPriority([id]) : null}
       />
 
       {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
@@ -622,6 +645,15 @@ export default function ScorerView({
             checkoutPlayer(id);
             setConfirmingCheckoutId(null);
           }}
+        />
+      )}
+
+      {latecomerPreview && (
+        <LatecomerPriorityDialog
+          preview={latecomerPreview}
+          players={state.players}
+          onCancel={onCancelLatecomerPriority}
+          onApply={onApplyLatecomerPriority}
         />
       )}
     </div>

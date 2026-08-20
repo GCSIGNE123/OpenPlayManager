@@ -21,6 +21,7 @@ export default function NextMatchupCard({
   onCancel,
   isNext,
   onSetNextMatchup,
+  isLatecomerPriority,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -75,6 +76,11 @@ export default function NextMatchupCard({
     <div style={styles.matchupCard(label === "Next up")}>
       <div style={styles.matchupHeadRow}>
         <div style={styles.matchupHeader(label === "Next up")}>{label}</div>
+        {isLatecomerPriority && (
+          <span style={styles.courtBadge} title="A latecomer was prioritized into this matchup">
+            PRIORITY
+          </span>
+        )}
         <div style={{ display: "flex", gap: 6 }}>
           {onSetNextMatchup && (
             <button

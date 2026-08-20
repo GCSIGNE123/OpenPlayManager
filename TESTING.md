@@ -656,6 +656,21 @@ New automated suite — `scripts/verify-double-elimination.mjs` (108 checks) —
 
 Full regression total after this work: **627/627** (519 pre-existing + 108 new), clean `npx vite build`.
 
+## Latecomer Priority + Undo (Adaptive Skill Rotation) (2026-08-10)
+
+A facilitator-control override layer around the existing `nextMatchups` system — explicitly NOT a change to `AdaptiveSkillRotationEngine`, the games-played fairness tuple, partner/opponent diversity, or Winner-vs-Winner, all of which remain byte-for-byte untouched (see FEATURES.md for the full architecture rationale). New automated suite — `scripts/verify-latecomer-priority.mjs` (46 checks).
+
+- [x] **Basic priority** — a newly checked-in player (`games === 0`) can be prioritized into the earliest not-locked, not-held upcoming matchup; the correct player (most games played among the matchup's 4) is displaced back to the queue; the proposed matchup is validated (2v2, no duplicate reservations) before ever being shown; normal `AdaptiveSkillRotationEngine.generateMatchups` behavior (team formation, one 2v2 matchup per 4 waiting players) is verified unaffected by the feature's mere existence.
+- [x] **Preview never mutates state** — calling `computeLatecomerPriorityPreview` is verified to leave the passed-in `nextMatchups` array byte-for-byte unchanged; Cancel is confirmed to leave the queue completely untouched (the dialog calls no mutation at all); Apply Priority is verified to change exactly the intended matchup and nothing else (no duplicate/stale matchup created).
+- [x] **Undo** — verified to restore the EXACT previous matchup (same object reference as originally captured, never a re-run of any rotation engine); verified unavailable the instant the affected matchup leaves `nextMatchups` (dispatched to a court — the self-healing effect mirrors "Set as Next Match"'s own); verified to fail safely (clears the snapshot, leaves the queue untouched, shows a message) when the matchup was further edited by something else since Apply, rather than risking a corrupted restore.
+- [x] **Multiple latecomers** — two latecomers correctly bump the two highest-games players in one matchup, not the lowest; an over-large selection (5 latecomers for a 4-slot matchup) is rejected outright rather than forced.
+- [x] **Edge cases** — a locked or held matchup is correctly skipped in favor of the next eligible one; a latecomer who's held, checked out, or already reserved elsewhere at Apply time (stale button click) is rejected with a clear reason rather than silently inserted; an empty queue or empty selection is rejected cleanly.
+- [x] **Regression** — `reservedMatchupIds`/`dissolveMatchupIfReserved`'s pre-existing contracts (used unmodified by the new Apply logic) verified unchanged.
+
+**Live browser verification**: a real Adaptive Skill Rotation Open Play session (2 courts, 13 checked-in players) was run end to end — checked in a latecomer ("Ken", 0 games) alongside an existing waiting matchup; clicked "Prioritize Next Match" → dialog showed the exact expected Current/Proposed/Displaced text ("Sam + Nina vs Uma + Ted" → "Ken + Nina vs Uma + Ted", "Sam → returns to queue"); clicked Apply Priority → matchup updated live, a "PRIORITY" badge appeared on the matchup card, an "Undo Priority" button appeared, and Sam correctly reappeared in the waiting list; clicked Undo Priority → matchup and waiting list restored to the exact original state, Undo button and badge both gone. Re-applied, then ended a live match to free a court — the prioritized matchup auto-dispatched ahead of the naturally-next-in-line matchup, and "Undo Priority" correctly disappeared the instant it dispatched. Also verified Cancel on a fresh preview leaves the queue untouched. Zero console errors throughout.
+
+Full regression total after this work: **734/734** (688 pre-existing + 46 new), clean `npx vite build`.
+
 ## Sign-off
 
 - **Automated:** `node scripts/run-acceptance-test.mjs` — 42/42 passed.

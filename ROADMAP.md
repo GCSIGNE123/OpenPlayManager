@@ -24,6 +24,22 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-08-10 — Latecomer Priority + Undo (Adaptive Skill Rotation)** — a
+  facilitator-control override layer around the existing `nextMatchups`
+  system, explicitly not a change to `AdaptiveSkillRotationEngine` itself
+  (games-played fairness, partner/opponent diversity, and Winner-vs-Winner
+  are all untouched — see the Stable list above). A newly checked-in player
+  who hasn't played yet gets a "NEW" tag and a "Prioritize Next Match"
+  action; the facilitator previews the exact proposed substitution before
+  anything changes, and applying it is fully reversible until the affected
+  matchup dispatches to a court, at which point Undo automatically becomes
+  unavailable. Reuses the existing substitution primitives
+  (`substituteInMatchup`/`dissolveMatchupIfReserved`) rather than inventing
+  a new mutation rule, and the same one-shot-snapshot precedent "Undo
+  regenerate"/"Undo last round" already established. 46 new regression
+  checks, live-verified end to end (Preview → Apply → Undo restoring the
+  exact original matchup; Apply → dispatch → Undo correctly unavailable).
+  See `FEATURES.md`'s Adaptive Skill Rotation section for the full writeup.
 - **2026-08-09 — Standalone Double Elimination** — root-caused from a real
   event where a session configured with Tournament Format "Double
   Elimination" silently ran as plain Round Robin (the format selector had

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Pause, Play, SkipForward, X } from "lucide-react";
+import { LogOut, Pause, Play, SkipForward, Zap, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
@@ -35,6 +35,8 @@ export default function WaitingPlayersPanel({
   onSetPartner,
   onClearPartner,
   checkedOutPlayers = [],
+  showLatecomerPriority = false,
+  onPrioritizeLatecomer,
 }) {
   const [confirmingPlayer, setConfirmingPlayer] = useState(null);
 
@@ -53,6 +55,7 @@ export default function WaitingPlayersPanel({
                 <li key={p.id} style={styles.rosterItem}>
                   <span style={styles.playerChipIndex}>{i + 1}</span>
                   <span style={{ ...styles.queueName, ...styles.teamNameProminent }}>{p.name}</span>
+                  {showLatecomerPriority && p.games === 0 && <span style={styles.courtBadge}>NEW</span>}
                   <span style={styles.queueStatusTag(queueStatus)}>{queueStatus}</span>
                   <span style={styles.waitingTimerText}>
                     <WaitingTimer player={p} />
@@ -105,6 +108,16 @@ export default function WaitingPlayersPanel({
                     >
                       <SkipForward size={11} strokeWidth={2.5} />
                       Skip
+                    </button>
+                  )}
+                  {showLatecomerPriority && p.games === 0 && onPrioritizeLatecomer && !p.held && (
+                    <button
+                      style={styles.skipToggleBtn(false)}
+                      onClick={() => onPrioritizeLatecomer(p.id)}
+                      title="Prioritize this newly checked-in player for the next available matchup — shows a preview to confirm before anything changes"
+                    >
+                      <Zap size={11} strokeWidth={2.5} />
+                      Prioritize Next Match
                     </button>
                   )}
                   <button

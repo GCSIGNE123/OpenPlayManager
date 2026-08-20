@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-08-10
+
+### Added
+- **Latecomer Priority + Undo (Adaptive Skill Rotation)** — a newly checked-in player who hasn't played yet ("NEW") can be prioritized into the next available waiting matchup via a facilitator-control override layer around the existing queue, not a change to the matchmaking algorithm itself: `AdaptiveSkillRotationEngine`, the games-played fairness tuple, partner/opponent diversity, and Winner-vs-Winner are all untouched. The organizer previews the exact proposed substitution (Current vs. Proposed matchup, who gets displaced back to the queue) before anything changes, and Cancel leaves the queue completely unchanged. Applying it is one-shot and fully reversible — Undo restores the exact prior matchup (never by re-running the rotation engine, which could produce a different result) and automatically becomes unavailable the moment that matchup dispatches to a court. Supports prioritizing more than one latecomer at once when the matchup has room; an impossible request (too many players, every matchup locked/held, a since-become-unavailable player) fails safely with a clear reason rather than forcing a bad match. Deliberately separate from the existing "Set as Next Match"/"Announce Next Match" facilitator concepts.
+
 ## 2026-08-09
 
 ### Fixed
