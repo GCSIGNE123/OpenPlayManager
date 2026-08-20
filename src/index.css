@@ -20,6 +20,14 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  /* Marketing Landing Page's full-bleed trick (styles.js's mktPage,
+     calc(50% - 50vw) margins) intentionally paints outside #root's own
+     900px box — the only screen that does this. A sub-pixel rounding
+     difference in that calc can otherwise add a few px to the page's
+     scrollWidth, letting a faint horizontal scrollbar appear; nothing else
+     in the app relies on horizontal scroll, so this is a safe, global
+     guard rather than something scoped to one screen. */
+  overflow-x: hidden;
 }
 
 #root {

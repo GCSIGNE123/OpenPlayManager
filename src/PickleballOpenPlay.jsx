@@ -2117,7 +2117,7 @@ export default function PickleballOpenPlay() {
   };
 
   return (
-    <div style={styles.app}>
+    <div style={screen === "landing" ? styles.appLanding : styles.app}>
       <style>{fontImport}</style>
 
       {sessionReport && (
