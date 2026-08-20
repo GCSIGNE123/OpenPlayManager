@@ -434,43 +434,45 @@ export default function CourtCard({
       )}
 
       {isLive && !court.awaitingPair && !editing && !subbingId && (
-        <div style={styles.courtLiveRow}>
-          <div style={styles.courtTeamHalf}>
-            <span style={styles.courtTeamBadge}>Team A</span>
-            <TeamRow
-              ids={court.teamA}
-              players={players}
-              score={court.scoreA}
-              onMinus={() => onScore && onScore("A", -1)}
-              onPlus={() => onScore && onScore("A", 1)}
-              readOnly={readOnly}
-              leading={court.scoreA > court.scoreB}
-              onRequestSub={!readOnly ? startSub : null}
-              onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
-              onRequestCheckout={!readOnly ? onRequestCheckout : null}
-              hideAvatar={hideAvatar}
-              hidePayment={hideAvatar}
-              startIndex={0}
-            />
-          </div>
-          <div style={styles.courtVerticalDivider} />
-          <div style={styles.courtTeamHalf}>
-            <span style={styles.courtTeamBadge}>Team B</span>
-            <TeamRow
-              ids={court.teamB}
-              players={players}
-              score={court.scoreB}
-              onMinus={() => onScore && onScore("B", -1)}
-              onPlus={() => onScore && onScore("B", 1)}
-              readOnly={readOnly}
-              leading={court.scoreB > court.scoreA}
-              onRequestSub={!readOnly ? startSub : null}
-              onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
-              onRequestCheckout={!readOnly ? onRequestCheckout : null}
-              hideAvatar={hideAvatar}
-              hidePayment={hideAvatar}
-              startIndex={court.teamA.length}
-            />
+        <>
+          <div style={styles.courtLiveRow}>
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team A</span>
+              <TeamRow
+                ids={court.teamA}
+                players={players}
+                score={court.scoreA}
+                onMinus={() => onScore && onScore("A", -1)}
+                onPlus={() => onScore && onScore("A", 1)}
+                readOnly={readOnly}
+                leading={court.scoreA > court.scoreB}
+                onRequestSub={!readOnly ? startSub : null}
+                onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("A") : null}
+                onRequestCheckout={!readOnly ? onRequestCheckout : null}
+                hideAvatar={hideAvatar}
+                hidePayment={hideAvatar}
+                startIndex={0}
+              />
+            </div>
+            <div style={styles.courtVerticalDivider} />
+            <div style={styles.courtTeamHalf}>
+              <span style={styles.courtTeamBadge}>Team B</span>
+              <TeamRow
+                ids={court.teamB}
+                players={players}
+                score={court.scoreB}
+                onMinus={() => onScore && onScore("B", -1)}
+                onPlus={() => onScore && onScore("B", 1)}
+                readOnly={readOnly}
+                leading={court.scoreB > court.scoreA}
+                onRequestSub={!readOnly ? startSub : null}
+                onDeclareWinner={!readOnly && onDeclareWinner ? () => onDeclareWinner("B") : null}
+                onRequestCheckout={!readOnly ? onRequestCheckout : null}
+                hideAvatar={hideAvatar}
+                hidePayment={hideAvatar}
+                startIndex={court.teamA.length}
+              />
+            </div>
           </div>
           {!readOnly && (
             <div style={styles.courtActionsInline}>
@@ -521,7 +523,7 @@ export default function CourtCard({
               </button>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
