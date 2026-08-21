@@ -527,19 +527,28 @@ export function applyPendingCourtRemovals(state) {
 // never reused/renumbered — see PickleballOpenPlay.jsx's endMatch), so
 // it's what identifies which history entry to correct.
 //
-// Deliberately scoped to fixing a scoring mistake ONLY, not re-deciding a
-// match: rejects any edit that would flip who won. Changing the winner
-// would need to unwind and redo everything that happened AFTER this match
-// on the strength of its original result — win/loss streaks, Adaptive
-// Skill Rotation promotion/relegation (which may have already changed a
-// player's division for every match since), and anything those
-// promotions/relegations then influenced — none of which can be safely
-// or completely reconstructed after the fact. A same-winner score
-// correction has no such ripple: wins/losses/streaks/skill/ratings were
-// already computed correctly from the original winner and stay untouched;
-// only `pointsFor`/`pointsAgainst` (used by Standings' point
-// differential and Session Analytics) shift by the exact delta between
-// the old and new score, for the 4 players who actually played it.
+// The winner is never picked directly — it's ALWAYS recalculated from the
+// two corrected scores (higher score wins, same rule `endMatch` itself
+// uses), so a correction that reverses which score is higher genuinely
+// flips the recorded winner. A match that already had a real winner can't
+// be edited into a tie — normal completed matches always resolve to a
+// winner (a fixed 11-0 via "Won", or a decisive manual score), so a tie
+// would contradict the game rules that produced it; only a match that was
+// ALREADY a tie (an early-ended match with equal scores) can stay a tie.
+//
+// wins/losses are simple counters, safe to adjust regardless of where in
+// history this match sits: the old winner's +1 win/+1 loss is reversed
+// and the new winner's applied, for the 4 players who played it.
+// streak/lossStreak/lastResult, by contrast, only reflect a player's
+// CURRENT run — correctly recomputing them after the fact would mean
+// replaying every match that happened after this one, which this
+// correction doesn't have enough information to redo safely. They're
+// only touched when this is a player's most recent recorded match (no
+// later match exists to have built a streak on top of this one); older
+// matches leave streak/lossStreak/lastResult untouched, same as skill
+// promotion/relegation and the rating engine, which this never revisits.
+// pointsFor/pointsAgainst always shift by the exact delta between the old
+// and new score, for the 4 players who actually played it.
 // Throws (rather than silently no-op'ing) so the caller can surface a
 // clear reason instead of the score quietly failing to update.
 export function editMatchHistoryScore(state, round, newScoreA, newScoreB) {
@@ -549,31 +558,53 @@ export function editMatchHistoryScore(state, round, newScoreA, newScoreB) {
   if (newScoreA < 0 || newScoreB < 0) throw new Error("Scores can't be negative.");
 
   const newWinner = newScoreA > newScoreB ? "A" : newScoreB > newScoreA ? "B" : null;
-  if (newWinner !== match.winner) {
-    throw new Error("Editing the score can't change who won this match — only correct the numbers, not the result.");
+  if (newWinner === null && match.winner !== null) {
+    throw new Error("A completed match must have a winner — scores can't be tied.");
   }
   if (newScoreA === match.scoreA && newScoreB === match.scoreB) return state;
 
   const deltaA = newScoreA - match.scoreA;
   const deltaB = newScoreB - match.scoreB;
+  const winnerChanged = newWinner !== match.winner;
+
+  // is `round` this player's most recent recorded match? (no later entry
+  // in matchHistory involves them) — the only case where reversing/
+  // reapplying streak/lossStreak/lastResult is actually correct.
+  const isLatestMatchFor = (id) =>
+    !matchHistory.some((m) => m.round > round && (m.teamA.includes(id) || m.teamB.includes(id)));
 
   let players = state.players;
-  const applyDelta = (ids, pointsForDelta, pointsAgainstDelta) => {
+  const set = (id, updates) => {
+    if (!players[id]) return; // player may have since been removed from the roster
+    if (players === state.players) players = { ...players };
+    players[id] = { ...players[id], ...updates };
+  };
+
+  const applyTeam = (ids, pointsForDelta, pointsAgainstDelta, wasWinner, isWinner) => {
     ids.forEach((id) => {
-      if (!players[id]) return; // player may have since been removed from the roster
-      if (players === state.players) players = { ...players };
-      players[id] = {
-        ...players[id],
-        pointsFor: (players[id].pointsFor || 0) + pointsForDelta,
-        pointsAgainst: (players[id].pointsAgainst || 0) + pointsAgainstDelta,
+      if (!players[id]) return;
+      const p = players[id];
+      const updates = {
+        pointsFor: (p.pointsFor || 0) + pointsForDelta,
+        pointsAgainst: (p.pointsAgainst || 0) + pointsAgainstDelta,
       };
+      if (winnerChanged) {
+        updates.wins = (p.wins || 0) + (isWinner ? 1 : 0) - (wasWinner ? 1 : 0);
+        updates.losses = (p.losses || 0) + (!isWinner && newWinner !== null ? 1 : 0) - (!wasWinner && match.winner !== null ? 1 : 0);
+        if (isLatestMatchFor(id)) {
+          updates.streak = isWinner ? (wasWinner ? p.streak : (p.streak || 0) + 1) : 0;
+          updates.lossStreak = !isWinner && newWinner !== null ? (!wasWinner ? p.lossStreak : (p.lossStreak || 0) + 1) : 0;
+          updates.lastResult = isWinner ? "win" : newWinner !== null ? "loss" : p.lastResult;
+        }
+      }
+      set(id, updates);
     });
   };
-  applyDelta(match.teamA, deltaA, deltaB);
-  applyDelta(match.teamB, deltaB, deltaA);
+  applyTeam(match.teamA, deltaA, deltaB, match.winner === "A", newWinner === "A");
+  applyTeam(match.teamB, deltaB, deltaA, match.winner === "B", newWinner === "B");
 
   const updatedMatchHistory = matchHistory.map((m) =>
-    m.round === round ? { ...m, scoreA: newScoreA, scoreB: newScoreB } : m
+    m.round === round ? { ...m, scoreA: newScoreA, scoreB: newScoreB, winner: newWinner } : m
   );
 
   return { ...state, players, matchHistory: updatedMatchHistory };

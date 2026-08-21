@@ -76,13 +76,14 @@ function TeamLine({ ids, players, score, isWinner, onSelectPlayer }) {
   );
 }
 
-// Game History — score correction. Same-winner-only edit (see
-// lib/queueManagement.js's editMatchHistoryScore for why) — this form
-// only ever offers scoreA/scoreB inputs, never a winner picker, since
-// changing the winner isn't supported. Gated behind `canEdit` (the
-// caller only passes true once the facilitator is scorer-authenticated —
-// see PickleballOpenPlay.jsx), so a public viewer of this same History
-// tab never sees an edit control at all.
+// Game History — score correction. This form only ever offers
+// scoreA/scoreB inputs, never a winner picker — the winner is always
+// recalculated from the corrected scores (see lib/queueManagement.js's
+// editMatchHistoryScore), so there's no separate control that could
+// disagree with the numbers. Gated behind `canEdit` (the caller only
+// passes true once the facilitator is scorer-authenticated — see
+// PickleballOpenPlay.jsx), so a public viewer of this same History tab
+// never sees an edit control at all.
 function MatchCard({ m, players, onSelectPlayer, canEdit, onEditScore, editError }) {
   const [editing, setEditing] = useState(false);
   const [draftA, setDraftA] = useState("");
