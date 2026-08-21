@@ -521,3 +521,60 @@ export function applyPendingCourtRemovals(state) {
   if (courts === state.courts && pending === (state.pendingCourtRemovals || 0)) return state;
   return { ...state, courts, pendingCourtRemovals: pending };
 }
+
+// Game History — score correction. A completed match's `round` field is a
+// stable, unique identifier (1-indexed at the moment it was recorded,
+// never reused/renumbered — see PickleballOpenPlay.jsx's endMatch), so
+// it's what identifies which history entry to correct.
+//
+// Deliberately scoped to fixing a scoring mistake ONLY, not re-deciding a
+// match: rejects any edit that would flip who won. Changing the winner
+// would need to unwind and redo everything that happened AFTER this match
+// on the strength of its original result — win/loss streaks, Adaptive
+// Skill Rotation promotion/relegation (which may have already changed a
+// player's division for every match since), and anything those
+// promotions/relegations then influenced — none of which can be safely
+// or completely reconstructed after the fact. A same-winner score
+// correction has no such ripple: wins/losses/streaks/skill/ratings were
+// already computed correctly from the original winner and stay untouched;
+// only `pointsFor`/`pointsAgainst` (used by Standings' point
+// differential and Session Analytics) shift by the exact delta between
+// the old and new score, for the 4 players who actually played it.
+// Throws (rather than silently no-op'ing) so the caller can surface a
+// clear reason instead of the score quietly failing to update.
+export function editMatchHistoryScore(state, round, newScoreA, newScoreB) {
+  const matchHistory = state.matchHistory || [];
+  const match = matchHistory.find((m) => m.round === round);
+  if (!match) throw new Error("That match could no longer be found in history.");
+  if (newScoreA < 0 || newScoreB < 0) throw new Error("Scores can't be negative.");
+
+  const newWinner = newScoreA > newScoreB ? "A" : newScoreB > newScoreA ? "B" : null;
+  if (newWinner !== match.winner) {
+    throw new Error("Editing the score can't change who won this match — only correct the numbers, not the result.");
+  }
+  if (newScoreA === match.scoreA && newScoreB === match.scoreB) return state;
+
+  const deltaA = newScoreA - match.scoreA;
+  const deltaB = newScoreB - match.scoreB;
+
+  let players = state.players;
+  const applyDelta = (ids, pointsForDelta, pointsAgainstDelta) => {
+    ids.forEach((id) => {
+      if (!players[id]) return; // player may have since been removed from the roster
+      if (players === state.players) players = { ...players };
+      players[id] = {
+        ...players[id],
+        pointsFor: (players[id].pointsFor || 0) + pointsForDelta,
+        pointsAgainst: (players[id].pointsAgainst || 0) + pointsAgainstDelta,
+      };
+    });
+  };
+  applyDelta(match.teamA, deltaA, deltaB);
+  applyDelta(match.teamB, deltaB, deltaA);
+
+  const updatedMatchHistory = matchHistory.map((m) =>
+    m.round === round ? { ...m, scoreA: newScoreA, scoreB: newScoreB } : m
+  );
+
+  return { ...state, players, matchHistory: updatedMatchHistory };
+}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Download, Pencil, Search, X } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
@@ -76,7 +76,120 @@ function TeamLine({ ids, players, score, isWinner, onSelectPlayer }) {
   );
 }
 
-function RoundCard({ round, matches, players, expanded, onToggle, onSelectPlayer }) {
+// Game History — score correction. Same-winner-only edit (see
+// lib/queueManagement.js's editMatchHistoryScore for why) — this form
+// only ever offers scoreA/scoreB inputs, never a winner picker, since
+// changing the winner isn't supported. Gated behind `canEdit` (the
+// caller only passes true once the facilitator is scorer-authenticated —
+// see PickleballOpenPlay.jsx), so a public viewer of this same History
+// tab never sees an edit control at all.
+function MatchCard({ m, players, onSelectPlayer, canEdit, onEditScore, editError }) {
+  const [editing, setEditing] = useState(false);
+  const [draftA, setDraftA] = useState("");
+  const [draftB, setDraftB] = useState("");
+  // `editError` is shared, session-wide state (see PickleballOpenPlay.jsx's
+  // historyEditError) — a failed attempt on a DIFFERENT match card
+  // shouldn't make this card show a stale error the moment it's opened.
+  // Only show it once THIS card has actually attempted a save itself.
+  const [attempted, setAttempted] = useState(false);
+
+  const startEdit = () => {
+    setDraftA(String(m.scoreA));
+    setDraftB(String(m.scoreB));
+    setAttempted(false);
+    setEditing(true);
+  };
+
+  const save = () => {
+    setAttempted(true);
+    // onEditScore returns true/false (see PickleballOpenPlay.jsx's
+    // editHistoryScore) — only close the form on success, so a rejected
+    // edit (e.g. an attempt to change the winner) stays open with its
+    // error message visible instead of silently closing.
+    const succeeded = onEditScore(m.round, Number(draftA), Number(draftB));
+    if (succeeded) setEditing(false);
+  };
+
+  return (
+    <div style={styles.historyMatchCard}>
+      <div style={styles.historyMatchHead}>
+        <span style={styles.courtBadge}>COURT {m.court}</span>
+        <span style={styles.historyMatchTime}>{formatDateTime(m.endedAt)}</span>
+        {canEdit && !editing && (
+          <button style={styles.subBtn} onClick={startEdit} aria-label="Edit score" title="Correct this match's score">
+            <Pencil size={11} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div>
+          <div style={styles.scoreInputRow}>
+            <label style={styles.scoreInputField}>
+              {teamLabel(m.teamA, players)}
+              <input
+                type="number"
+                min={0}
+                style={styles.expectedGamesInput}
+                value={draftA}
+                onChange={(e) => setDraftA(e.target.value)}
+              />
+            </label>
+            <label style={styles.scoreInputField}>
+              {teamLabel(m.teamB, players)}
+              <input
+                type="number"
+                min={0}
+                style={styles.expectedGamesInput}
+                value={draftB}
+                onChange={(e) => setDraftB(e.target.value)}
+              />
+            </label>
+          </div>
+          {attempted && editError && <p style={styles.editWarning}>{editError}</p>}
+          <div style={styles.editActions}>
+            <button type="button" style={styles.secondaryBtn} onClick={() => setEditing(false)}>
+              <X size={13} strokeWidth={2.5} />
+              Cancel
+            </button>
+            <button type="button" style={styles.primaryBtn} onClick={save}>
+              <Check size={14} strokeWidth={2.5} />
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={styles.historyMatchTeams}>
+            <TeamLine
+              ids={m.teamA}
+              players={players}
+              score={m.scoreA}
+              isWinner={m.winner === "A"}
+              onSelectPlayer={onSelectPlayer}
+            />
+            <div style={styles.vsLine} />
+            <TeamLine
+              ids={m.teamB}
+              players={players}
+              score={m.scoreB}
+              isWinner={m.winner === "B"}
+              onSelectPlayer={onSelectPlayer}
+            />
+          </div>
+          <p style={styles.historyWinnerLine}>
+            Winner:{" "}
+            <strong>
+              {m.winner === "A" ? teamLabel(m.teamA, players) : m.winner === "B" ? teamLabel(m.teamB, players) : "Tie"}
+            </strong>
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RoundCard({ round, matches, players, expanded, onToggle, onSelectPlayer, canEdit, onEditScore, editError }) {
   return (
     <div style={styles.historyRoundCard}>
       <button style={styles.historyRoundHead} onClick={onToggle}>
@@ -89,39 +202,15 @@ function RoundCard({ round, matches, players, expanded, onToggle, onSelectPlayer
       {expanded && (
         <div style={styles.historyRoundBody}>
           {matches.map((m) => (
-            <div key={`${m.round}-${m.court}`} style={styles.historyMatchCard}>
-              <div style={styles.historyMatchHead}>
-                <span style={styles.courtBadge}>COURT {m.court}</span>
-                <span style={styles.historyMatchTime}>{formatDateTime(m.endedAt)}</span>
-              </div>
-              <div style={styles.historyMatchTeams}>
-                <TeamLine
-                  ids={m.teamA}
-                  players={players}
-                  score={m.scoreA}
-                  isWinner={m.winner === "A"}
-                  onSelectPlayer={onSelectPlayer}
-                />
-                <div style={styles.vsLine} />
-                <TeamLine
-                  ids={m.teamB}
-                  players={players}
-                  score={m.scoreB}
-                  isWinner={m.winner === "B"}
-                  onSelectPlayer={onSelectPlayer}
-                />
-              </div>
-              <p style={styles.historyWinnerLine}>
-                Winner:{" "}
-                <strong>
-                  {m.winner === "A"
-                    ? teamLabel(m.teamA, players)
-                    : m.winner === "B"
-                      ? teamLabel(m.teamB, players)
-                      : "Tie"}
-                </strong>
-              </p>
-            </div>
+            <MatchCard
+              key={`${m.round}-${m.court}`}
+              m={m}
+              players={players}
+              onSelectPlayer={onSelectPlayer}
+              canEdit={canEdit}
+              onEditScore={onEditScore}
+              editError={editError}
+            />
           ))}
         </div>
       )}
@@ -194,7 +283,7 @@ function PlayerHistoryPanel({ playerId, players, matchHistory, onClose }) {
 // "everyone plays round N together" batch). Nothing here writes to
 // matchHistory or any other state — it only reads state.matchHistory,
 // exactly as Standings reads state.players.
-export default function HistoryView({ matchHistory, players }) {
+export default function HistoryView({ matchHistory, players, canEdit = false, onEditScore, editError = "" }) {
   const [search, setSearch] = useState("");
   const [roundFilter, setRoundFilter] = useState("");
   const [courtFilter, setCourtFilter] = useState("");
@@ -338,6 +427,9 @@ export default function HistoryView({ matchHistory, players }) {
             expanded={isExpanded(round)}
             onToggle={() => toggleRound(round)}
             onSelectPlayer={setSelectedPlayerId}
+            canEdit={canEdit}
+            onEditScore={onEditScore}
+            editError={editError}
           />
         ))
       )}

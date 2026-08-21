@@ -42,6 +42,7 @@ import {
   derivePaymentStats,
   requestRemoveCourt as requestRemoveCourtAction,
   applyPendingCourtRemovals,
+  editMatchHistoryScore,
 } from "./lib/queueManagement.js";
 import {
   selectNextDispatchableMatchup,
@@ -1653,6 +1654,28 @@ export default function PickleballOpenPlay() {
     setLastRoundSnapshot(null);
   };
 
+  // Game History — score correction (see lib/queueManagement.js's
+  // editMatchHistoryScore for the full "why same-winner-only" reasoning).
+  // A thin wrapper, same "call the pure function, save() what it returns"
+  // shape as every other handler here — errors (wrong-winner attempt,
+  // negative score, match no longer found) are caught and surfaced to the
+  // History tab rather than thrown into the console. Returns true/false so
+  // HistoryView's edit form knows whether to close itself (success) or
+  // stay open with the error visible (rejected) — the form closing itself
+  // unconditionally would otherwise hide a rejection's error message the
+  // instant it appeared.
+  const [historyEditError, setHistoryEditError] = useState("");
+  const editHistoryScore = (round, scoreA, scoreB) => {
+    setHistoryEditError("");
+    try {
+      save(editMatchHistoryScore(state, round, scoreA, scoreB));
+      return true;
+    } catch (e) {
+      setHistoryEditError(e.message);
+      return false;
+    }
+  };
+
   const setExpectedGamesPerPlayer = (count) => {
     const expectedGamesPerPlayer = Math.max(1, Number(count) || 1);
     save({ ...state, expectedGamesPerPlayer });
@@ -2359,7 +2382,13 @@ export default function PickleballOpenPlay() {
               )}
 
               {loaded && view === "history" && (
-                <HistoryView matchHistory={state.matchHistory || []} players={state.players} />
+                <HistoryView
+                  matchHistory={state.matchHistory || []}
+                  players={state.players}
+                  canEdit={scorerAuthed}
+                  onEditScore={editHistoryScore}
+                  editError={historyEditError}
+                />
               )}
 
               {loaded && view === "payment" && !paymentAuthed && (
