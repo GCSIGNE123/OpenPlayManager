@@ -6,6 +6,7 @@ import { fetchAllPlayerRatings, fetchPlayerRating } from "../lib/ratingModel.js"
 import { RatingEngine } from "../engines/RatingEngine.js";
 import { resizeImageToAvatar } from "../lib/utils.js";
 import { useActiveVenue } from "../context/ActiveVenueContext.jsx";
+import { supabase } from "../lib/supabaseClient.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
@@ -224,6 +225,119 @@ function PhotoEditor({ photo, onChange, busy, setBusy }) {
   );
 }
 
+// PickleKing Player Link — organizer action to generate a claim code so
+// this player can link their PickleKing Player app account to this
+// existing record. See pickleking-player's docs/PLAYER_CLAIM_UI.md for the
+// full design. The actual code generation and player_claim_codes writes
+// happen entirely server-side (Pro never gets a service-role credential,
+// never talks to player_claim_codes directly) — this component only calls
+// the generate-claim-code Edge Function in the shared Supabase project.
+//
+// SECURITY NOTE: Pro has no real per-organizer authentication yet (every
+// organizer action here is gated by the same shared ADMIN_PIN the rest of
+// the app already uses, e.g. AdminLogin.jsx) — this action requires that
+// same PIN, checked again server-side by the Edge Function itself (not
+// just trusted from this form), but it is not stronger than Pro's
+// existing PIN-based trust model. See docs/PLAYER_CLAIM_UI.md for the
+// full discussion; this is a known, documented limitation, not something
+// this task can fix on its own.
+function ClaimCodeCard({ player }) {
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [claim, setClaim] = useState(null); // { code, expiresAt, displayName }
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    if (!claim) return;
+    const tick = () => {
+      const ms = new Date(claim.expiresAt).getTime() - Date.now();
+      if (ms <= 0) {
+        setRemaining("Expired");
+        return;
+      }
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      setRemaining(`${m}:${String(s).padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [claim]);
+
+  const generate = async () => {
+    if (!pin.trim()) {
+      setPinError("Enter the organizer PIN.");
+      return;
+    }
+    setLoading(true);
+    setPinError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-claim-code", {
+        body: { playerId: player.id, organizerPin: pin },
+      });
+      if (error) {
+        let message = "Couldn't generate a code — try again.";
+        try {
+          const body = await error.context.json();
+          if (body?.message) message = body.message;
+        } catch (e) {
+          // non-JSON error body (e.g. a network failure) — fall back to the generic message
+        }
+        setPinError(message);
+        return;
+      }
+      setClaim(data);
+    } catch (e) {
+      setPinError("Couldn't generate a code — try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <SectionLabel>PickleKing Player Link</SectionLabel>
+      <div style={{ ...styles.tournamentSetupCard, textAlign: "center" }}>
+        {claim && (
+          <>
+            <p style={styles.editHint}>PickleKing Profile Link</p>
+            <p style={{ fontWeight: 700, fontSize: 16, margin: "4px 0 12px" }}>{claim.displayName}</p>
+            <p style={{ fontFamily: "ui-monospace, Consolas, monospace", fontSize: 32, fontWeight: 700, letterSpacing: 4, margin: "0 0 8px" }}>
+              {claim.code}
+            </p>
+            <p style={styles.editHint}>{remaining === "Expired" ? "Expired — regenerate a new code" : `Expires in ${remaining}`}</p>
+            <p style={styles.editHint}>Give this code to the player to link their PickleKing account.</p>
+          </>
+        )}
+        {!claim && (
+          <p style={styles.editHint}>Generate a short-lived code so this player can link their PickleKing Player app account.</p>
+        )}
+        <input
+          style={styles.pinInput}
+          type="password"
+          inputMode="numeric"
+          placeholder="Organizer PIN"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && generate()}
+        />
+        {pinError && <div style={styles.pinError}>{pinError}</div>}
+        <div style={{ ...styles.editActions, justifyContent: "center" }}>
+          <button
+            type="button"
+            style={{ ...(claim ? styles.secondaryBtn : styles.primaryBtn), ...(loading ? styles.btnDisabled : {}) }}
+            onClick={generate}
+            disabled={loading}
+          >
+            {loading ? "Generating…" : claim ? "Regenerate" : "Generate Claim Code"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Player Profile — see PROJECT.md's Player Management section. Editable:
 // First Name, Last Name, Photo, Contact Number, Skill Level (exactly the
 // fields the spec names — no Membership fields anywhere here). Layout
@@ -303,6 +417,7 @@ function PlayerProfile({ player, ratingView, onBack, onSaved }) {
       </div>
       <SectionLabel>Statistics</SectionLabel>
       <StatsPanel ratingView={ratingView} skill={skill} />
+      <ClaimCodeCard player={player} />
     </div>
   );
 }
