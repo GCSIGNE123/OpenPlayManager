@@ -2358,6 +2358,7 @@ export default function PickleballOpenPlay() {
 
               {loaded && view === "checkin" && (
                 <CheckinView
+                  sessionCode={sessionCode}
                   registeredNotHere={registeredNotHere}
                   checkInExisting={checkInExisting}
                   onChangeSkillPreCheckIn={setPreCheckInSkill}

@@ -1,11 +1,14 @@
-import { Camera, Check, LogIn, X } from "lucide-react";
+import { useState } from "react";
+import { Camera, Check, LogIn, QrCode, X } from "lucide-react";
 import { styles } from "../styles.js";
 import Avatar from "./Avatar.jsx";
+import CheckInScannerModal from "./CheckInScannerModal.jsx";
 import QueueList from "./QueueList.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
 
 export default function CheckinView({
+  sessionCode,
   registeredNotHere,
   checkInExisting,
   onChangeSkillPreCheckIn,
@@ -23,8 +26,15 @@ export default function CheckinView({
   handlePhotoSelect,
   photoBusy,
 }) {
+  const [scannerOpen, setScannerOpen] = useState(false);
   return (
     <div style={styles.checkinWrap}>
+      <SectionLabel>Check In Player</SectionLabel>
+      <button type="button" style={styles.secondaryBtn} onClick={() => setScannerOpen(true)}>
+        <QrCode size={14} strokeWidth={2.5} /> Scan Player QR
+      </button>
+      {scannerOpen && <CheckInScannerModal sessionCode={sessionCode} onClose={() => setScannerOpen(false)} />}
+
       <SectionLabel>Registered players not yet here ({registeredNotHere.length})</SectionLabel>
       {registeredNotHere.length === 0 ? (
         <p style={styles.emptyQueue}>No one registered is waiting to check in.</p>
