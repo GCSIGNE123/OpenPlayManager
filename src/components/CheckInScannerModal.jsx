@@ -6,6 +6,12 @@
 // dialogActions — see CheckoutConfirmDialog.jsx/SessionSettingsDialog.jsx)
 // rather than inventing new modal styles.
 //
+// No organizer PIN here — see create-scan-challenge/index.ts's header for
+// the security reasoning: sessionCode isn't a secret, and a challenge
+// alone can't check anyone in without a valid player token paired with it.
+// Opening this modal goes straight to requesting a challenge and starting
+// the camera.
+//
 // NOTE on flow: the approved architecture's checkin-player call performs
 // the ENTIRE check-in atomically in one step (token + challenge validation
 // + the session write, all in one Postgres transaction) — there is
@@ -22,10 +28,8 @@ import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
 
 export default function CheckInScannerModal({ sessionCode, onClose }) {
-  const [stage, setStage] = useState("pin"); // 'pin' | 'scanning' | 'result'
-  const [pin, setPin] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState("starting"); // 'starting' | 'scanning' | 'result'
+  const [startError, setStartError] = useState("");
   const [scanChallenge, setScanChallenge] = useState(null);
   const [result, setResult] = useState(null); // { status, player } | { error }
   const videoRef = useRef(null);
@@ -60,23 +64,24 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   };
 
   const requestChallenge = async () => {
-    if (!pin.trim()) {
-      setPinError("Enter the organizer PIN.");
-      return;
-    }
-    setBusy(true);
-    setPinError("");
+    setStage("starting");
+    setStartError("");
     try {
-      const { challenge } = await createScanChallenge(sessionCode, pin);
+      const { challenge } = await createScanChallenge(sessionCode);
       setScanChallenge(challenge);
       setStage("scanning");
       startCamera();
     } catch (e) {
-      setPinError(e.message || "Couldn't start the scanner.");
-    } finally {
-      setBusy(false);
+      setStartError(e.message || "Couldn't start the scanner.");
+      setResult({ error: e.message || "Couldn't start the scanner." });
+      setStage("result");
     }
   };
+
+  useEffect(() => {
+    requestChallenge();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleScanned = async (playerToken, challenge) => {
     try {
@@ -118,32 +123,9 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           <h2 style={styles.dialogTitle}>Scan Player QR</h2>
         </div>
 
-        {stage === "pin" && (
+        {stage === "starting" && !startError && (
           <div style={{ textAlign: "center" }}>
-            <p style={styles.editHint}>Enter the organizer PIN to start scanning.</p>
-            <input
-              style={styles.pinInput}
-              type="password"
-              inputMode="numeric"
-              placeholder="Organizer PIN"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && requestChallenge()}
-            />
-            {pinError && <div style={styles.pinError}>{pinError}</div>}
-            <div style={styles.dialogActions}>
-              <button type="button" style={styles.secondaryBtn} onClick={onClose}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                style={{ ...styles.primaryBtn, ...(busy ? styles.btnDisabled : {}) }}
-                onClick={requestChallenge}
-                disabled={busy}
-              >
-                {busy ? "Starting…" : "Start Scanning"}
-              </button>
-            </div>
+            <p style={styles.editHint}>Starting scanner…</p>
           </div>
         )}
 
@@ -191,7 +173,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
                   onClick={() => {
                     scanningLockRef.current = false;
                     setResult(null);
-                    setStage("pin");
+                    requestChallenge();
                   }}
                 >
                   Try Again

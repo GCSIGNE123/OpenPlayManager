@@ -24,12 +24,15 @@ async function invoke(functionName, payload) {
   return data;
 }
 
-// Session-bound, PIN-gated — see checkin_player_via_qr's design doc
-// (pickleking-player's 20260826000000_qr_checkin.sql migration) for why
-// this exists as its own step rather than folding the session id into the
-// player's QR token.
-export function createScanChallenge(sessionCode, organizerPin) {
-  return invoke("create-scan-challenge", { sessionCode, organizerPin });
+// Session-bound — see checkin_player_via_qr's design doc (pickleking-player's
+// 20260826000000_qr_checkin.sql migration) for why this exists as its own
+// step rather than folding the session id into the player's QR token.
+// sessionCode is not treated as a secret (see create-scan-challenge's
+// header comment) — the actual check-in authorization comes from pairing
+// the resulting challenge with a valid player token, never from this call
+// alone.
+export function createScanChallenge(sessionCode) {
+  return invoke("create-scan-challenge", { sessionCode });
 }
 
 // Never sends a player id — only the two opaque, single-use credentials
