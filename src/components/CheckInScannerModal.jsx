@@ -30,13 +30,23 @@ import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js"
 export default function CheckInScannerModal({ sessionCode, onClose }) {
   const [stage, setStage] = useState("starting"); // 'starting' | 'scanning' | 'result'
   const [startError, setStartError] = useState("");
-  const [scanChallenge, setScanChallenge] = useState(null);
   const [result, setResult] = useState(null); // { status, player } | { error }
   const videoRef = useRef(null);
   const canvasRef = useRef(document.createElement("canvas"));
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const scanningLockRef = useRef(false);
+  // Source of truth for tick()/handleScanned() — tick() recursively
+  // re-schedules itself via requestAnimationFrame without React ever
+  // re-rendering in between, so a value read from a `scanChallenge` STATE
+  // closure would stay pinned to whatever it was when that closure was
+  // created (one generation behind the challenge just minted by
+  // requestChallenge, or even the previous already-used one on a retry —
+  // this was confirmed live: checkin-player received a stale/empty
+  // scanChallenge and correctly rejected it). A ref has no such closure
+  // staleness — reading challengeRef.current always reflects whichever
+  // challenge was most recently assigned, regardless of renders.
+  const challengeRef = useRef(null);
 
   const stopCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -46,7 +56,13 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     }
   };
 
-  useEffect(() => stopCamera, []);
+  useEffect(
+    () => () => {
+      stopCamera();
+      challengeRef.current = null; // scanner/modal is closing/unmounting — nothing left to redeem
+    },
+    []
+  );
 
   const startCamera = async () => {
     try {
@@ -64,11 +80,12 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   };
 
   const requestChallenge = async () => {
+    challengeRef.current = null; // invalidate any previous challenge before minting/awaiting a new one
     setStage("starting");
     setStartError("");
     try {
       const { challenge } = await createScanChallenge(sessionCode);
-      setScanChallenge(challenge);
+      challengeRef.current = challenge; // tick()/handleScanned() read this directly, never a state closure
       setStage("scanning");
       startCamera();
     } catch (e) {
@@ -90,6 +107,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     } catch (e) {
       setResult({ error: e.message || "Couldn't check this player in." });
     } finally {
+      challengeRef.current = null; // single-use — spent (or rejected) either way, never reused
       setStage("result");
     }
   };
@@ -110,7 +128,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     if (code && code.data && !scanningLockRef.current) {
       scanningLockRef.current = true;
       stopCamera();
-      handleScanned(code.data, scanChallenge);
+      handleScanned(code.data, challengeRef.current);
       return;
     }
     rafRef.current = requestAnimationFrame(tick);
