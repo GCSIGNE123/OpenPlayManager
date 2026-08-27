@@ -61,6 +61,15 @@ export default function WaitingPlayersPanel({
                     <WaitingTimer player={p} />
                   </span>
                   {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
+                  {/* Open Play Availability / Queue Confirmation — read-only,
+                      set by the player in PickleKing Player, never by Pro.
+                      Hidden for the default "available" (or missing) case so
+                      an ordinary waiting player looks exactly as before. */}
+                  {p.playStatus && p.playStatus !== "available" && (
+                    <span style={styles.playStatusTag(p.playStatus)} title="Set by the player in PickleKing Player">
+                      {p.playStatus === "on_break" ? "ON BREAK" : p.playStatus === "confirmation_required" ? "CONFIRM?" : "LEFT"}
+                    </span>
+                  )}
                   {onChangeSkill && (
                     <button
                       style={styles.skillOverrideBtn}

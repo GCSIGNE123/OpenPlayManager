@@ -1346,6 +1346,24 @@ export const styles = {
     flexShrink: 0,
     letterSpacing: "0.03em",
   }),
+  // Open Play Availability / Queue Confirmation — read-only badge for a
+  // player's PickleKing Player-app playStatus (set by the player, never by
+  // Pro). Only rendered when the field is present and not the default
+  // "available" (see WaitingPlayersPanel.jsx) — an "available" player
+  // looks exactly as it always has, no new visual noise for the common
+  // case.
+  playStatusTag: (playStatus) => ({
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: playStatus === "confirmation_required" ? "var(--ink)" : "var(--chalk)",
+    background:
+      playStatus === "on_break" ? "var(--gold, #d9a441)" : playStatus === "confirmation_required" ? "var(--coral)" : "var(--court)",
+    borderRadius: 4,
+    padding: "2px 5px",
+    flexShrink: 0,
+    letterSpacing: "0.03em",
+  }),
   // Pre-Check-In Skill Correction — same look as skillTag above, but a real
   // <button> (border reset + pointer cursor) so a facilitator can flip a
   // registered-not-yet-checked-in player's skill in one tap, right in the
