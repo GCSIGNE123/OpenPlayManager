@@ -573,6 +573,21 @@ export async function saveManualSeeds(tournament, manualSeeds) {
   return saveTournament({ ...tournament, manualSeeds });
 }
 
+// PKR Ranking — organizer/admin classification. Deliberately a standalone
+// save (same "plain field set, no locking/validation" shape as
+// saveManualSeeds above), NOT routed through
+// TournamentRulesService/saveTournamentSettings — that service only
+// applies to Round Robin tournaments and locks fields by tournament
+// phase, neither of which is appropriate here: ranking classification
+// must work for BOTH formats and must remain editable even on a
+// completed/historical tournament (that's exactly how an existing
+// tournament becomes ranking-eligible after the fact — see
+// PKR_RANKING_DESIGN's Historical Tournament Handling). 1-4 | null
+// ("not yet classified" — never defaults to a guessed tier).
+export async function saveRankingTier(tournament, rankingTier) {
+  return saveTournament({ ...tournament, rankingTier });
+}
+
 // Builds whatever a seeding strategy needs beyond the plain qualified-team
 // list — an async ratings fetch for "rating" (the one thing
 // PlayoffBracketGenerator's synchronous interface can't do itself) or the

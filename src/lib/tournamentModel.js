@@ -361,6 +361,12 @@ export function makeTournament({
     venueId,
     format,
     mode, // 'singles' | 'doubles'
+    // PKR Ranking — 1 (Club) | 2 (Regional) | 3 (Major) | 4 (Championship) |
+    // null ("not yet classified" — a tournament contributes zero ranking
+    // points until an organizer/admin explicitly sets this; never defaults
+    // to a guessed tier). See pickleking-player's pkrRankingAdapter.js for
+    // the points table this feeds.
+    rankingTier: null,
     courtsCount,
     poolCount,
     assignmentMethod, // 'random' this milestone — see engines/PoolAssignment.js

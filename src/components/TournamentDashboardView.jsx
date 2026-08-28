@@ -31,6 +31,7 @@ import {
   saveUnpinMatch,
   saveTournamentSettings,
   saveManualSeeds,
+  saveRankingTier,
   saveGenerateBracket,
   saveGenerateDoubleEliminationBracket,
   saveDoubleEliminationMatchStart,
@@ -1117,6 +1118,23 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // PKR Ranking classification — deliberately NOT routed through
+  // handleSaveSettings/saveTournamentSettings (Round-Robin-only, phase-
+  // locked); see saveRankingTier's own comment for why this needs to work
+  // for every format/phase, including an already-completed/historical
+  // tournament.
+  const [rankingTierError, setRankingTierError] = useState("");
+  const handleSetRankingTier = async (rankingTier) => {
+    if (!tournament) return;
+    setRankingTierError("");
+    try {
+      const updated = await saveRankingTier(tournament, rankingTier);
+      setTournament(updated);
+    } catch (e) {
+      setRankingTierError(e.message);
+    }
+  };
+
   const handleRenameCourt = async (courtId, name) => {
     if (!tournament) return;
     setSettingsError("");
@@ -1259,6 +1277,23 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
         </div>
       )}
 
+      {tab === "overview" && tournament && (
+        <div style={styles.settingsField}>
+          <span>PKR Ranking Tier</span>
+          <select
+            style={styles.rotationSelect}
+            value={tournament.rankingTier ?? ""}
+            onChange={(e) => handleSetRankingTier(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Not classified — no ranking points</option>
+            <option value="1">Tier 1 — Club</option>
+            <option value="2">Tier 2 — Regional</option>
+            <option value="3">Tier 3 — Major</option>
+            <option value="4">Tier 4 — Championship</option>
+          </select>
+          {rankingTierError && <span style={styles.editWarning}>{rankingTierError}</span>}
+        </div>
+      )}
       {tab === "overview" && <OverviewPanel tournament={tournament} loading={loading} />}
 
       {tab === "participants" && <TournamentParticipantsView state={state} tournament={tournament} loading={loading} />}

@@ -74,6 +74,7 @@ export function emptyPlayerRecord({
   emergencyContact = null,
   duprId = null,
   venueId = null, // Phase 0: Multi-Tenant Foundation, see lib/venueModel.js — architecture-only, nothing reads this yet
+  city = null, // PKR Ranking's Local Ranking — see the field's own comment below
 }) {
   const now = Date.now();
   return {
@@ -97,6 +98,12 @@ export function emptyPlayerRecord({
     expirationDate,
     emergencyContact: emergencyContact ? emergencyContact.trim() : null,
     duprId: duprId ? duprId.trim() : null,
+    // PKR Ranking's Local Ranking — plain text, no GPS, no full address.
+    // Player-editable via PickleKing Player's own Edit Profile (see
+    // pickleking-player's player-profile Edge Function) — Pro's own
+    // Player Management editor doesn't need a control for this field,
+    // same precedent as duprRating/duprId already being read-only here.
+    city: city ? city.trim() : null,
     createdAt: now,
     updatedAt: now,
   };
