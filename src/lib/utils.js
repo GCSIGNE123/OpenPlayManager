@@ -505,6 +505,21 @@ export function getPlayerQueueStatus(player, state) {
   return QUEUE_STATUSES.WAITING;
 }
 
+// In-Court Player Count — see PROJECT.md. IN-COURT PLAYERS = every
+// checked-in player who is not CHECKED_OUT — i.e. PLAYING + HELD + UPCOMING
+// + WAITING combined (every getPlayerQueueStatus outcome except
+// CHECKED_OUT), reusing that exact same taxonomy rather than a second
+// definition. Deliberately NOT `player.checkedIn` alone — checkedIn stays
+// true forever after checkout (see PickleballOpenPlay.jsx's checkoutPlayer,
+// which only ever flips `status`), so a naive checkedIn-only count would
+// silently keep counting players who have already left for the rest of the
+// session.
+export function countInCourtPlayers(state) {
+  return Object.values(state.players || {}).filter(
+    (p) => p.checkedIn && getPlayerQueueStatus(p, state) !== QUEUE_STATUSES.CHECKED_OUT
+  ).length;
+}
+
 // Rotation strategies (Strategy pattern — see src/engines/), one instance
 // per mode. state.rotationMode ("continuous" | "winnerPool" |
 // "progressiveSkill", see ROTATION_MODES in constants.js) picks which one

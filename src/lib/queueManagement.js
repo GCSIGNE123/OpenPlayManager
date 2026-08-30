@@ -169,7 +169,7 @@ export function getLastCourtForPlayer(state, playerId) {
 // priority.
 export function setPlayerPayment(state, playerId, method) {
   const p = state.players[playerId];
-  if (!p || (method !== "cash" && method !== "gcash" && method !== "unpaid")) return state;
+  if (!p || (method !== "cash" && method !== "gcash" && method !== "organizer" && method !== "unpaid")) return state;
   const wasPaid = p.paymentStatus === "paid";
   if (method === "unpaid") {
     if (!wasPaid) return state;
@@ -216,7 +216,9 @@ export function setPlayerPayment(state, playerId, method) {
 }
 
 function methodLabel(m) {
-  return m === "gcash" ? "GCash" : "Cash";
+  if (m === "gcash") return "GCash";
+  if (m === "organizer") return "Organizer";
+  return "Cash";
 }
 
 // Player Payment Tracking — pure derivation of session-wide payment
@@ -232,7 +234,12 @@ export function derivePaymentStats(players) {
   const unpaid = checkedIn.length - paid.length;
   const cash = paid.filter((p) => p.paymentMethod === "cash").length;
   const gcash = paid.filter((p) => p.paymentMethod === "gcash").length;
-  return { totalPlayers: checkedIn.length, paid: paid.length, unpaid, cash, gcash };
+  // Organizer — see PROJECT.md. Per the approved product decision, this
+  // counts as paid participation and gets its own bucket alongside
+  // cash/gcash, exactly like every other payment method — no separate
+  // liability/receivable accounting, just a third method value.
+  const organizer = paid.filter((p) => p.paymentMethod === "organizer").length;
+  return { totalPlayers: checkedIn.length, paid: paid.length, unpaid, cash, gcash, organizer };
 }
 
 // Partner Requests — see PROJECT.md/FEATURES.md. Facilitator designation

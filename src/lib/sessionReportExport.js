@@ -37,7 +37,8 @@ export function buildSessionReportExportTable(report) {
       ["Payment — Paid", payment.paid],
       ["Payment — Unpaid", payment.unpaid],
       ["Payment — Cash", payment.cash],
-      ["Payment — GCash", payment.gcash]
+      ["Payment — GCash", payment.gcash],
+      ["Payment — Organizer", payment.organizer]
     );
   }
   rows.push(["Session Grade", `${grade.score} / 100 (${grade.label})`]);
@@ -46,7 +47,14 @@ export function buildSessionReportExportTable(report) {
   });
   if (paymentDetails) {
     paymentDetails.forEach((p) => {
-      const methodLabel = p.paymentStatus === "paid" ? (p.paymentMethod === "gcash" ? "Paid (GCash)" : "Paid (Cash)") : "Unpaid";
+      const methodLabel =
+        p.paymentStatus === "paid"
+          ? p.paymentMethod === "gcash"
+            ? "Paid (GCash)"
+            : p.paymentMethod === "organizer"
+              ? "Paid (Organizer)"
+              : "Paid (Cash)"
+          : "Unpaid";
       rows.push([`Payment: ${p.playerName}`, methodLabel]);
     });
   }

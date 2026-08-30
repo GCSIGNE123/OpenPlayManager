@@ -147,6 +147,7 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
               <Stat label="Unpaid" value={payment.unpaid} />
               <Stat label="Cash" value={payment.cash} />
               <Stat label="GCash" value={payment.gcash} />
+              <Stat label="Organizer" value={payment.organizer} />
             </div>
             {/* Session Review Improvements — see PROJECT.md/FEATURES.md.
                 Read-only: who paid, who's still unpaid, and by which
@@ -158,7 +159,13 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
                   <div key={p.playerId} style={styles.analyticsPaymentRow}>
                     <span style={styles.analyticsPaymentName}>{p.playerName}</span>
                     <span style={styles.paymentTag(p.paymentStatus === "paid")}>
-                      {p.paymentStatus === "paid" ? (p.paymentMethod === "gcash" ? "P-GC" : "P-C") : "UP"}
+                      {p.paymentStatus === "paid"
+                        ? p.paymentMethod === "gcash"
+                          ? "P-GC"
+                          : p.paymentMethod === "organizer"
+                            ? "P-OR"
+                            : "P-C"
+                        : "UP"}
                     </span>
                   </div>
                 ))}

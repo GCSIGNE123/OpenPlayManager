@@ -168,3 +168,25 @@ export function filterPlayersByQuery(players, query) {
     [p.displayName, p.firstName, p.lastName, p.nickname, p.contactNumber].some((s) => s && s.toLowerCase().includes(q))
   );
 }
+
+// Registered Player Check-In — see CheckinView.jsx/PickleballOpenPlay.jsx's
+// checkInFromDatabase. Pure decision only (no state mutation, no save()) —
+// given a session's current `players` map and a Player Database `record`
+// the organizer picked from search, decides which of three things should
+// happen. Extracted here specifically so this new branching logic (not the
+// surrounding save()-calling wrapper, which mirrors the existing quickAddCheckIn/
+// checkInExisting pattern) can be unit-tested directly.
+export function resolveDatabaseCheckIn(sessionPlayers, record) {
+  if (!record?.id) return { action: "noop" };
+  const existing = (sessionPlayers || {})[record.id];
+  if (existing) {
+    return existing.checkedIn ? { action: "noop" } : { action: "checkInExisting", id: record.id };
+  }
+  return {
+    action: "createNew",
+    id: record.id,
+    name: record.displayName,
+    skill: record.skill === "intermediate" ? "intermediate" : "beginner",
+    photo: record.photo || null,
+  };
+}

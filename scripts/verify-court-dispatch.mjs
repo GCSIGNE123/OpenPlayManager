@@ -489,5 +489,125 @@ console.log("\n17. Regression Verification scenario 6 — Held Match Behavior");
   ));
 }
 
+// ---- Next Match (facilitator announcement) as a dispatch tie-break ------
+// See PickleballOpenPlay.jsx's setNextMatchup/state.nextMatchupId and
+// courtDispatch.js's own header comment. Regression coverage for the fix:
+// dispatch now honors the organizer's explicit "Set Next Match" designation
+// as a selection tie-break — the designated matchup wins over front-of-
+// array order when it's still present AND eligible, and falls back to the
+// original behavior otherwise. Matchmaking/pairing/rotation are never
+// touched by any of this — every matchup object here is hand-built exactly
+// like the sections above, never regenerated.
+console.log("\nNext Match designation (nextMatchupId) — dispatch tie-break");
+{
+  const players = {
+    p0: { id: "p0", name: "P0", held: false, status: "ACTIVE" },
+    p1: { id: "p1", name: "P1", held: false, status: "ACTIVE" },
+    p2: { id: "p2", name: "P2", held: false, status: "ACTIVE" },
+    p3: { id: "p3", name: "P3", held: false, status: "ACTIVE" },
+    p4: { id: "p4", name: "P4", held: false, status: "ACTIVE" },
+    p5: { id: "p5", name: "P5", held: false, status: "ACTIVE" },
+    p6: { id: "p6", name: "P6", held: false, status: "ACTIVE" },
+    p7: { id: "p7", name: "P7", held: false, status: "ACTIVE" },
+  };
+  const matchupA = { id: "A", teamA: ["p0", "p1"], teamB: ["p2", "p3"] };
+  const matchupB = { id: "B", teamA: ["p4", "p5"], teamB: ["p6", "p7"] };
+  const oneOpenCourt = [emptyCourt(1)];
+
+  {
+    // designated next matchup + eligible -> selected first, even though
+    // it's second in the array (B would be front-of-array's pick otherwise
+    // is irrelevant here — A is deliberately placed SECOND to prove the
+    // designation, not array position, wins).
+    const result = dispatchAvailableCourts({
+      courts: oneOpenCourt,
+      nextMatchups: [matchupB, matchupA],
+      queueIds: [],
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+      nextMatchupId: "A",
+    });
+    assert("designated matchup (A) is dispatched first despite being second in the array", result.dispatched[0]?.matchupId === "A");
+    assert("the other eligible matchup (B) remains in nextMatchups, untouched", result.nextMatchups.length === 1 && result.nextMatchups[0].id === "B");
+  }
+
+  {
+    // designated next matchup + another matchup also eligible -> designated
+    // one wins (same scenario, front-of-array order this time, to prove
+    // it's not just an accidental array-order coincidence).
+    const result = dispatchAvailableCourts({
+      courts: oneOpenCourt,
+      nextMatchups: [matchupA, matchupB],
+      queueIds: [],
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+      nextMatchupId: "B",
+    });
+    assert("designated matchup (B) wins even though A is eligible and frontmost", result.dispatched[0]?.matchupId === "B");
+  }
+
+  {
+    // designated matchup no longer exists (dispatched/cancelled/regenerated
+    // elsewhere) -> falls through to normal front-of-array selection.
+    const result = dispatchAvailableCourts({
+      courts: oneOpenCourt,
+      nextMatchups: [matchupA, matchupB],
+      queueIds: [],
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+      nextMatchupId: "GONE",
+    });
+    assert("a designation pointing at a matchup no longer in nextMatchups falls back to normal selection (A, frontmost)", result.dispatched[0]?.matchupId === "A");
+  }
+
+  {
+    // designated matchup exists but is NOT dispatch eligible (e.g. held, or
+    // one of its players got held/checked-out since) -> falls through to
+    // normal selection, the ineligible designated one is left untouched.
+    const heldMatchupA = { ...matchupA, held: true };
+    const result = dispatchAvailableCourts({
+      courts: oneOpenCourt,
+      nextMatchups: [heldMatchupA, matchupB],
+      queueIds: [],
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+      nextMatchupId: "A",
+    });
+    assert("an ineligible (held) designated matchup is skipped -> normal selection dispatches B instead", result.dispatched[0]?.matchupId === "B");
+    assert("the ineligible designated matchup (A) is left exactly as it was — still held, still present", (
+      result.nextMatchups.length === 1 && result.nextMatchups[0].id === "A" && result.nextMatchups[0].held === true
+    ));
+  }
+
+  {
+    // no designation (nextMatchupId omitted/null) -> existing behavior
+    // completely unchanged, front-of-array selection.
+    const result = dispatchAvailableCourts({
+      courts: oneOpenCourt,
+      nextMatchups: [matchupA, matchupB],
+      queueIds: [],
+      players,
+      autoFillCourts: true,
+      isCourtReserved: () => false,
+    });
+    assert("no designation -> existing frontmost-eligible behavior is unchanged", result.dispatched[0]?.matchupId === "A");
+  }
+
+  {
+    // The same tie-break applies identically via selectNextDispatchableMatchup
+    // directly — the function manual dispatch (fillCourt/fillAllCourts/
+    // Generate remaining courts) calls, confirming manual and automatic
+    // dispatch still can never disagree now that both pass nextMatchupId.
+    const { matchup } = selectNextDispatchableMatchup([matchupA, matchupB], players, "B");
+    assert("selectNextDispatchableMatchup itself honors the same designation directly (manual dispatch's own call site)", matchup?.id === "B");
+    const { matchup: fallback } = selectNextDispatchableMatchup([matchupA, matchupB], players, null);
+    assert("selectNextDispatchableMatchup with no id passed behaves exactly as before", fallback?.id === "A");
+  }
+}
+
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

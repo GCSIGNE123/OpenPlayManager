@@ -214,5 +214,78 @@ console.log("\nScope Protection: setPlayerPayment never touches queueIds/nextMat
   assert("games untouched", next.players.p1.games === 2);
 }
 
+// ---- Organizer payment method — see PROJECT.md. Extends the existing
+// cash/gcash model with a third method: "the organizer paid for this
+// player's participation," tracked exactly like Cash/GCash (counts as
+// paid, its own bucket in the summary), no separate liability/receivable
+// accounting introduced.
+console.log("\nPaid by Organizer");
+{
+  const state = makeState();
+  const next = setPlayerPayment(state, "p1", "organizer");
+  assert("paymentStatus is now paid", next.players.p1.paymentStatus === "paid");
+  assert("paymentMethod is organizer", next.players.p1.paymentMethod === "organizer");
+  const entry = next.queueActivityLog[0];
+  assert("a Payment Received entry was logged", entry.kind === "paymentReceived");
+  assert("logged entry names the right player/method", entry.playerName === "Jofel" && entry.newMethod === "organizer");
+}
+
+console.log("\nOrganizer selected can be saved, and correcting between methods works");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "organizer");
+  assert("saved correctly as organizer", state.players.p1.paymentMethod === "organizer");
+  // Correcting a mistaken method — organizer -> cash — same one-function
+  // "set paymentStatus/paymentMethod together" path as any other correction.
+  const corrected = setPlayerPayment(state, "p1", "cash");
+  assert("correcting from organizer to cash works", corrected.players.p1.paymentMethod === "cash" && corrected.players.p1.paymentStatus === "paid");
+  const correctedEntry = corrected.queueActivityLog[0];
+  assert("a Payment Updated entry (not Received) was logged for the correction", correctedEntry.kind === "paymentUpdated" && correctedEntry.reason === "Organizer → Cash");
+}
+
+console.log("\nReload preserves an Organizer payment (session state is just plain JSON — no special handling needed)");
+{
+  const state = setPlayerPayment(makeState(), "p1", "organizer");
+  const reloaded = JSON.parse(JSON.stringify(state));
+  assert("paymentMethod survives a save/reload round-trip", reloaded.players.p1.paymentMethod === "organizer");
+  assert("paymentStatus survives a save/reload round-trip", reloaded.players.p1.paymentStatus === "paid");
+}
+
+console.log("\nderivePaymentStats includes an organizer bucket, existing cash/gcash/unpaid counts unaffected");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "organizer");
+  state = setPlayerPayment(state, "p2", "cash");
+  const stats = derivePaymentStats(state.players);
+  assert("organizer count is 1", stats.organizer === 1);
+  assert("cash count is still correctly 1", stats.cash === 1);
+  assert("gcash count is still correctly 0", stats.gcash === 0);
+  assert("paid total includes the organizer-paid player", stats.paid === 2);
+  assert("unpaid count is 0 (only 2 checked-in players, both now paid)", stats.unpaid === 0);
+}
+
+console.log("\nSession report / export include Organizer correctly");
+{
+  let state = makeState();
+  state = setPlayerPayment(state, "p1", "organizer");
+  const report = computeSessionAnalyticsReport(state);
+  assert("report.payment.organizer is 1", report.payment.organizer === 1);
+  const detail = report.paymentDetails.find((p) => p.playerId === "p1");
+  assert("paymentDetails records the organizer method for this player", detail.paymentMethod === "organizer");
+}
+
+console.log("\nExisting cash/gcash/unpaid behavior remains completely unchanged");
+{
+  const state = makeState();
+  const stillRejectsInvalid = setPlayerPayment(state, "p1", "bogus-method");
+  assert("an invalid method (still) results in a no-op", stillRejectsInvalid === state);
+  const cashResult = setPlayerPayment(state, "p1", "cash");
+  assert("cash still works exactly as before", cashResult.players.p1.paymentMethod === "cash" && cashResult.players.p1.paymentStatus === "paid");
+  const gcashResult = setPlayerPayment(state, "p1", "gcash");
+  assert("gcash still works exactly as before", gcashResult.players.p1.paymentMethod === "gcash" && gcashResult.players.p1.paymentStatus === "paid");
+  const unpaidResult = setPlayerPayment(cashResult, "p1", "unpaid");
+  assert("reverting to unpaid still works exactly as before", unpaidResult.players.p1.paymentStatus === "unpaid" && unpaidResult.players.p1.paymentMethod === null);
+}
+
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

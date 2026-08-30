@@ -38,16 +38,32 @@ export function isDispatchEligible(matchup, players) {
   });
 }
 
-// Selects the highest-priority (frontmost) eligible matchup, leaving every
-// OTHER matchup — including any it skips over — in its exact original
-// relative order. Never mutates, reorders, or rebuilds nextMatchups; the
-// caller is responsible for actually removing the chosen matchup once it
-// commits to deploying it. Shared by manual dispatch (Assign match / Fill
-// all open courts / Generate remaining courts, see PickleballOpenPlay.jsx)
-// and automatic dispatch below — one definition of "what's next" for the
-// whole app, so manual and automatic dispatch can never disagree.
-export function selectNextDispatchableMatchup(nextMatchups, players) {
+// Selects the highest-priority eligible matchup, leaving every OTHER
+// matchup — including any it skips over — in its exact original relative
+// order. Never mutates, reorders, or rebuilds nextMatchups; the caller is
+// responsible for actually removing the chosen matchup once it commits to
+// deploying it. Shared by manual dispatch (Assign match / Fill all open
+// courts / Generate remaining courts, see PickleballOpenPlay.jsx) and
+// automatic dispatch below — one definition of "what's next" for the whole
+// app, so manual and automatic dispatch can never disagree.
+//
+// Next Match (facilitator announcement) — see PickleballOpenPlay.jsx's
+// setNextMatchup/state.nextMatchupId. Passing that id here (optional,
+// defaults to null = exact prior behavior) makes the organizer's explicit
+// designation win the tie-break: if the designated matchup still exists in
+// `nextMatchups` AND is dispatch-eligible, it's selected regardless of its
+// position in the array; otherwise this falls through to the original
+// frontmost-eligible selection, completely unchanged. This is deliberately
+// ONLY a selection-order tie-break — it never changes which matchups exist,
+// how they were built, or anything about matchmaking/pairing/rotation.
+export function selectNextDispatchableMatchup(nextMatchups, players, nextMatchupId = null) {
   const list = nextMatchups || [];
+  if (nextMatchupId) {
+    const designatedIndex = list.findIndex((m) => m.id === nextMatchupId);
+    if (designatedIndex !== -1 && isDispatchEligible(list[designatedIndex], players)) {
+      return { matchup: list[designatedIndex], rest: list.filter((_, i) => i !== designatedIndex) };
+    }
+  }
   const index = list.findIndex((m) => isDispatchEligible(m, players));
   if (index === -1) return { matchup: null, rest: list };
   return { matchup: list[index], rest: list.filter((_, i) => i !== index) };
@@ -82,7 +98,7 @@ export function selectNextDispatchableMatchup(nextMatchups, players) {
 // notion of announcements, timers, or Auto Start Match — those are
 // entirely the caller's concern (PickleballOpenPlay.jsx); Dispatch's own
 // job here is only detect + select + assign.
-export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, players, autoFillCourts, isCourtReserved }) {
+export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, players, autoFillCourts, isCourtReserved, nextMatchupId = null }) {
   if (autoFillCourts === false) {
     return { courts, nextMatchups, queueIds, dispatched: [] };
   }
@@ -96,7 +112,11 @@ export function dispatchAvailableCourts({ courts, nextMatchups, queueIds, player
     if (c.status !== "open" || c.assignmentMode === "manual") continue;
     if (isCourtReserved && isCourtReserved(c.number)) continue;
 
-    const { matchup, rest } = selectNextDispatchableMatchup(remainingMatchups, players);
+    // Next Match designation only ever applies to the FIRST court filled in
+    // this pass — once it's dispatched (or skipped for being ineligible),
+    // every subsequent open court in this same loop falls back to plain
+    // frontmost-eligible selection, same as before this feature existed.
+    const { matchup, rest } = selectNextDispatchableMatchup(remainingMatchups, players, nextMatchupId);
     if (!matchup) continue; // no eligible matchup right now — leave this (and any later) open court alone, try again next save()
 
     remainingMatchups = rest;

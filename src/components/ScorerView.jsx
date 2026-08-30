@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Megaphone, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { ROTATION_MODES } from "../lib/constants.js";
-import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds } from "../lib/utils.js";
+import { ROTATION_MODES, MATCHMAKING_PRIORITIES } from "../lib/constants.js";
+import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds, countInCourtPlayers } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
 import NextMatchupCard from "./NextMatchupCard.jsx";
@@ -10,6 +10,7 @@ import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
+import FixedPartnerPanel from "./FixedPartnerPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
 import LatecomerPriorityDialog from "./LatecomerPriorityDialog.jsx";
 
@@ -219,6 +220,19 @@ export default function ScorerView({
   // screen) — this is a read-only label, not a control, so the organizer
   // can still see which mode is active without being able to switch it here
   const rotationModeLabel = ROTATION_MODES.find((m) => m.value === rotationMode)?.label || rotationMode;
+  // Persistent Matchmaking Priority Indicator — see PROJECT.md. Inspection
+  // confirmed state.matchmakingPriority is NOT lost/cleared anywhere — it's
+  // reapplied on every save() via refreshNextMatchups/regenerateNextMatchups,
+  // completely unchanged by this task. The only gap was visibility: once
+  // Session Settings closes, nothing on screen showed it was still active.
+  // This is the smallest possible fix — a label lookup, same pattern as
+  // rotationModeLabel above — and nothing about matchmaking/queue sorting
+  // is touched. Deliberately distinct from the Latecomer Priority "NEW"
+  // badge (showLatecomerPriority && p.games === 0, WaitingPlayersPanel) —
+  // that's a completely different feature and is left untouched.
+  const matchmakingPriorityLabel = state.matchmakingPriority
+    ? MATCHMAKING_PRIORITIES.find((p) => p.value === state.matchmakingPriority)?.label || state.matchmakingPriority
+    : null;
   const totalPlayers = Object.keys(state.players || {}).length;
   // matches matchHistory's own round numbering (see endMatch: `round:
   // (state.matchHistory || []).length + 1`) — the round the next completed
@@ -242,6 +256,23 @@ export default function ScorerView({
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Rotation Mode</span>
           <span style={styles.sessionInfoValue}>{rotationModeLabel}</span>
+        </div>
+        {matchmakingPriorityLabel && (
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Priority</span>
+            <span style={styles.sessionInfoValue} title="Session Matchmaking Priority — set in Session Settings, applied to every new matchup">
+              {matchmakingPriorityLabel}
+            </span>
+          </div>
+        )}
+        <div style={styles.sessionInfoItem}>
+          {/* In-Court Player Count — see PROJECT.md/lib/utils.js's
+              countInCourtPlayers. Every checked-in, not-checked-out player
+              (playing + held + upcoming + waiting) — no new persisted
+              field, computed fresh every render from state.players/courts/
+              nextMatchups exactly like getPlayerQueueStatus already is. */}
+          <span style={styles.sessionInfoLabel}>In-Court Players</span>
+          <span style={styles.sessionInfoValue}>{countInCourtPlayers(state)}</span>
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Courts</span>
@@ -526,6 +557,8 @@ export default function ScorerView({
         showLatecomerPriority={rotationMode === "adaptiveSkill"}
         onPrioritizeLatecomer={onPreviewLatecomerPriority ? (id) => onPreviewLatecomerPriority([id]) : null}
       />
+
+      <FixedPartnerPanel players={state.players} state={state} onSetPartner={setFixedPartner} onClearPartner={clearFixedPartner} />
 
       {rotationMode === "adaptiveSkill" && skillChangeLog && skillChangeLog.length > 0 && (
         <>

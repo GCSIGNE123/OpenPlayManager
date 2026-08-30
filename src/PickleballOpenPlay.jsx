@@ -3,6 +3,7 @@ import { Copy, LogOut, Users, Tv } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
 import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
+import { resolveDatabaseCheckIn } from "./lib/playerDatabase.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -448,6 +449,10 @@ export default function PickleballOpenPlay() {
         nextMatchups: withMatchups.nextMatchups,
         queueIds: withMatchups.queueIds,
         players: withMatchups.players,
+        // Next Match (facilitator announcement) — honored as a dispatch
+        // tie-break only (see courtDispatch.js's selectNextDispatchableMatchup);
+        // matchmaking/pairing/rotation are completely unaffected.
+        nextMatchupId: withMatchups.nextMatchupId,
         // Stop Queueing — see PROJECT.md/FEATURES.md. "NO NEW auto dispatch"
         // while stopped, regardless of the Auto-fill Courts setting;
         // manual dispatch (fillCourt/fillAllCourts/generateRemainingCourts)
@@ -1207,6 +1212,66 @@ export default function PickleballOpenPlay() {
     setTimeout(() => setCheckinMsg(""), 2500);
   };
 
+  // Registered Player Check-In (Player Database) — see CheckinView.jsx's own
+  // header comment. `record` is a Player Database row (lib/playerDatabase.js
+  // — id/displayName/skill/photo), found via search for a player who wasn't
+  // pre-added to THIS session's roster at Create Session time. Two cases:
+  //   - this session already has a player record under that same id (e.g.
+  //     pre-registered, or previously added here another way) -> reuse the
+  //     exact existing checkInExisting path unchanged, never a duplicate.
+  //   - genuinely new to this session -> create a fresh session-player
+  //     record using the Player Database's OWN id/name/skill/photo (never a
+  //     new random id — see playerDatabase.js's header comment on why the
+  //     shared id matters), same fresh-record shape quickAddCheckIn already
+  //     uses for a walk-in, just keyed by the real identity instead.
+  const checkInFromDatabase = (record) => {
+    const decision = resolveDatabaseCheckIn(state.players, record);
+    if (decision.action === "noop") return;
+    if (decision.action === "checkInExisting") {
+      checkInExisting(decision.id);
+      return;
+    }
+    const { id, name, skill, photo } = decision;
+    const players = {
+      ...state.players,
+      [id]: {
+        id,
+        name,
+        skill,
+        checkedIn: true,
+        checkedInAt: Date.now(),
+        paymentStatus: "unpaid",
+        paymentMethod: null,
+        partnerId: null,
+        held: false,
+        status: "ACTIVE",
+        checkedOutAt: null,
+        games: 0,
+        wins: 0,
+        losses: 0,
+        streak: 0,
+        lossStreak: 0,
+        lastMatchEndAt: null,
+        lastResult: null,
+        pointsFor: 0,
+        pointsAgainst: 0,
+        partnerCounts: {},
+        recentPartnerIds: [],
+        opponentCounts: {},
+        lastOpponentIds: [],
+        recentOpponentIds: [],
+        courtCounts: {},
+        lastCourt: null,
+        photo,
+      },
+    };
+    const queueIds = [...state.queueIds, id];
+    clearOneShotSnapshots();
+    save({ ...state, players, queueIds });
+    setCheckinMsg(`${name} is in the queue.`);
+    setTimeout(() => setCheckinMsg(""), 2500);
+  };
+
   const quickAddCheckIn = () => {
     const name = nameInput.trim();
     if (!name) return;
@@ -1274,7 +1339,7 @@ export default function PickleballOpenPlay() {
     // manual courts are filled by lockManualCourt (the organizer's own
     // picks), never by deploying a pre-built rotation-engine matchup
     if (court.status !== "open" || court.assignmentMode === "manual" || isCourtReserved(court.number)) return;
-    const { matchup: nextMatch, rest: restMatchups } = selectNextDispatchableMatchup(state.nextMatchups, state.players);
+    const { matchup: nextMatch, rest: restMatchups } = selectNextDispatchableMatchup(state.nextMatchups, state.players, state.nextMatchupId);
     if (!nextMatch) return;
 
     const { teamA, teamB } = nextMatch;
@@ -1292,7 +1357,7 @@ export default function PickleballOpenPlay() {
     let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
       if (c.status !== "open" || c.assignmentMode === "manual" || isCourtReserved(c.number)) return c;
-      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players);
+      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players, state.nextMatchupId);
       if (!nextMatch) return c;
       remainingMatchups = rest;
       const { teamA, teamB } = nextMatch;
@@ -1446,7 +1511,7 @@ export default function PickleballOpenPlay() {
     let remainingMatchups = [...generated];
     const courts = state.courts.map((c) => {
       if (c.status !== "open" || c.assignmentMode === "manual") return c;
-      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players);
+      const { matchup: nextMatch, rest } = selectNextDispatchableMatchup(remainingMatchups, state.players, state.nextMatchupId);
       if (!nextMatch) return c;
       remainingMatchups = rest;
       const consumed = new Set([...nextMatch.teamA, ...nextMatch.teamB]);
@@ -2382,6 +2447,7 @@ export default function PickleballOpenPlay() {
                   sessionCode={sessionCode}
                   registeredNotHere={registeredNotHere}
                   checkInExisting={checkInExisting}
+                  checkInFromDatabase={checkInFromDatabase}
                   onChangeSkillPreCheckIn={setPreCheckInSkill}
                   nameInput={nameInput}
                   setNameInput={setNameInput}
@@ -2400,7 +2466,7 @@ export default function PickleballOpenPlay() {
               )}
 
               {loaded && view === "standings" && (
-                <StandingsView players={state.players} />
+                <StandingsView players={state.players} state={state} />
               )}
 
               {loaded && view === "history" && (
