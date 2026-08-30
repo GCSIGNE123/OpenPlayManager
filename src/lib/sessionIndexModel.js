@@ -6,9 +6,30 @@
 // find EVERY session — still running, manually ended, or auto-ended for
 // inactivity — with when it opened and when it closed, regardless of
 // which of those states it's in right now.
-import { STORAGE_PREFIX, SESSION_INDEX_PREFIX, SESSION_AUTO_END_AGE_MS } from "./constants.js";
+import { STORAGE_PREFIX, SESSION_INDEX_PREFIX, SESSION_AUTO_END_AGE_MS, SESSION_INACTIVITY_AGE_MS } from "./constants.js";
 import { computeSessionAnalyticsReport } from "./sessionAnalytics.js";
 import { saveSessionReport } from "./sessionReportModel.js";
+import { expirationReason } from "./openPlaySessionLifecycle.js";
+
+// The one canonical "end a session" sequence — used identically whether the
+// end is a scheduled 3-day/24-hour auto-close (sweepAgedSessions below) or a
+// server-side Edge Function sweep (supabase/functions/sweep-open-play-
+// sessions) reusing this same module. Never a second/parallel implementation
+// of "generate report -> delete live record -> mark index ended".
+async function endExpiredSession(entry, liveState, reason) {
+  try {
+    const report = computeSessionAnalyticsReport(liveState);
+    await saveSessionReport(report, entry.sessionCode);
+  } catch (e) {
+    // report generation/save failing shouldn't block ending the session
+  }
+  try {
+    await window.storage.delete(`${STORAGE_PREFIX}${entry.sessionCode}`, true);
+  } catch (e) {
+    // deletion failure shouldn't block marking the index entry ended
+  }
+  await recordSessionEnded(entry.sessionCode, { reason });
+}
 
 // Written once, at the moment a session is created (see PickleballOpenPlay.jsx's
 // startSession) — never touched again except by recordSessionEnded below.
@@ -72,19 +93,25 @@ export async function fetchAllSessionIndexEntries() {
   return records.filter(Boolean).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-// Auto-End Aged Sessions — see PROJECT.md/FEATURES.md. Run once whenever
-// the All Sessions screen mounts (this app has no server-side cron; a
-// facilitator/organizer viewing that screen is what triggers the check —
-// documented limitation, not a background job). Any index entry still
-// "active" whose underlying session has been running for
-// SESSION_AUTO_END_AGE_MS (3 days) or more is ended exactly the way a
-// manual End Session would: a report is generated and saved (so its final
-// standings/payment status are preserved, reviewable from All Sessions
-// exactly like any other ended session), then the live record is deleted.
+// Auto-End Aged Sessions + 24-Hour Inactivity Auto-Close — see PROJECT.md/
+// FEATURES.md. Run whenever the All Sessions screen mounts (client-
+// triggered, same as always) AND, independently, on a schedule by
+// supabase/functions/sweep-open-play-sessions (see that function's own
+// header — the real "genuinely automatic, doesn't depend on anyone opening
+// a screen" mechanism). Both callers share this exact function.
+//
+// An index entry still "active" is ended (via endExpiredSession above —
+// the one canonical end sequence) when EITHER:
+//   - its session has been running SESSION_AUTO_END_AGE_MS (3 days) or
+//     more since sessionStartedAt (the original rule, unchanged), OR
+//   - it has had no MEANINGFUL activity (see lib/openPlaySessionLifecycle.js
+//     and PickleballOpenPlay.jsx's save()) for SESSION_INACTIVITY_AGE_MS
+//     (24 hours) — a NEW, separate rule; a session can fail this one while
+//     comfortably under the 3-day ceiling.
 // A session whose live record is already gone (deleted some other way,
 // without its index entry being updated) is simply marked ended here too,
 // rather than being swept every single time this runs.
-export async function sweepAgedSessions(maxAgeMs = SESSION_AUTO_END_AGE_MS) {
+export async function sweepAgedSessions(maxAgeMs = SESSION_AUTO_END_AGE_MS, maxInactivityMs = SESSION_INACTIVITY_AGE_MS) {
   const entries = await fetchAllSessionIndexEntries();
   const activeEntries = entries.filter((e) => e.status === "active");
   const endedCodes = [];
@@ -103,20 +130,17 @@ export async function sweepAgedSessions(maxAgeMs = SESSION_AUTO_END_AGE_MS) {
       endedCodes.push(entry.sessionCode);
       continue;
     }
-    const startedAt = liveState.sessionStartedAt || entry.createdAt || 0;
-    if (Date.now() - startedAt < maxAgeMs) continue;
-    try {
-      const report = computeSessionAnalyticsReport(liveState);
-      await saveSessionReport(report, entry.sessionCode);
-    } catch (e) {
-      // report generation/save failing shouldn't block ending the session
-    }
-    try {
-      await window.storage.delete(`${STORAGE_PREFIX}${entry.sessionCode}`, true);
-    } catch (e) {
-      // deletion failure shouldn't block marking the index entry ended
-    }
-    await recordSessionEnded(entry.sessionCode, { reason: "Auto-ended — inactive 3+ days" });
+    // Race safety (Idempotency / Race Safety — see the approved design):
+    // re-read liveState fresh above (never a cached/stale copy), and
+    // re-evaluate expirationReason against THAT read, right before ending
+    // it — so a session that received meaningful activity between this
+    // sweep starting and this specific iteration running is correctly
+    // seen as current (its freshly-read lastActivityAt already reflects
+    // that activity) and is left alone, never incorrectly ended.
+    const reason = expirationReason(liveState, Date.now(), { maxAgeMs, maxInactivityMs });
+    if (!reason || reason === "missing-session-data") continue; // current, or malformed data — never guessed expired
+    const endReason = reason === "age" ? "Auto-ended — inactive 3+ days" : "Auto-ended — inactive 24h";
+    await endExpiredSession(entry, liveState, endReason);
     endedCodes.push(entry.sessionCode);
   }
   return endedCodes;

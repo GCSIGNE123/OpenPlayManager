@@ -373,7 +373,15 @@ export default function PickleballOpenPlay() {
   }, [sessionCode]);
 
   const save = useCallback(
-    async (next) => {
+    // 24-Hour Inactivity Auto-Close — see lib/constants.js's SESSION_INACTIVITY_AGE_MS
+    // and lib/openPlaySessionLifecycle.js. `isActivity` (default true) marks whether
+    // this particular save represents MEANINGFUL player/organizer movement. It is
+    // false ONLY from the held-player-reminder timer's own save() call below — that
+    // timer fires purely because 15s of wall-clock time elapsed, not because anything
+    // actually happened, so it must never refresh lastActivityAt (it would otherwise
+    // let a truly idle session with a held player in it stay "active" forever). Every
+    // other save() call site in this file is real activity and needs no change.
+    async (next, { isActivity = true } = {}) => {
       if (!sessionCode) return;
       // Dynamic Court Count — see PROJECT.md/FEATURES.md. Runs first, before
       // anything else in save(), so a court a pending removal is waiting on
@@ -477,7 +485,16 @@ export default function PickleballOpenPlay() {
         ...withDispatch,
         players: applyWaitingTimeTracking(stateRef.current.courts, withDispatch.courts, withDispatch.players),
       };
-      const withStamp = { ...withDispatch, updatedAt: Date.now() };
+      // updatedAt advances on EVERY save() (any write at all — still the right
+      // signal for "is this row being touched"); lastActivityAt advances only
+      // when isActivity is true (the default) — see save()'s own doc comment
+      // above and lib/constants.js's defaultState.lastActivityAt.
+      const now = Date.now();
+      const withStamp = {
+        ...withDispatch,
+        updatedAt: now,
+        lastActivityAt: isActivity ? now : withDispatch.lastActivityAt ?? withDispatch.sessionStartedAt ?? now,
+      };
       setState(withStamp);
       try {
         await window.storage.set(`${STORAGE_PREFIX}${sessionCode}`, JSON.stringify(withStamp), true);
@@ -573,7 +590,10 @@ export default function PickleballOpenPlay() {
       due.forEach(({ playerId, minutesHeld, roundsHeld }) => {
         next = markHeldReminderShown(next, playerId, { minutesHeld, roundsHeld });
       });
-      save(next);
+      // NOT meaningful activity — this tick fires purely because 15s of
+      // wall-clock time passed, see save()'s own doc comment. Must never
+      // refresh lastActivityAt / the 24-Hour Inactivity Auto-Close clock.
+      save(next, { isActivity: false });
     };
     tick(); // check immediately on entering Scorer, don't wait a full interval
     const interval = setInterval(tick, 15000);
@@ -944,6 +964,7 @@ export default function PickleballOpenPlay() {
         courtDispatchSettings: { ...defaultState.courtDispatchSettings },
         pendingTournamentTemplate: templateConfig, // see lib/constants.js/TournamentTemplateService.js — read once by TournamentScheduleView to pre-fill its defaults, never touched again after that
         updatedAt: Date.now(),
+        lastActivityAt: Date.now(), // 24-Hour Inactivity Auto-Close — seeded to session creation time, same as sessionStartedAt; first real save() (any meaningful action) advances it from there
       };
       await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(initial), true);
 
