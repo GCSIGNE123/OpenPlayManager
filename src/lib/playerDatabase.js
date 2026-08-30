@@ -53,7 +53,12 @@ import { PLAYER_DB_PREFIX } from "./constants.js";
 //   membershipPlanId (nullable string — a built-in or custom MembershipPlan id),
 //   joinDate (nullable ms epoch), expirationDate (nullable ms epoch),
 //   emergencyContact (nullable string), duprId (nullable string placeholder
-//   — the player's DUPR account id, distinct from duprRating's number)
+//   — the player's DUPR account id, distinct from duprRating's number),
+//   birthdate (nullable ISO date string "YYYY-MM-DD" — added for PickleKing
+//   Player's direct self-registration flow; a record from before this field
+//   existed simply has it null/undefined, same "additive, no backfill"
+//   precedent as every other optional field here. Never used to compute or
+//   store age — age, if ever needed, is derived from this at read time)
 // }
 export function emptyPlayerRecord({
   firstName,
@@ -75,6 +80,7 @@ export function emptyPlayerRecord({
   duprId = null,
   venueId = null, // Phase 0: Multi-Tenant Foundation, see lib/venueModel.js — architecture-only, nothing reads this yet
   city = null, // PKR Ranking's Local Ranking — see the field's own comment below
+  birthdate = null, // PickleKing Player self-registration — see the field's own comment above
 }) {
   const now = Date.now();
   return {
@@ -89,6 +95,7 @@ export function emptyPlayerRecord({
     duprRating: duprRating === "" || duprRating == null ? null : Number(duprRating),
     contactNumber: contactNumber ? contactNumber.trim() : null,
     notes: notes ? notes.trim() : null,
+    birthdate: birthdate || null,
     active: true,
     venueId,
     memberId,
