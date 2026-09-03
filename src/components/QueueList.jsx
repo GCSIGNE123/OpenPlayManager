@@ -33,6 +33,16 @@ export default function QueueList({ queueIds, players, nextMatchups }) {
               ))}
             </div>
           </div>
+          {/* Next Match Proposal — see PROJECT.md's Fairness First
+              redesign. Only shown on the actual "Next up" card (i === 0),
+              not the "Then" preview cards further down the queue, since
+              that's the one about to be dispatched. Read-only — never
+              hides a fairness tradeoff even when it's not a warning. */}
+          {i === 0 && m.fairness && (
+            <div style={styles.fairnessNote(m.fairness.usedLookahead || m.fairness.guardRelaxed)}>
+              {m.fairness.reason}
+            </div>
+          )}
         </div>
       ))}
       {leftover.length > 0 && (

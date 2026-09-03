@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Lock, Pause, Play, Shuffle, Star, Unlock, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Lock, Pause, Play, Shuffle, Star, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import PlayerChip from "./PlayerChip.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
@@ -7,6 +7,18 @@ import PlayerPicker from "./PlayerPicker.jsx";
 // A pre-built upcoming matchup, editable before it's assigned to a court —
 // mirrors CourtCard's "fix teams" / substitute interactions, minus anything
 // score/court-status related since this matchup isn't live yet.
+//
+// Next Match Proposal — see PROJECT.md's Fairness First redesign. Only the
+// "Next up" card (label === "Next up") ever gets `matchup.fairness` acted
+// on here: a collapsible "Why these players?" breakdown (per-player wait
+// time + games played, plus the existing match-quality factors this
+// matchup's pairing already considered) and an "Approve Next Match" button
+// (onApprove — deploys THIS matchup to the court the caller determined is
+// next available; omitted/no-op if no court is free yet). This operates
+// entirely on the matchup the fairness engine already built — Regenerate
+// (onToggleLock's sibling regenerateMatchups, wired one level up in
+// ScorerView) and Cancel (onCancel, already existing on every card) are
+// reused as-is, not reimplemented here.
 export default function NextMatchupCard({
   matchup,
   players,
@@ -22,11 +34,13 @@ export default function NextMatchupCard({
   isNext,
   onSetNextMatchup,
   isLatecomerPriority,
+  onApprove,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [subbingId, setSubbingId] = useState(null);
   const [subChoice, setSubChoice] = useState(null);
+  const [showWhy, setShowWhy] = useState(false);
 
   const allIds = [...matchup.teamA, ...matchup.teamB];
 
@@ -190,6 +204,7 @@ export default function NextMatchupCard({
         </div>
       ) : (
         <div>
+          {label === "Next up" && <span style={styles.dialogLabel}>NEXT MATCH PROPOSAL</span>}
           <div style={styles.matchupTeams}>
             <div style={styles.matchupTeam}>
               {matchup.teamA.map((id, i) => (
@@ -219,7 +234,22 @@ export default function NextMatchupCard({
               ))}
             </div>
           </div>
+
+          {label === "Next up" && matchup.fairness && (
+            <FairnessProposalPanel matchup={matchup} players={players} showWhy={showWhy} setShowWhy={setShowWhy} />
+          )}
+
           <div style={styles.courtActionsRow}>
+            {label === "Next up" && onApprove && (
+              <button
+                style={styles.approveMatchBtn}
+                onClick={onApprove}
+                title="Deploy this exact matchup to the next available court"
+              >
+                <Check size={13} strokeWidth={2.5} />
+                Approve Next Match
+              </button>
+            )}
             <button style={styles.fixTeamsBtn} onClick={startEdit}>
               <Shuffle size={12} strokeWidth={2.5} />
               Fix teams
@@ -229,4 +259,100 @@ export default function NextMatchupCard({
       )}
     </div>
   );
+}
+
+// Next Match Proposal's "Why these players?" breakdown — organizer-facing
+// only (ScorerView), never shown on the read-only QueueList views players
+// or the TV Board see. Purely presentational: reads already-existing
+// player fields (games, checkedInAt/lastMatchEndAt, partnerCounts/
+// recentPartnerIds, opponentCounts/recentOpponentIds, lastResult) and the
+// matchup.fairness metadata AdaptiveSkillRotationEngine already attaches
+// (see its describeFairness) — computes nothing the engine doesn't already
+// know, reimplements no matchmaking logic.
+function FairnessProposalPanel({ matchup, players, showWhy, setShowWhy }) {
+  const allIds = [...matchup.teamA, ...matchup.teamB];
+  const now = Date.now();
+  const waitMinutesFor = (id) => {
+    const p = players[id];
+    const since = p?.lastMatchEndAt ?? p?.checkedInAt ?? now;
+    return Math.round((now - since) / 60000);
+  };
+
+  return (
+    <div style={styles.fairnessProposal}>
+      <div style={styles.fairnessNote(matchup.fairness.usedLookahead || matchup.fairness.guardRelaxed)}>
+        {matchup.fairness.reason}
+      </div>
+      <button style={styles.fairnessToggle} onClick={() => setShowWhy((v) => !v)}>
+        {showWhy ? <ChevronDown size={13} strokeWidth={2.5} /> : <ChevronRight size={13} strokeWidth={2.5} />}
+        Why these players?
+      </button>
+      {showWhy && (
+        <div style={styles.fairnessBreakdownGrid}>
+          <div style={styles.fairnessBreakdownCol}>
+            <div style={styles.fairnessBreakdownColTitle}>Queue priority</div>
+            {allIds.map((id) => (
+              <div key={id} style={styles.fairnessBreakdownRow}>
+                {players[id]?.name} — waited {waitMinutesFor(id)} min
+              </div>
+            ))}
+          </div>
+          <div style={styles.fairnessBreakdownCol}>
+            <div style={styles.fairnessBreakdownColTitle}>Games played</div>
+            {allIds.map((id) => (
+              <div key={id} style={styles.fairnessBreakdownRow}>
+                {players[id]?.name} — {players[id]?.games || 0}
+              </div>
+            ))}
+          </div>
+          <div style={styles.fairnessBreakdownCol}>
+            <div style={styles.fairnessBreakdownColTitle}>Match quality</div>
+            <ul style={styles.fairnessQualityList}>
+              {describeMatchQuality(matchup, players).map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Qualitative match-quality summary — reads only already-existing player
+// fields (partner/opponent recency, lastResult); never recomputes or
+// second-guesses the engine's own scoring.
+function describeMatchQuality(matchup, players) {
+  const [a1, a2] = matchup.teamA;
+  const [b1, b2] = matchup.teamB;
+  const lines = [];
+
+  const skill = players[a1]?.skill || players[b1]?.skill;
+  lines.push(skill ? `Skill balance: both teams are ${skill} division` : "Skill balance: same-division matchup");
+
+  const partnerRepeat =
+    (players[a1]?.recentPartnerIds || []).includes(a2) || (players[b1]?.recentPartnerIds || []).includes(b2);
+  lines.push(
+    partnerRepeat
+      ? "Partner diversity: a recent-partner repeat could not be fully avoided this round"
+      : "Partner diversity: no recent-partner repeats on either team"
+  );
+
+  const oppRepeat = [a1, a2].some(
+    (x) => (players[x]?.recentOpponentIds || []).includes(b1) || (players[x]?.recentOpponentIds || []).includes(b2)
+  );
+  lines.push(
+    oppRepeat
+      ? "Opponent diversity: a recent-opponent repeat could not be fully avoided this round"
+      : "Opponent diversity: no recent-opponent repeats between the two teams"
+  );
+
+  const results = [a1, a2, b1, b2].map((id) => players[id]?.lastResult);
+  if (results.every((r) => r && r === results[0])) {
+    lines.push(`Winner/loser structure: all 4 players are coming off a ${results[0]}`);
+  } else if (results.some((r) => r)) {
+    lines.push("Winner/loser structure: not applicable this round (mixed results)");
+  }
+
+  return lines;
 }

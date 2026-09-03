@@ -11,60 +11,97 @@ import { shuffle, uid } from "../lib/random.js";
 // when the two preferences conflict.
 export const WINNER_MATCH_BONUS = 30;
 
-// Cross-division fairness redesign — see PROJECT.md/FEATURES.md. Adaptive
-// Skill Rotation used to build each division's matchups independently and
-// simply concatenate Beginner-then-Intermediate before Smart Queue
-// Management's queue-depth cap sliced the result — meaning Intermediate
-// matchups were silently truncated away entirely whenever the Beginner
-// division alone could fill the cap, every single round, with no fairness
-// signal ever weighing in (confirmed by simulation: total starvation of
-// the smaller division, even at an even 16/16 split). The fix: score every
-// candidate matchup from BOTH divisions on one shared scale, merge, sort,
-// and only THEN let the existing cap slice the top N — see generateMatchups
-// below.
-//
-// Games-played imbalance redesign — see PROJECT.md/FEATURES.md. The
-// original fix above (a single flat additive score: partner + opponent +
-// winner + a small waiting/games bonus) stopped total division starvation,
-// but real Open Play sessions still showed players who checked in
-// simultaneously drifting to large games-played gaps (e.g. 8 vs 2). Root
-// cause, confirmed by simulation: team FORMATION (BalancedRotationEngine's
-// own buildTeams/scorePartner) has zero awareness of games played — it only
-// ever considers partner recency — and the small additive games/wait bonus
-// this class layered on top was numerically swamped by scorePartner/
-// scoreOpponents's much larger range (roughly -400 to +200) every round,
-// so a modest partner/opponent advantage could reliably outvote a real
-// games-played disadvantage. Increasing the bonus weight only plateaued
-// (a tuning sweep 0-10 showed diminishing/reversing returns past ~4-5) —
-// this was a ranking-algorithm problem, not a weight problem.
-//
-// Fix: generateMatchups below now ranks candidates by an explicit,
-// lexicographic (tiered) tuple instead of one blended number:
-//   1. Lowest average games played across the matchup's 4 players
-//   2. Lowest maximum games played among those 4 (guards against an
-//      already-over-served player "riding along" with a needy partner —
-//      a matchup only wins tier 1 on AVERAGE if even its most-played
-//      member isn't the outlier propping that average up)
-//   3. Existing matchup quality score — partner diversity + opponent
-//      diversity + Winner-vs-Winner (qualityScoreFor below) — completely
-//      unchanged inputs, just no longer summed with games/wait
-//   4. Waiting bonus (waitingBonusFor below) as the final tiebreak
-// A simulation comparison (12 Beginner/10 Intermediate, 3 courts, 20-40
-// seeded trials per option, ~3h and ~15h session lengths) validated this
-// against a flat "lowest MINIMUM games" ranking and against the original
-// flat additive formula before this was adopted — see TESTING.md for the
-// full comparison tables. Team formation, partner/opponent scoring, and
-// Winner-vs-Winner are completely untouched by this — only the PRIORITY
-// ORDER candidates are considered in changes.
-//
-// WAIT_BONUS_WEIGHT — points per minute a matchup's 4 players are waiting
-// above/below the CURRENT overall waiting-pool average (see
-// waitingBonusFor). Relative to the pool average (not an absolute
-// constant) so it self-scales as a session runs longer. Now used only as
-// tier 4 (the final tiebreak among candidates already tied on games
-// played and quality) rather than blended additively with everything
-// else.
+// LEGACY — kept only for scoreBreakdownFor/waitingBonusFor, the dev-only
+// inspection helpers scripts/simulate-adaptive-fairness.mjs prints (never
+// called from generateMatchups or any production path — see the Fairness
+// Selection Redesign comment below for what actually decides matchmaking
+// now). Points per minute a matchup's 4 players are waiting above/below the
+// pool average.
 export const WAIT_BONUS_WEIGHT = 2;
+
+// ---------------------------------------------------------------------
+// FAIRNESS SELECTION REDESIGN (see PROJECT.md/FEATURES.md — "Fairness
+// First, Competition Second"). Real ~28-player Open Play sessions showed
+// players who had JUST finished a match getting selected for the next one
+// ahead of players who had been waiting far longer — root-caused (see the
+// investigation report) to two things:
+//   1. generateMatchups ranked candidate matchups by average games-played
+//      FIRST, waiting time only as the last tiebreak — so a fresher,
+//      lower-games player could always outrank a much-longer-waiting one.
+//   2. Team FORMATION itself (BalancedRotationEngine.scorePartner) has
+//      zero awareness of waiting time at all, so a long-waiting player
+//      could be left out of a division's candidate pool entirely, before
+//      any tiebreak ever ran.
+//
+// Fix — a two-stage pipeline, Stage 1 decides WHO plays, Stage 2 (entirely
+// unchanged, reused as-is) decides WHO PARTNERS/FACES WHOM among just those
+// players:
+//
+//   STAGE 1 — SELECTION (selectFairnessGroups below). Builds a single
+//   "waiting stack" per division, ordered by:
+//     1. Longest effective wait (checkedInAt/lastMatchEndAt), descending
+//     2. Fewest games played, ascending
+//     3. A stable tertiary tiebreak (earlier of the two timestamps first)
+//   Walks the stack front-to-back in groups of 4, protecting the very
+//   front of the stack (the single longest-waiting eligible player is
+//   NEVER skipped) while allowing a small, explicit BOUNDED LOOKAHEAD
+//   (LOOKAHEAD_MAX_UNITS below) to swap in a slightly-further-back player
+//   only when needed — see selectQuartetFromWindow's own comment.
+//
+//   HARD RECENT-PLAY REST GUARD — a player who just finished a match
+//   (waited under REST_GUARD_FRESH_MINUTES) must NEVER be selected ahead
+//   of an eligible alternative who has waited at least REST_GUARD_GAP_MINUTES
+//   longer, as long as such an alternative exists within the bounded
+//   lookahead window. This is a hard filter on which candidate quartets
+//   Stage 1 will even consider — not a score/weight Stage 2's quality
+//   optimization could out-bid. It only relaxes (selects the fresh player
+//   anyway) when no guard-compliant quartet exists in the window at all
+//   (e.g. a very small division), exactly matching "fairness first,
+//   competition second": fairness constraints are relaxed only when there
+//   is truly no fair alternative, never for a better skill/quality score.
+//
+//   STAGE 2 — PAIRING (generateDivisionMatchups below, unchanged). Once
+//   Stage 1 hands over a fixed set of exactly 4 players, team formation
+//   (BalancedRotationEngine.buildTeams — partner-recency, Partner
+//   Requests) and matchup quality (buildMatchupsFromTeams/scoreMatchup —
+//   opponent-recency, Winner-vs-Winner) run EXACTLY as they always have,
+//   just scoped to that one group of 4 instead of the whole division pool.
+//   Nothing in BalancedRotationEngine, scorePartner, scoreOpponents, or the
+//   Winner-vs-Winner bonus is modified — Stage 2 simply can no longer reach
+//   past the players Stage 1 already fairness-selected to find a better
+//   score, which is the whole point: Winner-vs-Winner and partner/opponent
+//   diversity remain PAIRING preferences, never a queue-selection priority.
+//
+// Cross-division fairness redesign (superseded by the above for RANKING —
+// see generateMatchups) still applies structurally: Beginners only ever
+// play Beginners, Intermediates only ever play Intermediates. Games-played
+// imbalance redesign's insight (team formation has no games-awareness) is
+// what Stage 1 now directly fixes, rather than working around with a
+// bigger additive bonus.
+// ---------------------------------------------------------------------
+
+// A player who has waited less than this many minutes since their last
+// match (or check-in, if they haven't played yet) counts as "just
+// finished" / fresh for the rest guard below.
+export const REST_GUARD_FRESH_MINUTES = 5;
+
+// The rest guard triggers when a fresh player (see above) would be
+// selected while an eligible alternative, still within the bounded
+// lookahead window, has waited at least this many minutes LONGER. Matches
+// the investigation's own example (a player who finished 2 minutes ago
+// must not be chosen over players waiting 11-14 minutes — an 9-12 minute
+// gap, comfortably over this threshold).
+export const REST_GUARD_GAP_MINUTES = 8;
+
+// Bounded stack lookahead — see selectQuartetFromWindow. At most this many
+// EXTRA waiting units (a unit is one player, or one mutually-fixed-partner
+// pair moving together) beyond the front-of-stack unit are ever considered
+// when assembling one group of 4. This is a hard cap, not a suggestion:
+// Stage 1 never scans deeper into the stack than
+// 1 (front) + LOOKAHEAD_MAX_UNITS units looking for a valid combination,
+// so the maximum a player can ever be "reached past" is bounded and
+// documented, not unlimited search for a "better" matchup.
+export const LOOKAHEAD_MAX_UNITS = 6;
 
 // Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Beginners only ever
 // play Beginners, Intermediates only ever play Intermediates — this engine
@@ -92,18 +129,18 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   }
 
   // Each division still generates its own candidate matchups completely
-  // independently, exactly as before (generateDivisionMatchups is
-  // unchanged) — Beginners only ever pair with Beginners, Intermediates
-  // only ever with Intermediates. What changes is what happens to the two
-  // resulting lists: instead of concatenating them (Beginner-first) and
-  // letting the caller's queue-depth cap truncate whatever's left over,
-  // every candidate matchup from BOTH divisions is ranked on one shared,
-  // lexicographic (tiered) scale and merged into a single list, best-first
-  // — see the games-played imbalance redesign comment above for the tuple.
-  // The cap itself still lives entirely in the caller (refreshNextMatchups's
+  // independently — Beginners only ever pair with Beginners, Intermediates
+  // only ever with Intermediates (see generateDivisionMatchups, which now
+  // runs Stage 1 fairness selection before Stage 2 pairing). What changes
+  // is how the two resulting lists are merged: every matchup from BOTH
+  // divisions is ranked on one shared scale and merged into a single list,
+  // best-first — see the Fairness Selection Redesign comment above for why
+  // waiting time is now the PRIMARY ranking key (previously average games
+  // played was primary and waiting was only the last tiebreak). The cap
+  // itself still lives entirely in the caller (refreshNextMatchups's
   // `.slice(0, room)`, lib/utils.js) — unchanged — it now just slices the
-  // top of this ranked list instead of a division-ordered or single-score
-  // one.
+  // top of this ranked list instead of a division-ordered or
+  // games-first-ranked one.
   generateMatchups(context) {
     const { waitingIds, players, existingMatchups } = context;
     const reserved = new Set((existingMatchups || []).flatMap((m) => [...m.teamA, ...m.teamB]));
@@ -121,49 +158,213 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players);
     const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players);
 
-    // pool-wide baseline computed once per call, reused for every
-    // candidate's tier-4 waiting tiebreak — see waitingBonusFor below
-    const overallAvgWaitMinutes = this.avgWaitMinutes(pool, players);
-
-    const ranked = [...beginnerMatchups, ...intermediateMatchups].map((m) => {
+    const merged = [...beginnerMatchups, ...intermediateMatchups].map((m) => {
       const ids = [...m.teamA, ...m.teamB];
       return {
         m,
+        representativeWait: this.avgWaitMinutes(ids, players),
         avgGames: this.avgGames(ids, players),
-        maxGames: this.maxGames(ids, players),
         quality: this.qualityScoreFor(m, players),
-        waitBonus: this.waitingBonusFor(ids, players, overallAvgWaitMinutes),
       };
     });
 
     // shuffle before the sort so an exact tie on every tier doesn't
     // systematically favor whichever division happened to be concatenated
-    // first (Array.prototype.sort is not guaranteed stable across all
-    // engines/inputs for this purpose, and even where it is, "always
-    // Beginner on a tie" is exactly the bias this redesign exists to
-    // remove)
-    shuffle(ranked);
-    ranked.sort(
+    // first
+    shuffle(merged);
+    merged.sort(
       (a, b) =>
-        a.avgGames - b.avgGames || // 1. lowest average games played
-        a.maxGames - b.maxGames || // 2. lowest max games played (guards against an over-served rider)
-        b.quality - a.quality || // 3. existing matchup quality (partner + opponent + Winner-vs-Winner)
-        b.waitBonus - a.waitBonus // 4. waiting bonus, final tiebreak
+        b.representativeWait - a.representativeWait || // 1. longest-waiting group first (Stage 1's own priority)
+        a.avgGames - b.avgGames || // 2. fewest games played, tiebreak
+        b.quality - a.quality // 3. existing matchup quality (partner + opponent + Winner-vs-Winner), final tiebreak
     );
 
-    return ranked.map(({ m }) => m);
+    return merged.map(({ m }) => m);
   }
 
-  // One division (Beginner or Intermediate) at a time. `true` for
-  // allowSameSkillFallback mirrors this class's original behavior — the
-  // pool handed in is already single-skill (one division), so
-  // BalancedRotationEngine's own mixed-pairing loop never finds a partner
-  // in the OTHER skill bucket and always needs its same-skill leftover path
-  // (pairLeftovers) to pair anyone at all. Nothing about that changes here.
+  // One division (Beginner or Intermediate) at a time.
+  //
+  // Stage 1: selectFairnessGroups partitions `pool` into ordered groups of
+  // exactly 4 fairness-selected players (see its own comment) plus a
+  // leftover remainder that simply isn't matched this round (same
+  // "leftover stays available for the next refresh" precedent every other
+  // engine in this app already follows for an odd/insufficient pool).
+  //
+  // Stage 2: for each group, team formation (buildTeams) and matchup
+  // quality (buildMatchupsFromTeams) run EXACTLY as before this redesign —
+  // completely unchanged code, just scoped to 4 players at a time instead
+  // of the whole division. `true` for allowSameSkillFallback mirrors this
+  // class's original behavior — a single division's pool is always
+  // single-skill, so BalancedRotationEngine's own mixed-pairing loop never
+  // finds a partner in the OTHER skill bucket and always needs its
+  // same-skill leftover path (pairLeftovers) to pair anyone at all.
   generateDivisionMatchups(pool, players) {
-    const teams = this.divisionEngine.buildTeams(pool, players, true);
-    const rawMatchups = this.buildMatchupsFromTeams(teams, players);
-    return rawMatchups.map(({ teamA, teamB }) => ({ id: uid(), teamA, teamB }));
+    const { groups, groupNotes } = this.selectFairnessGroups(pool, players);
+
+    const matchups = [];
+    groups.forEach((quartet, i) => {
+      const teams = this.divisionEngine.buildTeams(quartet, players, true);
+      const rawMatchups = this.buildMatchupsFromTeams(teams, players);
+      // exactly 4 players in => exactly 2 teams => exactly 1 full matchup,
+      // every time (buildTeams never leaves a same-skill-of-4 pool
+      // unpaired) — rawMatchups.length === 1 is guaranteed here, but this
+      // stays a .forEach rather than an assumption so a future
+      // buildTeams edge case degrades to "no matchup this group" instead
+      // of throwing.
+      rawMatchups.forEach(({ teamA, teamB }) => {
+        matchups.push({ id: uid(), teamA, teamB, fairness: this.describeFairness(quartet, players, groupNotes[i]) });
+      });
+    });
+
+    return matchups;
+  }
+
+  // Stage 1 — see the Fairness Selection Redesign comment above the class.
+  // Builds one priority "stack" for the whole division pool, then walks it
+  // front-to-back assembling groups of exactly 4 fairness-selected
+  // players. Mutually-fixed Partner Requests (see
+  // BalancedRotationEngine.extractFixedPartnerTeams, reused read-only here
+  // — never modified) are treated as a single 2-player "unit" that always
+  // moves through the stack together, so a partner request can never be
+  // split across two different groups by the fairness ordering.
+  selectFairnessGroups(pool, players) {
+    const { teams: fixedPairs, remaining: soloIds } = this.divisionEngine.extractFixedPartnerTeams(pool, players);
+    const now = Date.now();
+
+    const units = [
+      ...soloIds.map((id) => ({ ids: [id] })),
+      ...fixedPairs.map(([a, b]) => ({ ids: [a, b] })),
+    ].map((unit) => ({
+      ...unit,
+      // a unit's priority is driven by its LONGEST-waiting member (so a
+      // partner request never dilutes a long-waiting player's own
+      // priority) and its FEWEST games (so the unit isn't penalized by a
+      // fresher partner either)
+      wait: Math.max(...unit.ids.map((id) => this.waitMinutesFor(id, players, now))),
+      games: Math.min(...unit.ids.map((id) => players[id]?.games || 0)),
+      earliestSince: Math.min(...unit.ids.map((id) => this.sinceStamp(id, players))),
+    }));
+
+    units.sort(
+      (a, b) => b.wait - a.wait || a.games - b.games || a.earliestSince - b.earliestSince
+    );
+
+    const groups = [];
+    const groupNotes = [];
+    let stack = units;
+
+    while (stack.reduce((n, u) => n + u.ids.length, 0) >= 4) {
+      const window = stack.slice(0, 1 + LOOKAHEAD_MAX_UNITS);
+      const { quartetUnitIndexes, usedLookahead, guardRelaxed } = this.selectQuartetFromWindow(window, players, now);
+      if (!quartetUnitIndexes) break; // window can't assemble a full 4 (e.g. a single leftover unit of 2) — stop, leave it waiting
+      const chosenUnits = quartetUnitIndexes.map((i) => window[i]);
+      const quartet = chosenUnits.flatMap((u) => u.ids);
+      groups.push(quartet);
+      groupNotes.push({ usedLookahead, guardRelaxed });
+      const chosenSet = new Set(quartetUnitIndexes.map((i) => window[i]));
+      stack = stack.filter((u) => !chosenSet.has(u));
+    }
+
+    return { groups, groupNotes, leftover: stack.flatMap((u) => u.ids) };
+  }
+
+  // Assembles one valid group of exactly 4 ids from `window` (an ordered
+  // slice of units, front = highest priority). The front-most unit is
+  // mandatory — "protect the queue front" — everything else is chosen by
+  // a small brute-force search over the REMAINING units in the window
+  // (bounded to at most LOOKAHEAD_MAX_UNITS of them, never the whole
+  // stack) for the combination that both (a) totals exactly 4 ids and
+  // (b) satisfies the hard rest guard (see REST_GUARD_* above) against
+  // every unit the window would otherwise exclude. Ties are broken toward
+  // whichever combination sits closest to the front (lowest unit-index
+  // sum) — i.e. the strict front-of-stack groups are used whenever they
+  // don't trip the guard, exactly "protect the queue front while allowing
+  // limited flexibility."
+  //
+  // Graceful relaxation: if NO combination in the window satisfies the
+  // guard (only possible in a very small/thin division), the guard is
+  // dropped and the strict front-of-window combination is used instead —
+  // "the guard should gracefully relax only when there are not enough
+  // eligible alternatives," never the other way around.
+  selectQuartetFromWindow(window, players, now) {
+    if (window.length === 0) return { quartetUnitIndexes: null };
+    const totalIds = window.reduce((n, u) => n + u.ids.length, 0);
+    if (totalIds < 4) return { quartetUnitIndexes: null };
+
+    const frontIndex = 0;
+    const restIndexes = window.map((_, i) => i).filter((i) => i !== frontIndex);
+    const frontSize = window[frontIndex].ids.length;
+
+    const candidates = [];
+    // bounded brute force: restIndexes.length <= LOOKAHEAD_MAX_UNITS, so
+    // 2^restIndexes.length subsets is at most 2^6 = 64 — small and
+    // explicitly capped by LOOKAHEAD_MAX_UNITS
+    const subsetCount = 1 << restIndexes.length;
+    for (let mask = 0; mask < subsetCount; mask++) {
+      const chosenRest = restIndexes.filter((_, bit) => mask & (1 << bit));
+      const size = frontSize + chosenRest.reduce((n, i) => n + window[i].ids.length, 0);
+      if (size !== 4) continue;
+      const quartetUnitIndexes = [frontIndex, ...chosenRest];
+      candidates.push({ quartetUnitIndexes, indexSum: quartetUnitIndexes.reduce((a, b) => a + b, 0) });
+    }
+
+    if (candidates.length === 0) return { quartetUnitIndexes: null };
+
+    const guardCompliant = candidates.filter((c) => this.satisfiesRestGuard(c.quartetUnitIndexes, window, players, now));
+    const pool = guardCompliant.length > 0 ? guardCompliant : candidates;
+    pool.sort((a, b) => a.indexSum - b.indexSum);
+    const chosen = pool[0];
+    const strictFront = window.length >= 4 ? [0, 1, 2, 3].every((i) => chosen.quartetUnitIndexes.includes(i)) : false;
+    return {
+      quartetUnitIndexes: chosen.quartetUnitIndexes,
+      usedLookahead: !strictFront,
+      guardRelaxed: guardCompliant.length === 0,
+    };
+  }
+
+  // Hard rest guard check for one candidate quartet (given as unit indexes
+  // into `window`): no included unit that is "fresh" (waited less than
+  // REST_GUARD_FRESH_MINUTES) may be selected while an EXCLUDED unit still
+  // inside the same bounded window has waited at least REST_GUARD_GAP_MINUTES
+  // longer. This is checked per-unit (not per-player) so a fixed-partner
+  // pair is judged by its own (longest-waiting-member) priority, same as
+  // everywhere else in Stage 1.
+  satisfiesRestGuard(quartetUnitIndexes, window, players, now) {
+    const chosenSet = new Set(quartetUnitIndexes);
+    for (const i of quartetUnitIndexes) {
+      const unit = window[i];
+      if (unit.wait >= REST_GUARD_FRESH_MINUTES) continue; // not "fresh" — guard doesn't apply to this unit
+      for (let j = 0; j < window.length; j++) {
+        if (chosenSet.has(j)) continue;
+        if (window[j].wait >= unit.wait + REST_GUARD_GAP_MINUTES) return false;
+      }
+    }
+    return true;
+  }
+
+  // Next Match Proposal explanation data — see docs/PROJECT.md's "Next
+  // Match Proposal" UI. Purely descriptive (never affects matchmaking
+  // itself); attached to each returned matchup so the UI can show the
+  // organizer WHY these 4 players were selected, and surface a Fairness
+  // Warning whenever the bounded lookahead had to reach past the strict
+  // front of the queue, or the rest guard had to relax.
+  describeFairness(quartet, players, note) {
+    const now = Date.now();
+    const waits = quartet.map((id) => this.waitMinutesFor(id, players, now));
+    const games = quartet.map((id) => players[id]?.games || 0);
+    let reason = "Fairness priority: these are the longest-waiting eligible players.";
+    if (note?.guardRelaxed) {
+      reason = "Fairness note: the rest guard was relaxed because there weren't enough eligible alternatives waiting substantially longer.";
+    } else if (note?.usedLookahead) {
+      reason = "Fairness note: limited queue lookahead was used because the first four waiting players could not form a valid matchup.";
+    }
+    return {
+      waitMinutesRange: [Math.round(Math.min(...waits)), Math.round(Math.max(...waits))],
+      gamesRange: [Math.min(...games), Math.max(...games)],
+      usedLookahead: Boolean(note?.usedLookahead),
+      guardRelaxed: Boolean(note?.guardRelaxed),
+      reason,
+    };
   }
 
   // Winner vs Winner / Loser vs Loser — a PREFERENCE layered on top of
@@ -172,14 +373,11 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // a scoring bonus, not a filter: whenever there aren't enough
   // same-last-result players available to pair up, the bonus just doesn't
   // apply to any candidate pairing and the existing
-  // fairness/opponent-avoidance scoring alone decides who faces whom —
-  // there's no separate "fall back to the plain engine" code path to
-  // maintain, because a soft-scored preference that can't be satisfied
-  // simply contributes nothing to any candidate's score. bestOfAttempts
-  // still always returns the best-available FULL set of matchups from
-  // whatever pool it's given, exactly like BalancedRotationEngine itself —
-  // that's what guarantees a court is never left empty because of this
-  // preference.
+  // fairness/opponent-avoidance scoring alone decides who faces whom.
+  // Scoped to a single Stage-1-selected group of 4 since this redesign —
+  // it can rearrange which 2 of THOSE 4 players are on which team, but can
+  // never reach outside the group to pull in a different, fresher player
+  // for a better score (see the class header comment).
   buildMatchupsFromTeams(teams, players) {
     return this.bestOfAttempts(
       () => this.buildMatchupsOnce(teams, players),
@@ -231,9 +429,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // or the two differ. WINNER_MATCH_BONUS is deliberately smaller than the
   // repeat-opponent scale, so priority 1 always outranks priority 2 when
   // they conflict; "remaining fairness heuristics" (priority 3 — waiting
-  // time, games played, teammate avoidance) all live one level up, in the
-  // team-formation step (buildTeams/scorePartner), completely untouched by
-  // this method.
+  // time, games played) now live one level up, in Stage 1 (selectFairnessGroups),
+  // completely untouched by this method.
   scoreMatchup(teamX, teamY, players) {
     return this.divisionEngine.scoreOpponents(teamX, teamY, players) + this.winnerBonusFor(teamX, teamY, players);
   }
@@ -258,55 +455,63 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     return bonus;
   }
 
+  // Minutes waited right now for a single player id — same fallback
+  // WaitingTimer.jsx already displays with (lastMatchEndAt once a player
+  // has played, else checkedInAt). Explicit null/undefined checks (not
+  // `||`) so a literal 0 timestamp is never mistaken for "not set" — real
+  // epoch timestamps are never exactly 0, but this keeps the fallback
+  // correct rather than relying on that always being true.
+  waitMinutesFor(id, players, now = Date.now()) {
+    const p = players[id];
+    const since = p?.lastMatchEndAt ?? p?.checkedInAt ?? now;
+    return (now - since) / 60000;
+  }
+
+  // Raw timestamp (not minutes) backing waitMinutesFor — used only as
+  // Stage 1's stable tertiary tiebreak (earlier timestamp = been in the
+  // pool/off-court longer, resolves an exact wait-minute tie consistently
+  // rather than by insertion order).
+  sinceStamp(id, players) {
+    const p = players[id];
+    return p?.lastMatchEndAt ?? p?.checkedInAt ?? 0;
+  }
+
   // Average minutes waited across a set of player ids, right now. Reuses
-  // the exact same fields/fallback WaitingTimer.jsx already displays with
-  // (lastMatchEndAt once a player has played, else checkedInAt) — no new
-  // player field, no new persisted state.
+  // the exact same fields/fallback WaitingTimer.jsx already displays with.
   avgWaitMinutes(ids, players) {
     if (ids.length === 0) return 0;
     const now = Date.now();
-    const total = ids.reduce((sum, id) => {
-      const since = players[id]?.lastMatchEndAt || players[id]?.checkedInAt || now;
-      return sum + (now - since) / 60000;
-    }, 0);
-    return total / ids.length;
+    return ids.reduce((sum, id) => sum + this.waitMinutesFor(id, players, now), 0) / ids.length;
   }
 
-  // Average games played across a set of player ids — tier 1 of the
-  // ranking tuple in generateMatchups above.
+  // Average games played across a set of player ids — dev-tool/legacy use
+  // (scripts/simulate-adaptive-fairness.mjs); Stage 1's own games-played
+  // tiebreak is computed directly in selectFairnessGroups above.
   avgGames(ids, players) {
     if (ids.length === 0) return 0;
     return ids.reduce((sum, id) => sum + (players[id]?.games || 0), 0) / ids.length;
   }
 
-  // Max games played across a set of player ids — tier 2 of the ranking
-  // tuple. Prevents a matchup from winning tier 1 purely on a low AVERAGE
-  // that's actually propped up by pairing one very-underplayed player with
-  // one already-heavily-played "rider" — a matchup only wins tier 2 too if
-  // even its most-played member isn't an outlier.
+  // Max games played across a set of player ids — dev-tool/legacy use, see
+  // avgGames above.
   maxGames(ids, players) {
     if (ids.length === 0) return 0;
     return Math.max(...ids.map((id) => players[id]?.games || 0));
   }
 
-  // Player-based waiting bonus — deliberately computed from the 4 players
-  // actually IN this candidate matchup, not a division-wide average, so a
-  // long-waiting player rises in priority even against same-division peers
-  // who just played, and a division that's been structurally excluded
-  // keeps climbing every round its players don't get a fresh
-  // lastMatchEndAt, until it outweighs the plain scorePartner/
-  // scoreOpponents gap that was starving it (see WAIT_BONUS_WEIGHT above).
+  // LEGACY — no longer called by generateMatchups (Stage 1 now decides
+  // waiting priority directly), kept only for
+  // scripts/simulate-adaptive-fairness.mjs's dev-only breakdown tool.
   waitingBonusFor(matchupPlayerIds, players, overallAvgWaitMinutes) {
     return WAIT_BONUS_WEIGHT * (this.avgWaitMinutes(matchupPlayerIds, players) - overallAvgWaitMinutes);
   }
 
-  // Tier 3 of the ranking tuple — "existing matchup quality": composes
-  // BalancedRotationEngine's own scoreFullMatchup (scorePartner x2 +
-  // scoreOpponents, i.e. partner diversity + opponent diversity) with this
-  // class's own winnerBonusFor (Winner-vs-Winner). No scoring logic is
-  // reimplemented here; this only sums pieces that already exist
-  // elsewhere. Deliberately excludes games/waiting — those are tiers 1/2/4
-  // of the tuple in generateMatchups, not blended into this number.
+  // "Existing matchup quality" — composes BalancedRotationEngine's own
+  // scoreFullMatchup (scorePartner x2 + scoreOpponents, i.e. partner
+  // diversity + opponent diversity) with this class's own winnerBonusFor
+  // (Winner-vs-Winner). No scoring logic is reimplemented here; this only
+  // sums pieces that already exist elsewhere. Used as generateMatchups'
+  // final cross-division tiebreak, and by the dev-tool breakdown helper.
   qualityScoreFor(matchup, players) {
     return (
       this.divisionEngine.scoreFullMatchup(matchup.teamA, matchup.teamB, players) +
@@ -316,11 +521,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
 
   // Development-only helper — NEVER called from generateMatchups or any
   // production code path; exists purely so a dev-only script/tool can
-  // print a per-matchup ranking breakdown (Avg Games/Max Games/Quality/
-  // Waiting) for inspecting WAIT_BONUS_WEIGHT or the tuple's behavior
-  // against a real or simulated session. Read-only decomposition of the
-  // same numbers generateMatchups' ranking already uses — does not affect
-  // matchmaking.
+  // print a per-matchup breakdown. Read-only decomposition of numbers this
+  // class already computes elsewhere — does not affect matchmaking.
   scoreBreakdownFor(matchup, players, { overallAvgWaitMinutes }) {
     const ids = [...matchup.teamA, ...matchup.teamB];
     const partnerScore =

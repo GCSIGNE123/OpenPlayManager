@@ -1723,6 +1723,95 @@ export const styles = {
     fontWeight: 700,
     cursor: "pointer",
   }),
+  // Next Match Proposal — see PROJECT.md's Fairness First redesign.
+  // Read-only explanation shown under the "Next up" matchup only, so an
+  // organizer can see WHY those 4 players were selected. Neutral styling
+  // by default; a warmer border/left-accent when the bounded lookahead
+  // was used or the rest guard had to relax, so a fairness compromise is
+  // visible rather than hidden.
+  fairnessNote: (compromised) => ({
+    marginTop: 8,
+    marginBottom: 2,
+    padding: "6px 9px",
+    borderRadius: 7,
+    fontSize: 11,
+    lineHeight: 1.4,
+    background: compromised ? "var(--color-warning-bg, rgba(230, 160, 40, 0.12))" : "var(--color-surface-alt, rgba(120,120,120,0.08))",
+    borderLeft: `3px solid ${compromised ? "var(--ball)" : "var(--line)"}`,
+    color: "var(--color-text-faint)",
+  }),
+  // Next Match Proposal — organizer-facing breakdown (ScorerView's "Next
+  // up" NextMatchupCard only). A collapsible "Why these players?" panel:
+  // per-player queue-priority (wait) and games-played, plus the
+  // match-quality factors this matchup's pairing already considered.
+  // Never rendered anywhere read-only players/TV Board can see (that's
+  // QueueList's one-line fairnessNote above, already covered) — this is
+  // the full detail an organizer reviews before approving.
+  fairnessProposal: {
+    marginTop: 10,
+    marginBottom: 10,
+    padding: "10px 12px",
+    borderRadius: 8,
+    background: "var(--color-surface-alt, rgba(120,120,120,0.06))",
+    border: "1px solid var(--line)",
+  },
+  fairnessToggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    background: "none",
+    border: "none",
+    padding: 0,
+    color: "var(--color-text-muted)",
+    fontSize: 11.5,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    textTransform: "uppercase",
+    cursor: "pointer",
+  },
+  fairnessBreakdownGrid: {
+    display: "flex",
+    gap: 18,
+    flexWrap: "wrap",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  fairnessBreakdownCol: {
+    minWidth: 120,
+  },
+  fairnessBreakdownColTitle: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: "var(--color-text-faint)",
+    marginBottom: 4,
+  },
+  fairnessBreakdownRow: {
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+    lineHeight: 1.6,
+  },
+  fairnessQualityList: {
+    margin: "4px 0 0 0",
+    paddingLeft: 16,
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+    lineHeight: 1.6,
+  },
+  approveMatchBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "var(--court)",
+    color: "var(--chalk)",
+    border: "none",
+    borderRadius: 7,
+    padding: "9px 14px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
   matchupTeams: {
     display: "flex",
     alignItems: "center",

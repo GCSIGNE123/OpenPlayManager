@@ -452,6 +452,15 @@ export default function ScorerView({
 
       {nextMatchups.length > 0 && (() => {
         const announcedMatchup = nextMatchups.find((m) => m.id === nextMatchupId);
+        // Next Match Proposal's "Approve Next Match" — deploys the exact
+        // matchup already shown to whichever court fillCourt would pick
+        // for it anyway (same open/automatic/not-reserved check CourtCard
+        // already uses for canFill, see isReserved above). null when no
+        // court is free yet, so the button is simply omitted rather than
+        // approving into nowhere.
+        const nextOpenCourtIndex = state.courts.findIndex(
+          (c) => c.status === "open" && c.assignmentMode !== "manual" && !(reservedCourtNumbers?.has(c.number) ?? false)
+        );
         return (
         <>
           {announcedMatchup && (
@@ -536,6 +545,7 @@ export default function ScorerView({
               isNext={m.id === nextMatchupId}
               onSetNextMatchup={() => onSetNextMatchup(m.id)}
               isLatecomerPriority={m.id === latecomerPriority?.matchupId}
+              onApprove={i === 0 && nextOpenCourtIndex !== -1 ? () => fillCourt(nextOpenCourtIndex) : null}
             />
           ))}
         </>
