@@ -155,6 +155,8 @@ export default function ScorerView({
   reservedCourtNumbers,
   matchmakingPriority,
   queueingStopped,
+  queueingStarted,
+  onStartQueuing,
   onToggleQueueing,
   pendingCourtRemovals,
   nextMatchupId,
@@ -333,11 +335,23 @@ export default function ScorerView({
           <strong>{waitingCount}</strong> players waiting
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* Start Queuing — see PROJECT.md/FEATURES.md. Shown only before
+              the organizer has explicitly started queueing: check-in can
+              continue freely (players keep joining queueIds normally)
+              with zero matchups auto-generated until this one explicit
+              click. Never shown again afterward — a one-way transition,
+              not a toggle like Stop/Resume Queueing below. */}
+          {queueingStarted === false && onStartQueuing && (
+            <button style={styles.primaryBtn} onClick={onStartQueuing} title="Done checking players in — start generating matchups and dispatching courts">
+              <Play size={14} strokeWidth={2.5} />
+              Start Queuing
+            </button>
+          )}
           <button
-            style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt ? styles.btnDisabled : {}) }}
+            style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt || queueingStarted === false ? styles.btnDisabled : {}) }}
             onClick={generateRemainingCourts}
-            disabled={!hasOpenAutomaticCourt}
-            title="Rebuild matchups (ignoring anyone on a Manual court) and fill every open automatic court right away"
+            disabled={!hasOpenAutomaticCourt || queueingStarted === false}
+            title={queueingStarted === false ? "Click Start Queuing first" : "Rebuild matchups (ignoring anyone on a Manual court) and fill every open automatic court right away"}
           >
             <Wand2 size={14} strokeWidth={2.5} />
             Generate remaining courts

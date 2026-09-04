@@ -3,7 +3,7 @@ import { Copy, LogOut, Users, Tv } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
 import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
-import { resolveDatabaseCheckIn } from "./lib/playerDatabase.js";
+import { resolveDatabaseCheckIn, emptyPlayerRecord, savePlayerRecord, fetchPlayer } from "./lib/playerDatabase.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -419,9 +419,16 @@ export default function PickleballOpenPlay() {
       // matchup — existing nextMatchups entries (and everything live) are
       // left completely untouched, and the facilitator can still manually
       // deploy whatever's already queued.
+      //
+      // Start Queuing — see lib/constants.js's defaultState.queueingStarted.
+      // Same "don't generate" outcome as queueingStopped, checked here
+      // too, ahead of it — `=== false` (not `!next.queueingStarted`) so an
+      // older session that never had this field keeps behaving exactly as
+      // it always has.
+      const queueingNotYetStarted = next.queueingStarted === false;
       const withMatchups = {
         ...next,
-        nextMatchups: next.queueingStopped
+        nextMatchups: queueingNotYetStarted || next.queueingStopped
           ? next.nextMatchups || []
           : refreshNextMatchups(
               autoQueueIds,
@@ -967,6 +974,7 @@ export default function PickleballOpenPlay() {
         skillChangeLog: [],
         queueActivityLog: [],
         courtDispatchSettings: { ...defaultState.courtDispatchSettings },
+        queueingStarted: false, // Start Queuing — see lib/constants.js's defaultState.queueingStarted for the full gate design; explicitly set here (not left implicit) so every NEW session begins check-in-only, generating no matchups until the organizer explicitly clicks "Start Queuing"
         pendingTournamentTemplate: templateConfig, // see lib/constants.js/TournamentTemplateService.js — read once by TournamentScheduleView to pre-fill its defaults, never touched again after that
         updatedAt: Date.now(),
         lastActivityAt: Date.now(), // 24-Hour Inactivity Auto-Close — seeded to session creation time, same as sessionStartedAt; first real save() (any meaningful action) advances it from there
@@ -1272,7 +1280,21 @@ export default function PickleballOpenPlay() {
     setTimeout(() => setCheckinMsg(""), 2500);
   };
 
-  const quickAddCheckIn = () => {
+  // Walk-In Players Join the Player Database — see PROJECT.md. A walk-in
+  // checked in here through CheckinView's quick-add form used to get a
+  // throwaway, session-only `uid()` — never written anywhere else, so the
+  // player didn't exist for "Search registered players" next time and had
+  // to be re-entered from scratch. This now follows the EXACT same shape
+  // CreateSessionScreen's own "Create new player" already uses
+  // (emptyPlayerRecord + savePlayerRecord): a real Player Database record
+  // is created first, and its own id — never a second, unrelated one — is
+  // reused as this session's player id, exactly like checkInFromDatabase/
+  // checkInExisting already do for a player found via search. A save
+  // failure doesn't block the walk-in from joining today's session (same
+  // "still added to this session" precedent CreateSessionScreen's own
+  // createAndAddPlayer follows) — it just means this one walk-in won't be
+  // findable in the Player Database next time.
+  const quickAddCheckIn = async () => {
     const name = nameInput.trim();
     if (!name) return;
     // Player Photos & Broadcast Experience — see PROJECT.md. Required for
@@ -1282,13 +1304,24 @@ export default function PickleballOpenPlay() {
     // (CheckinView's onKeyDown) calls this function directly, so the guard
     // needs to live here too.
     if (!photoDataUrl) return;
-    const id = uid();
+    const skill = skillInput === "intermediate" ? "intermediate" : "beginner";
+    const record = emptyPlayerRecord({ firstName: name, displayName: name, photo: photoDataUrl, skill });
+    try {
+      await savePlayerRecord(record);
+    } catch (e) {
+      // Player Database save failed — the walk-in still joins this
+      // session below, using the id already generated for the record
+      // (emptyPlayerRecord's uid() happens locally, before the network
+      // call — never regenerated on failure), same as
+      // CreateSessionScreen's own createAndAddPlayer.
+    }
+    const id = record.id;
     const players = {
       ...state.players,
       [id]: {
         id,
         name,
-        skill: skillInput === "intermediate" ? "intermediate" : "beginner",
+        skill,
         checkedIn: true,
         checkedInAt: Date.now(), // Smart Queue Management — see the Waiting Queue Timer
         paymentStatus: "unpaid", // Player Payment Tracking — see PROJECT.md/FEATURES.md, session-scoped only
@@ -1495,7 +1528,10 @@ export default function PickleballOpenPlay() {
     // courts" explicitly rebuilds nextMatchups from scratch; while queueing
     // is stopped it must not create anything new either, so it falls back
     // to just deploying whatever's already queued onto open courts below.
-    const generated = state.queueingStopped
+    // Start Queuing — same gate save() uses (see lib/constants.js's
+    // defaultState.queueingStarted); before it's explicitly started, this
+    // manual action must not generate anything either.
+    const generated = state.queueingStopped || state.queueingStarted === false
       ? state.nextMatchups || []
       : regenerateNextMatchups(
           queueIds,
@@ -1904,7 +1940,14 @@ export default function PickleballOpenPlay() {
     // Stop Queueing — "Regenerate matchups" explicitly builds NEW matchups
     // from scratch, so it's a no-op while queueing is stopped (see the
     // matching disabled state in ScorerView).
-    if (state.queueingStopped) return;
+    // Start Queuing — same no-op before the organizer has explicitly
+    // started queueing (see lib/constants.js's defaultState.queueingStarted)
+    // — regenerateQueue below computes its own fresh nextMatchups
+    // unconditionally, so this early return is what actually prevents it
+    // from leaking a generated matchup through save()'s own gate (which
+    // only ever PRESERVES whatever nextMatchups it's handed while gated,
+    // rather than clearing it).
+    if (state.queueingStopped || state.queueingStarted === false) return;
     const before = state.nextMatchups || [];
     setRegenerateSnapshot(before);
     save(regenerateQueue(state));
@@ -1917,6 +1960,19 @@ export default function PickleballOpenPlay() {
   // never touched by this flip either way.
   const toggleQueueing = () => {
     save({ ...state, queueingStopped: !state.queueingStopped });
+  };
+
+  // Start Queuing — see lib/constants.js's defaultState.queueingStarted.
+  // A one-way transition: `if (state.queueingStarted)` guards against a
+  // double-click/duplicate event re-triggering anything (there's nothing
+  // to "restart" — the very next save() below just stops being gated,
+  // and refreshNextMatchups runs over queueIds/players exactly as it
+  // always has, generating the FIRST batch of matchups from whoever's
+  // already checked in — no separate "initialize the queue" step, no
+  // rotation-history reset, no touch to any matchmaking engine).
+  const startQueuing = () => {
+    if (state.queueingStarted) return;
+    save({ ...state, queueingStarted: true });
   };
 
   // restores nextMatchups to how it looked right before the last
@@ -2096,10 +2152,25 @@ export default function PickleballOpenPlay() {
   // matchups, both meaningless (and undesired, per spec) for a player who
   // isn't in the queue yet. No toast, no activity log entry — this is
   // roster data being corrected, not an in-session event.
+  // Last Open Play Category — see PROJECT.md. A pre-check-in skill change
+  // is also the organizer correcting/updating this player's remembered
+  // "current" category for NEXT time, not just today's roster — so it's
+  // persisted back to the Player Database's own existing `skill` field
+  // (no second category system introduced) the same best-effort way
+  // quickAddCheckIn's own Player Database save is: this session's roster
+  // is already updated synchronously above regardless of whether the
+  // network write below succeeds. A player with no matching Player
+  // Database record (fetchPlayer returns null — e.g. an older
+  // session-only id) is simply left alone, never fabricated.
   const setPreCheckInSkill = (id, newSkill) => {
     const next = setPreCheckInSkillAction(state, id, newSkill);
     if (next === state) return;
     save(next);
+    fetchPlayer(id)
+      .then((record) => {
+        if (record) return savePlayerRecord({ ...record, skill: newSkill });
+      })
+      .catch(() => {});
   };
 
   // Player Payment Tracking — thin wrapper around the pure setPlayerPayment
@@ -2582,6 +2653,8 @@ export default function PickleballOpenPlay() {
                   matchmakingPriority={state.matchmakingPriority}
                   queueingStopped={state.queueingStopped}
                   onToggleQueueing={toggleQueueing}
+                  queueingStarted={state.queueingStarted}
+                  onStartQueuing={startQueuing}
                   pendingCourtRemovals={state.pendingCourtRemovals || 0}
                   nextMatchupId={state.nextMatchupId}
                   onSetNextMatchup={setNextMatchup}

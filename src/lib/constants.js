@@ -242,6 +242,21 @@ export const defaultState = {
   },
   matchmakingPriority: null, // Session Matchmaking Priority — see MATCHMAKING_PRIORITIES above. null = no explicit priority (existing behavior, unaffected)
   queueingStopped: false, // Stop Queueing — see PROJECT.md/FEATURES.md. While true: save() skips generating any NEW matchups and skips automatic dispatch; existing live matches and existing nextMatchups entries are completely unaffected, and the facilitator can still manually dispatch (Assign match / Fill all open courts) from whatever's already queued. Resume Queueing (flip back to false) restores normal automatic behavior instantly, next save().
+  // Start Queuing — see PROJECT.md/FEATURES.md. A ONE-WAY gate, distinct
+  // from queueingStopped above (which is a reversible mid-session pause):
+  // while `queueingStarted` is explicitly `false`, save()/generateRemainingCourts
+  // never generate any matchup at all — the organizer can freely check
+  // players in (queueIds still grows normally) without any game being
+  // auto-generated, until they explicitly click "Start Queuing" in the
+  // Scorer tab. IMPORTANT: this field is only ever explicitly set to
+  // `false` at session creation going forward (startSession's own
+  // `initial` object) — an already-existing/older session simply never
+  // has this field at all, so `next.queueingStarted === false` (a strict
+  // check, not `!next.queueingStarted`) is what every gate checks, and
+  // `undefined` on an old session correctly behaves as "already started"
+  // (its prior, unchanged, always-auto-generating behavior) rather than
+  // being silently re-gated by a field that didn't exist when it began.
+  queueingStarted: false,
   pendingCourtRemovals: 0, // Dynamic Court Count — see PROJECT.md/FEATURES.md. Incremented by requestRemoveCourt (lib/queueManagement.js) when the organizer removes a court that isn't idle right now; applyPendingCourtRemovals (run every save(), same "reacts on every save" precedent as Smart Court Dispatch) removes the last court and decrements this the moment that specific court is actually open, never losing a live match and never dropping below 1 court total.
   updatedAt: 0,
   lastActivityAt: 0, // 24-Hour Inactivity Auto-Close — see SESSION_INACTIVITY_AGE_MS/lib/openPlaySessionLifecycle.js. Set once at session creation (= sessionStartedAt) and refreshed on every MEANINGFUL save() (check-in/out, queue/matchup changes, dispatch, scoring, match completion, ...) — deliberately NOT refreshed by the 15s held-player-reminder timer tick (see PickleballOpenPlay.jsx's save(next, { isActivity }) opt-out), so that timer alone can never keep an inactive session alive. Distinct from `updatedAt`, which DOES advance on every save() including that timer tick — `updatedAt` remains "last write of any kind" (used elsewhere for e.g. Discover/Player staleness display), `lastActivityAt` is specifically "last real player/organizer movement."
