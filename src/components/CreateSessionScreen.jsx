@@ -2,13 +2,31 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Camera, ChevronDown, ChevronRight, LogIn, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { resizeImageToAvatar, estimateGamesPerPlayer } from "../lib/utils.js";
-import { emptyPlayerRecord, fetchAllPlayers, filterPlayersByQuery, savePlayerRecord } from "../lib/playerDatabase.js";
+import {
+  emptyPlayerRecord,
+  fetchAllPlayers,
+  filterPlayersByQuery,
+  recentPlayers,
+  disambiguateDuplicateNames,
+  savePlayerRecord,
+} from "../lib/playerDatabase.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
 
 const templateService = new TournamentTemplateService();
+
+// Register Players Joining Today — Scalable Player Picker (see PROJECT.md).
+// The default (no-search) view shows only a small, useful subset —
+// "approximately 8-12 players" — never the whole database, so this screen
+// stays usable whether the Player Database has 30 or 30,000 records. A
+// search result LIST is also capped (a very common query, e.g. a single
+// letter, could otherwise still return hundreds of rows) — SEARCH_RESULTS_LIMIT
+// is generous enough that a real name search essentially never hits it,
+// while still bounding the pathological case.
+const DEFAULT_SUGGESTIONS_LIMIT = 10;
+const SEARCH_RESULTS_LIMIT = 40;
 
 export default function CreateSessionScreen({
   onStart,
@@ -198,9 +216,26 @@ export default function CreateSessionScreen({
   };
 
   const activePlayers = playerDb.filter((p) => p.active);
-  const searchResults = filterPlayersByQuery(activePlayers, search).sort((a, b) =>
-    a.displayName.localeCompare(b.displayName)
+  const trimmedSearch = search.trim();
+
+  // No query -> a small, bounded "recently used" default (see
+  // recentPlayers' own comment for why updatedAt is the right signal),
+  // excluding whoever's already registered for today — they're shown in
+  // "Today's Players" below instead, so the limited default slots aren't
+  // spent on players the organizer doesn't need to pick again. A real
+  // query -> the existing name/nickname/contact search, sorted
+  // alphabetically same as before, capped defensively so an overly broad
+  // query can't still render hundreds of rows.
+  const defaultSuggestions = recentPlayers(
+    activePlayers.filter((p) => !rosterIds.has(p.id)),
+    DEFAULT_SUGGESTIONS_LIMIT
   );
+  const matchingSearchResults = trimmedSearch
+    ? filterPlayersByQuery(activePlayers, search).sort((a, b) => a.displayName.localeCompare(b.displayName))
+    : [];
+  const searchResultsOverflow = trimmedSearch ? Math.max(0, matchingSearchResults.length - SEARCH_RESULTS_LIMIT) : 0;
+  const searchResults = trimmedSearch ? matchingSearchResults.slice(0, SEARCH_RESULTS_LIMIT) : defaultSuggestions;
+  const duplicateNameHints = disambiguateDuplicateNames(searchResults);
 
   return (
     <div style={styles.createWrap}>
@@ -391,6 +426,28 @@ export default function CreateSessionScreen({
         Skill level is used to pair a beginner with an intermediate player as teammates.
       </p>
 
+      {/* Today's Players — compact, near the top, so an organizer already
+          registered can be seen (and removed) at a glance without ever
+          having to search for them again. Same roster/removePlayer this
+          screen has always used — only its position and layout changed. */}
+      <p style={styles.pickerGroupLabel}>Today's Players ({roster.length})</p>
+      {roster.length === 0 ? (
+        <p style={styles.todaysPlayersEmpty}>No one registered yet — add players below.</p>
+      ) : (
+        <div style={styles.todaysPlayersWrap}>
+          {roster.map((p) => (
+            <div key={p.id} style={styles.todaysPlayerChip}>
+              <Avatar player={p} size={20} />
+              <span>{p.name}</span>
+              <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
+              <button style={styles.rosterRemoveBtn} onClick={() => removePlayer(p.id)} aria-label={`remove ${p.name}`}>
+                <X size={11} strokeWidth={3} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={styles.skillToggle}>
         <button
           type="button"
@@ -415,7 +472,7 @@ export default function CreateSessionScreen({
             <Search size={14} strokeWidth={2.5} />
             <input
               style={styles.historySearchInput}
-              placeholder="Search players by name…"
+              placeholder="Search player by name…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -427,30 +484,63 @@ export default function CreateSessionScreen({
               No players in the database yet — switch to "Create new player" to add your first one.
             </p>
           ) : searchResults.length === 0 ? (
-            <p style={styles.editWarning}>No players match "{search.trim()}".</p>
-          ) : (
-            <div style={styles.editGrid}>
-              {searchResults.map((p) => {
-                const alreadyAdded = rosterIds.has(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    style={{ ...styles.editChip, ...(alreadyAdded ? styles.btnDisabled : {}) }}
-                    onClick={() => addExistingPlayer(p)}
-                    disabled={alreadyAdded}
-                  >
-                    <Avatar player={{ name: p.displayName, photo: p.photo }} size={22} />
-                    <span style={styles.editChipName}>
-                      {p.displayName}
-                      {p.duprRating != null && <span style={styles.playerDbMeta}>DUPR {p.duprRating}</span>}
-                    </span>
-                    <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
-                    {alreadyAdded ? <span style={styles.playerDbMeta}>Added</span> : <UserPlus size={14} strokeWidth={2.5} />}
-                  </button>
-                );
-              })}
+            <div>
+              <p style={styles.editWarning}>No players found{trimmedSearch ? ` for "${trimmedSearch}"` : ""}.</p>
+              <button
+                type="button"
+                style={styles.fixTeamsBtn}
+                onClick={() => {
+                  setRegistrationMode("create");
+                  if (trimmedSearch && !firstName) {
+                    setFirstName(trimmedSearch);
+                    setDisplayName(trimmedSearch);
+                  }
+                }}
+              >
+                <UserPlus size={13} strokeWidth={2.5} />
+                Create New Player
+              </button>
             </div>
+          ) : (
+            <>
+              <p style={styles.pickerGroupLabel}>
+                {trimmedSearch ? `Search results (${matchingSearchResults.length})` : "Recently added"}
+              </p>
+              {/* Scalability — this grid only ever holds a bounded subset
+                  (DEFAULT_SUGGESTIONS_LIMIT with no query, capped at
+                  SEARCH_RESULTS_LIMIT with one) regardless of how large the
+                  Player Database actually is; see those constants' own
+                  comment. */}
+              <div style={styles.registerPlayerGrid}>
+                {searchResults.map((p) => {
+                  const alreadyAdded = rosterIds.has(p.id);
+                  const duplicateHint = duplicateNameHints.get(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      style={{ ...styles.editChip, ...(alreadyAdded ? styles.btnDisabled : {}) }}
+                      onClick={() => addExistingPlayer(p)}
+                      disabled={alreadyAdded}
+                    >
+                      <Avatar player={{ name: p.displayName, photo: p.photo }} size={22} />
+                      <span style={styles.editChipName}>
+                        {p.displayName}
+                        {duplicateHint && <span style={styles.playerDbDuplicateHint}> · {duplicateHint}</span>}
+                        {p.duprRating != null && <span style={styles.playerDbMeta}>DUPR {p.duprRating}</span>}
+                      </span>
+                      <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
+                      {alreadyAdded ? <span style={styles.playerDbMeta}>Added</span> : <UserPlus size={14} strokeWidth={2.5} />}
+                    </button>
+                  );
+                })}
+              </div>
+              {searchResultsOverflow > 0 && (
+                <p style={styles.editHint}>
+                  Showing {SEARCH_RESULTS_LIMIT} of {matchingSearchResults.length} matches — keep typing to narrow it down.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
@@ -584,24 +674,9 @@ export default function CreateSessionScreen({
         </div>
       )}
 
-      {roster.length > 0 && (
-        <ul style={styles.rosterList}>
-          {roster.map((p) => (
-            <li key={p.id} style={styles.rosterItem}>
-              <Avatar player={p} size={26} />
-              <span style={styles.queueName}>{p.name}</span>
-              <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>
-              <button
-                style={styles.rosterRemoveBtn}
-                onClick={() => removePlayer(p.id)}
-                aria-label={`remove ${p.name}`}
-              >
-                <X size={11} strokeWidth={3} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* Today's Players (near the top of this section, above) is now the
+          one place the registered-today roster is shown — no second,
+          duplicate list at the bottom. */}
 
       {createError && <div style={styles.pinError}>{createError}</div>}
 

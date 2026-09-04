@@ -176,6 +176,53 @@ export function filterPlayersByQuery(players, query) {
   );
 }
 
+// Scalable Register Players picker — see CreateSessionScreen.jsx and
+// PROJECT.md. The default (no-search) view can no longer render every
+// active player once the database grows into the hundreds/thousands — this
+// picks a small, useful default subset instead, reusing fields the record
+// already has (createdAt/updatedAt) rather than inventing a new
+// "lastUsedAt" tracking field. updatedAt is stamped on every
+// savePlayerRecord call (creation AND edits, see that function above), so
+// sorting by it descending surfaces whoever was most recently touched in
+// the database — the closest "recently used" proxy already available
+// without a data-model change. `limit` defaults to 10, the middle of the
+// "8-12 players" default-view size this was built to.
+export function recentPlayers(players, limit = 10) {
+  return [...(players || [])]
+    .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+    .slice(0, limit);
+}
+
+// Duplicate-name handling — see CreateSessionScreen.jsx's picker ("Handle
+// duplicate names clearly"). Never a database change: purely a display-time
+// computation over whichever players are actually being RENDERED right now
+// (the default subset, or one search result page), so two unrelated
+// "Alex"es only get a disambiguating hint when they'd actually appear
+// together in the same visible list. Returns a Map<id, hint|null> — hint is
+// the player's last name if that alone disambiguates them from the other(s)
+// sharing their display name, else a short fragment of their own id (always
+// unique, never guessed). Players whose display name is unique in this list
+// map to null (no hint needed).
+export function disambiguateDuplicateNames(players) {
+  const hints = new Map();
+  const byName = new Map();
+  for (const p of players || []) {
+    const key = (p.displayName || "").trim().toLowerCase();
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(p);
+  }
+  for (const group of byName.values()) {
+    if (group.length < 2) continue;
+    const lastNames = new Set(group.map((p) => (p.lastName || "").trim().toLowerCase()).filter(Boolean));
+    const lastNameDisambiguates = lastNames.size === group.length; // every member has a distinct last name
+    for (const p of group) {
+      hints.set(p.id, lastNameDisambiguates ? p.lastName : `#${p.id.slice(-4)}`);
+    }
+  }
+  return hints;
+}
+
 // Registered Player Check-In — see CheckinView.jsx/PickleballOpenPlay.jsx's
 // checkInFromDatabase. Pure decision only (no state mutation, no save()) —
 // given a session's current `players` map and a Player Database `record`

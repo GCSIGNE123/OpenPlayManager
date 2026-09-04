@@ -252,6 +252,34 @@ export const styles = {
     marginLeft: "auto",
     padding: 0,
   },
+  // Register Players Joining Today — scalable player picker (see
+  // PROJECT.md). "Today's Players" — the compact, near-the-top roster
+  // display so an organizer never has to re-search for someone already
+  // registered. Wraps horizontally (unlike rosterList's single-column
+  // layout) since these are short name+skill chips, not full rows.
+  todaysPlayersWrap: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  todaysPlayerChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 8px 5px 6px",
+    borderRadius: 20,
+    border: "1.5px solid var(--line)",
+    background: "var(--color-surface)",
+    fontSize: 12.5,
+    fontWeight: 600,
+    maxWidth: "100%",
+  },
+  todaysPlayersEmpty: {
+    fontSize: 12.5,
+    color: "var(--color-text-faint)",
+    marginBottom: 10,
+  },
   checkInTapBtn: {
     display: "flex",
     alignItems: "center",
@@ -881,6 +909,30 @@ export const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 6,
+  },
+  // Register Players Joining Today — a RESPONSIVE grid, not editGrid's
+  // single column, so the picker uses available desktop width instead of
+  // one long vertical strip (editGrid itself is shared by CourtBookingScreen/
+  // CourtCard/NextMatchupCard/PlayerPicker — left untouched; this is a new,
+  // separate container so none of those are affected). auto-fill + minmax
+  // means it degrades to a single column on narrow/mobile viewports with no
+  // horizontal overflow, and never depends on how many players are in it —
+  // scalability comes from LIMITING which players are ever placed in this
+  // grid (see CreateSessionScreen's own default-suggestions/search-results
+  // caps), not from this layout.
+  registerPlayerGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+    gap: 6,
+  },
+  // Disambiguates two players who share the same display name within the
+  // same rendered picker list — never a database change, purely a display
+  // hint computed at render time (see CreateSessionScreen's
+  // disambiguateDuplicateNames).
+  playerDbDuplicateHint: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10.5,
+    color: "var(--color-text-faint)",
   },
   editChip: {
     display: "flex",

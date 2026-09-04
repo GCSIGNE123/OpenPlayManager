@@ -8,7 +8,7 @@
 // is exercised directly here.
 //
 // Usage: node scripts/verify-registered-checkin.mjs
-import { resolveDatabaseCheckIn, filterPlayersByQuery } from "../src/lib/playerDatabase.js";
+import { resolveDatabaseCheckIn, filterPlayersByQuery, recentPlayers, disambiguateDuplicateNames } from "../src/lib/playerDatabase.js";
 
 let pass = 0, fail = 0;
 function assert(desc, cond) {
@@ -63,6 +63,64 @@ console.log("\nfilterPlayersByQuery — reused verbatim, unmodified, for the new
   assert("search matches by display name", filterPlayersByQuery(players, "reyes").length === 1);
   assert("search matches by nickname", filterPlayersByQuery(players, "benny").length === 1);
   assert("empty query returns everyone", filterPlayersByQuery(players, "").length === 2);
+}
+
+console.log("\nrecentPlayers — Register Players Joining Today's scalable default view (never renders the whole database)");
+{
+  const now = Date.now();
+  const many = Array.from({ length: 1000 }, (_, i) => ({
+    id: `p${i}`,
+    displayName: `Player ${i}`,
+    updatedAt: now - i * 1000, // p0 is most-recently touched, p999 the oldest
+  }));
+  const top = recentPlayers(many);
+  assert("A/B/scalability: default subset is capped at 10 regardless of a 1,000-player database", top.length === 10);
+  assert("most recently updated player sorts first", top[0].id === "p0");
+  assert("does not mutate the original array's order", many[0].id === "p0" && many[999].id === "p999");
+
+  const customLimit = recentPlayers(many, 12);
+  assert("a custom limit (e.g. 12, the upper end of '8-12 players') is honored", customLimit.length === 12);
+
+  assert("falls back to createdAt when updatedAt is missing", recentPlayers([
+    { id: "old", createdAt: now - 100 },
+    { id: "new", createdAt: now - 10 },
+  ])[0].id === "new");
+
+  assert("empty/undefined input never crashes", recentPlayers([]).length === 0 && recentPlayers(undefined).length === 0);
+}
+
+console.log("\ndisambiguateDuplicateNames — H: duplicate-name players handled clearly, without touching the database");
+{
+  const noCollision = disambiguateDuplicateNames([
+    { id: "1", displayName: "Ana Reyes", lastName: "Reyes" },
+    { id: "2", displayName: "Ben Santos", lastName: "Santos" },
+  ]);
+  assert("no hint at all when every display name in the list is unique", noCollision.size === 0);
+
+  const distinctLastNames = disambiguateDuplicateNames([
+    { id: "1", displayName: "Alex", lastName: "Cruz" },
+    { id: "2", displayName: "Alex", lastName: "Reyes" },
+  ]);
+  assert("two same-first-name players with DIFFERENT last names are disambiguated by last name", (
+    distinctLastNames.get("1") === "Cruz" && distinctLastNames.get("2") === "Reyes"
+  ));
+
+  const sameLastNameToo = disambiguateDuplicateNames([
+    { id: "aaaa1111", displayName: "Alex Cruz", lastName: "Cruz" },
+    { id: "bbbb2222", displayName: "Alex Cruz", lastName: "Cruz" },
+  ]);
+  assert("identical name AND last name still gets a real, distinct hint (never silently indistinguishable)", (
+    sameLastNameToo.get("aaaa1111") !== sameLastNameToo.get("bbbb2222") &&
+    sameLastNameToo.get("aaaa1111") != null && sameLastNameToo.get("bbbb2222") != null
+  ));
+
+  assert("case-insensitive collision detection ('alex' === 'Alex')", disambiguateDuplicateNames([
+    { id: "1", displayName: "alex", lastName: "Cruz" },
+    { id: "2", displayName: "Alex", lastName: "Reyes" },
+  ]).size === 2);
+
+  assert("a player with no display name is simply skipped, never crashes", disambiguateDuplicateNames([{ id: "1" }]).size === 0);
+  assert("empty/undefined input never crashes", disambiguateDuplicateNames([]).size === 0 && disambiguateDuplicateNames(undefined).size === 0);
 }
 
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);
