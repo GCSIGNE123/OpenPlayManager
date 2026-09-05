@@ -9,8 +9,11 @@
 // No organizer PIN here — see create-scan-challenge/index.ts's header for
 // the security reasoning: sessionCode isn't a secret, and a challenge
 // alone can't check anyone in without a valid player token paired with it.
-// Opening this modal goes straight to requesting a challenge and starting
-// the camera.
+// Opening this modal mints a challenge for whichever mode is active (see
+// the remembered-mode default just below) — the camera is NEVER started
+// (and getUserMedia is NEVER called) until the organizer explicitly
+// selects Camera Scanner, so a USB-only organizer never sees a spurious
+// camera-permission prompt or error.
 //
 // NOTE on flow: the approved architecture's checkin-player call performs
 // the ENTIRE check-in atomically in one step (token + challenge validation
@@ -44,9 +47,31 @@ import { Camera, Check, ScanLine } from "lucide-react";
 import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
 import { normalizeUsbScanPayload } from "../lib/usbScanner.js";
+import { SCAN_MODE_STORAGE_KEY, resolveScanMode } from "../lib/scanModePreference.js";
+
+function loadRememberedScanMode() {
+  try {
+    return resolveScanMode(window.localStorage.getItem(SCAN_MODE_STORAGE_KEY));
+  } catch (e) {
+    return "usb"; // localStorage unavailable (e.g. private mode) — safe default, never crashes
+  }
+}
+
+function rememberScanMode(mode) {
+  try {
+    window.localStorage.setItem(SCAN_MODE_STORAGE_KEY, mode);
+  } catch (e) {
+    // best-effort only — not remembering the preference isn't worth surfacing an error for
+  }
+}
 
 export default function CheckInScannerModal({ sessionCode, onClose }) {
-  const [mode, setMode] = useState("camera"); // 'camera' | 'usb'
+  // Lazy initializer — reads localStorage exactly once, before the first
+  // render, so the modal's very first paint already reflects the right
+  // mode instead of flashing camera-mode UI first. See requestChallenge/
+  // startCamera below: the camera is only ever invoked when mode==='camera',
+  // so starting in 'usb' here means getUserMedia is never called on open.
+  const [mode, setMode] = useState(loadRememberedScanMode); // 'camera' | 'usb'
   const [stage, setStage] = useState("starting"); // 'starting' | 'scanning' | 'result'
   const [startError, setStartError] = useState("");
   const [result, setResult] = useState(null); // { status, player } | { error }
@@ -194,8 +219,10 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
 
   const switchMode = (nextMode) => {
     if (nextMode === mode) return;
-    if (mode === "camera") stopCamera();
+    if (mode === "camera") stopCamera(); // stop any active camera tracks before leaving camera mode
+    rememberScanMode(nextMode);
     setMode(nextMode);
+    setStartError(""); // clear any leftover camera error immediately on leaving/entering camera mode
     setResult(null);
     setUsbResult(null);
     setUsbValue("");
@@ -205,7 +232,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     if (nextMode === "usb") {
       requestUsbChallenge();
     } else {
-      requestChallenge();
+      requestChallenge(); // camera is only ever started here, on an explicit switch into Camera Scanner
     }
   };
 
@@ -262,8 +289,10 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           <h2 style={styles.dialogTitle}>Scan Player QR</h2>
         </div>
 
-        {mode === "camera" && stage !== "result" && modeToggle}
-        {mode === "usb" && modeToggle}
+        {/* Always visible — including on the camera's terminal error screen —
+            so an organizer whose camera failed can switch straight to USB
+            QR Scanner without first clicking Try Again. */}
+        {modeToggle}
 
         {mode === "camera" && stage === "starting" && !startError && (
           <div style={{ textAlign: "center" }}>
