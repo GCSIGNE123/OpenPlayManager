@@ -12,11 +12,17 @@ import { saveSessionReport } from "./sessionReportModel.js";
 import { expirationReason } from "./openPlaySessionLifecycle.js";
 
 // The one canonical "end a session" sequence — used identically whether the
-// end is a scheduled 3-day/24-hour auto-close (sweepAgedSessions below) or a
+// end is a scheduled 3-day/24-hour auto-close (sweepAgedSessions below), a
 // server-side Edge Function sweep (supabase/functions/sweep-open-play-
-// sessions) reusing this same module. Never a second/parallel implementation
-// of "generate report -> delete live record -> mark index ended".
-async function endExpiredSession(entry, liveState, reason) {
+// sessions) reusing this same module, OR an organizer's manual End Session
+// from All Sessions (OpenPlaySessionHistoryScreen.jsx — the exact same
+// sequence PickleballOpenPlay.jsx's own confirmEndSession already performs
+// inline for the "end from inside the live session" entry point: save the
+// report, delete the live row, mark the index entry ended). Exported so
+// every one of those callers shares this single implementation. Never a
+// second/parallel implementation of "generate report -> delete live record
+// -> mark index ended".
+export async function endSessionAndRecord(entry, liveState, reason) {
   try {
     const report = computeSessionAnalyticsReport(liveState);
     await saveSessionReport(report, entry.sessionCode);
@@ -100,7 +106,7 @@ export async function fetchAllSessionIndexEntries() {
 // header — the real "genuinely automatic, doesn't depend on anyone opening
 // a screen" mechanism). Both callers share this exact function.
 //
-// An index entry still "active" is ended (via endExpiredSession above —
+// An index entry still "active" is ended (via endSessionAndRecord above —
 // the one canonical end sequence) when EITHER:
 //   - its session has been running SESSION_AUTO_END_AGE_MS (3 days) or
 //     more since sessionStartedAt (the original rule, unchanged), OR
@@ -140,7 +146,7 @@ export async function sweepAgedSessions(maxAgeMs = SESSION_AUTO_END_AGE_MS, maxI
     const reason = expirationReason(liveState, Date.now(), { maxAgeMs, maxInactivityMs });
     if (!reason || reason === "missing-session-data") continue; // current, or malformed data — never guessed expired
     const endReason = reason === "age" ? "Auto-ended — inactive 3+ days" : "Auto-ended — inactive 24h";
-    await endExpiredSession(entry, liveState, endReason);
+    await endSessionAndRecord(entry, liveState, endReason);
     endedCodes.push(entry.sessionCode);
   }
   return endedCodes;

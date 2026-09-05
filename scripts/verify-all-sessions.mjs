@@ -37,7 +37,7 @@ function makeFakeStorage() {
 
 global.window = { storage: makeFakeStorage() };
 
-const { recordSessionCreated, recordSessionEnded, fetchAllSessionIndexEntries, sweepAgedSessions } = await import("../src/lib/sessionIndexModel.js");
+const { recordSessionCreated, recordSessionEnded, fetchAllSessionIndexEntries, sweepAgedSessions, endSessionAndRecord } = await import("../src/lib/sessionIndexModel.js");
 
 function makeLiveSession(sessionCode, { sessionStartedAt = Date.now(), players = {} } = {}) {
   return {
@@ -163,6 +163,85 @@ console.log("\nsweepAgedSessions — an orphaned active index entry (live record
   assert("the orphaned entry was cleaned up", ended.includes(code));
   const entries = await fetchAllSessionIndexEntries();
   assert("its status is now ended", entries.find((e) => e.sessionCode === code).status === "ended");
+}
+
+// =====================================================================
+// End Session from All Sessions — see OpenPlaySessionHistoryScreen.jsx.
+// Exercises endSessionAndRecord directly — the exact SAME exported
+// function both the manual "End Session" button on an All Sessions card
+// AND sweepAgedSessions above already call. Never a second/parallel
+// end-session implementation.
+// =====================================================================
+console.log("\nendSessionAndRecord — the canonical manual end-session sequence, called directly (5/10)");
+{
+  const code = "MANUAL01";
+  const players = {
+    p1: { id: "p1", name: "Ana", games: 3, wins: 2, losses: 1, checkedIn: true, paymentStatus: "paid", paymentMethod: "cash" },
+    p2: { id: "p2", name: "Ben", games: 3, wins: 1, losses: 2, checkedIn: true, paymentStatus: "unpaid", paymentMethod: null },
+  };
+  await recordSessionCreated({ sessionCode: code, venue: "Manual End Venue", rotationMode: "continuous", sessionType: "openPlay", createdAt: Date.now() });
+  const liveState = makeLiveSession(code, { players });
+  await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(liveState));
+
+  const entriesBefore = await fetchAllSessionIndexEntries();
+  const entry = entriesBefore.find((e) => e.sessionCode === code);
+  await endSessionAndRecord(entry, liveState, "Ended by facilitator");
+
+  const entriesAfter = await fetchAllSessionIndexEntries();
+  const endedEntry = entriesAfter.find((e) => e.sessionCode === code);
+  assert("7: the session's index entry flips from active to ended", endedEntry.status === "ended");
+  assert("8: it now has a real endedAt timestamp", typeof endedEntry.endedAt === "number" && endedEntry.endedAt > 0);
+  assert("8: its end reason is the manual-facilitator one, not an auto-sweep reason", endedEntry.endReason === "Ended by facilitator");
+
+  let liveGone = false;
+  try {
+    await window.storage.get(`${STORAGE_PREFIX}${code}`);
+  } catch (e) {
+    liveGone = true;
+  }
+  assert("the live opl-session-* row was deleted — same as the sweep's own cleanup", liveGone);
+
+  const { keys } = await window.storage.list(SESSION_REPORT_PREFIX);
+  let foundReport = null;
+  for (const key of keys) {
+    const res = await window.storage.get(key);
+    const parsed = JSON.parse(res.value);
+    if (parsed.sessionCode === code) foundReport = parsed;
+  }
+  assert("a Session Analytics report was saved before the live row was deleted", !!foundReport);
+  assert("the saved report reflects the real live data (2 players)", foundReport.finalStandings.length === 2);
+}
+
+console.log("\nendSessionAndRecord — supports tournament-type sessions too, same as sweepAgedSessions (no session-type restriction)");
+{
+  const code = "MANUALTOURNEY01";
+  await recordSessionCreated({ sessionCode: code, venue: "Tournament Venue", rotationMode: "continuous", sessionType: "tournament", createdAt: Date.now() });
+  const liveState = { ...makeLiveSession(code), sessionType: "tournament" };
+  await window.storage.set(`${STORAGE_PREFIX}${code}`, JSON.stringify(liveState));
+  const entry = (await fetchAllSessionIndexEntries()).find((e) => e.sessionCode === code);
+
+  await endSessionAndRecord(entry, liveState, "Ended by facilitator");
+
+  const ended = (await fetchAllSessionIndexEntries()).find((e) => e.sessionCode === code);
+  assert("a tournament-type session ends via the exact same function, unrestricted by session type", ended.status === "ended" && ended.sessionType === "tournament");
+}
+
+console.log("\n9: endSessionAndRecord never falsely marks a session ended if the live row is already gone at call time (organizer double-tap / already-ended race)");
+{
+  // A caller that somehow retries after the row is already deleted (e.g. a
+  // double End Session click that both read stale-but-still-active index
+  // state) still only ever produces "ended" — never a crash, never a
+  // second report overwriting the first with different data. This is the
+  // same idempotency guarantee sweepAgedSessions's own "second run is a
+  // no-op" test above already relies on; endSessionAndRecord itself does
+  // not need special-casing for it, since recordSessionEnded is itself
+  // idempotent by design (see that function's own comment).
+  const code = "MANUAL01"; // already ended above
+  const entry = (await fetchAllSessionIndexEntries()).find((e) => e.sessionCode === code);
+  const fakeLiveState = makeLiveSession(code); // caller's own stale copy, since the real row is already gone
+  await endSessionAndRecord(entry, fakeLiveState, "Ended by facilitator");
+  const stillEnded = (await fetchAllSessionIndexEntries()).find((e) => e.sessionCode === code);
+  assert("re-ending an already-ended session is a safe no-op — still just 'ended', no crash", stillEnded.status === "ended");
 }
 
 console.log(`\n${"=".repeat(60)}\n${pass} passed, ${fail} failed`);

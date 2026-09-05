@@ -164,6 +164,31 @@ export const styles = {
     margin: "0 0 14px 0",
     lineHeight: 1.5,
   },
+  // All Sessions — see OpenPlaySessionHistoryScreen.jsx. Each card's own
+  // action row (Open Session always; End Session only while active).
+  // Wraps on narrow viewports rather than overflowing horizontally.
+  sessionCardActions: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  // Deliberately NOT dangerBtn (that's reserved for the confirmation
+  // dialog's actual destructive action) — a lighter, coral-outlined
+  // "secondary" treatment so End Session reads as available-but-cautionary
+  // on the card itself, never visually competing with Open Session.
+  sessionCardEndBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "var(--color-surface)",
+    color: "var(--coral)",
+    border: "1.5px solid var(--coral)",
+    borderRadius: 7,
+    padding: "8px 14px",
+    fontWeight: 700,
+    fontSize: 12.5,
+    cursor: "pointer",
+  },
   codeInput: {
     fontFamily: "'Space Mono', monospace",
     letterSpacing: "0.15em",

@@ -28,7 +28,16 @@ const exportService = new ExportService();
 // and the session continues); pass only onClose to reopen an already-saved
 // report from Session History — read-only, no Confirm/Cancel, since the
 // session those numbers came from is long over. Never both at once.
-export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose }) {
+//
+// confirmBusy/confirmError (All Sessions' End Session entry point — see
+// OpenPlaySessionHistoryScreen.jsx) — both optional, default to
+// false/null so the existing PickleballOpenPlay.jsx caller is completely
+// unaffected. While confirmBusy, both buttons disable and Confirm's label
+// changes, preventing a double-submit from ending the same session twice.
+// confirmError, when set, is shown right above the actions — the dialog
+// stays open and the session is never assumed ended, so the organizer can
+// see what went wrong and retry without losing their place.
+export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose, confirmBusy = false, confirmError = null }) {
   if (!report) return null;
   const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, grade, sessionType, tournamentId } = report;
   const isReopened = Boolean(onClose);
@@ -53,7 +62,12 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
 
         <div style={styles.dialogHeadRow}>
           <h2 style={styles.dialogTitle}>Session Analytics & Fairness Report</h2>
-          <button style={styles.iconBtn} onClick={isReopened ? onClose : onCancel} aria-label="Close report">
+          <button
+            style={{ ...styles.iconBtn, ...(confirmBusy ? styles.btnDisabled : {}) }}
+            onClick={isReopened ? onClose : onCancel}
+            disabled={confirmBusy}
+            aria-label="Close report"
+          >
             <X size={16} strokeWidth={2.5} />
           </button>
         </div>
@@ -234,6 +248,8 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
         </div>
         </div>
 
+        {confirmError && !isReopened && <p style={styles.editWarning}>{confirmError}</p>}
+
         <div style={styles.dialogActions}>
           {isReopened ? (
             <button style={styles.secondaryBtn} onClick={onClose}>
@@ -241,12 +257,12 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
             </button>
           ) : (
             <>
-              <button style={styles.secondaryBtn} onClick={onCancel}>
+              <button style={{ ...styles.secondaryBtn, ...(confirmBusy ? styles.btnDisabled : {}) }} onClick={onCancel} disabled={confirmBusy}>
                 Cancel
               </button>
-              <button style={styles.dangerBtn} onClick={onConfirm}>
+              <button style={{ ...styles.dangerBtn, ...(confirmBusy ? styles.btnDisabled : {}) }} onClick={onConfirm} disabled={confirmBusy}>
                 <Check size={14} strokeWidth={2.5} />
-                Confirm end session
+                {confirmBusy ? "Ending…" : "Confirm end session"}
               </button>
             </>
           )}
