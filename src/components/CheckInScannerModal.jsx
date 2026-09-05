@@ -9,11 +9,17 @@
 // No organizer PIN here — see create-scan-challenge/index.ts's header for
 // the security reasoning: sessionCode isn't a secret, and a challenge
 // alone can't check anyone in without a valid player token paired with it.
-// Opening this modal mints a challenge for whichever mode is active (see
-// the remembered-mode default just below) — the camera is NEVER started
-// (and getUserMedia is NEVER called) until the organizer explicitly
-// selects Camera Scanner, so a USB-only organizer never sees a spurious
-// camera-permission prompt or error.
+//
+// Camera lifecycle — see lib/cameraLifecycle.js. Opening this modal, and
+// switching TO Camera Scanner, both land in the 'idle' state: no
+// createScanChallenge call, no getUserMedia call, no camera-permission
+// prompt. The camera is only ever requested when the organizer explicitly
+// presses "Start Scanning" — even when Camera Scanner is the current/
+// remembered mode. (An earlier version minted a challenge and started the
+// camera automatically whenever mode==='camera' was active on open, which
+// is exactly the bug this fixes: a remembered Camera Scanner preference
+// meant every re-open showed a camera-permission error before the
+// organizer had done anything.)
 //
 // NOTE on flow: the approved architecture's checkin-player call performs
 // the ENTIRE check-in atomically in one step (token + challenge validation
@@ -35,19 +41,19 @@
 // lib/checkinQrApi.js) — there's no separate QR format, payload parsing, or
 // check-in logic for USB; a given QR code produces an identical result
 // whether it's read by the camera or typed by the scanner. USB mode's own
-// state/flow is intentionally NOT routed through the shared `stage`
-// state machine's 'result' screen: a USB scanner is used to check a whole
-// line of players in back to back, so each scan's outcome shows inline and
-// the input immediately refocuses for the next player, rather than
-// replacing the screen with a one-shot result that requires "Try Again"
-// per person.
-import { useEffect, useRef, useState } from "react";
+// state/flow is intentionally NOT routed through the camera's result
+// screen: a USB scanner is used to check a whole line of players in back
+// to back, so each scan's outcome shows inline and the input immediately
+// refocuses for the next player, rather than replacing the screen with a
+// one-shot result that requires "Try Again" per person.
+import { useEffect, useReducer, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { Camera, Check, ScanLine } from "lucide-react";
 import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
 import { normalizeUsbScanPayload } from "../lib/usbScanner.js";
 import { SCAN_MODE_STORAGE_KEY, resolveScanMode } from "../lib/scanModePreference.js";
+import { CAMERA_IDLE, CAMERA_STARTING, CAMERA_ACTIVE, CAMERA_ERROR, initialCameraLifecycle, cameraLifecycleReducer } from "../lib/cameraLifecycle.js";
 
 function loadRememberedScanMode() {
   try {
@@ -68,13 +74,14 @@ function rememberScanMode(mode) {
 export default function CheckInScannerModal({ sessionCode, onClose }) {
   // Lazy initializer — reads localStorage exactly once, before the first
   // render, so the modal's very first paint already reflects the right
-  // mode instead of flashing camera-mode UI first. See requestChallenge/
-  // startCamera below: the camera is only ever invoked when mode==='camera',
-  // so starting in 'usb' here means getUserMedia is never called on open.
+  // mode instead of flashing camera-mode UI first.
   const [mode, setMode] = useState(loadRememberedScanMode); // 'camera' | 'usb'
-  const [stage, setStage] = useState("starting"); // 'starting' | 'scanning' | 'result'
-  const [startError, setStartError] = useState("");
-  const [result, setResult] = useState(null); // { status, player } | { error }
+  // Camera acquisition lifecycle — deliberately separate from `result`
+  // (the OUTCOME of a completed scan attempt, success or check-in
+  // failure) below. See lib/cameraLifecycle.js for the state machine
+  // itself (idle/starting/active/error) and its own headless tests.
+  const [camera, dispatchCamera] = useReducer(cameraLifecycleReducer, undefined, initialCameraLifecycle);
+  const [result, setResult] = useState(null); // { status, player } | { error } | null — a completed scan's outcome
   const videoRef = useRef(null);
   const canvasRef = useRef(document.createElement("canvas"));
   const streamRef = useRef(null);
@@ -85,14 +92,14 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   // re-rendering in between, so a value read from a `scanChallenge` STATE
   // closure would stay pinned to whatever it was when that closure was
   // created (one generation behind the challenge just minted by
-  // requestChallenge, or even the previous already-used one on a retry —
+  // startScanning, or even the previous already-used one on a retry —
   // this was confirmed live: checkin-player received a stale/empty
   // scanChallenge and correctly rejected it). A ref has no such closure
   // staleness — reading challengeRef.current always reflects whichever
   // challenge was most recently assigned, regardless of renders.
   const challengeRef = useRef(null);
 
-  // USB mode's own state — deliberately separate from `stage`/`result`
+  // USB mode's own state — deliberately separate from the camera state
   // above (see file header).
   const [usbBusy, setUsbBusy] = useState(false);
   const [usbValue, setUsbValue] = useState("");
@@ -107,6 +114,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
 
   const stopCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -121,7 +129,11 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     []
   );
 
-  const startCamera = async () => {
+  // The one place getUserMedia is ever called — only reached via
+  // startScanning() below, itself only ever called from the explicit
+  // "Start Scanning"/"Try Again" button handlers. Never called from a
+  // mount effect or a mode switch.
+  const startCameraStream = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
@@ -129,32 +141,43 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      dispatchCamera({ type: "STREAM_ACQUIRED" });
       tick();
     } catch (e) {
-      setResult({ error: "Couldn't access the camera. Check your browser's camera permission." });
-      setStage("result");
+      dispatchCamera({ type: "FAILED", message: "Couldn't access the camera. Check your browser's camera permission." });
     }
   };
 
-  const requestChallenge = async () => {
+  // Mints a fresh single-use challenge, then requests the camera. Called
+  // only from an explicit "Start Scanning" or "Try Again" click — never
+  // automatically on mount or on switching into Camera Scanner mode (see
+  // requirement 10: switching back to Camera Scanner returns to idle).
+  const startScanning = async () => {
     challengeRef.current = null; // invalidate any previous challenge before minting/awaiting a new one
-    setStage("starting");
-    setStartError("");
+    dispatchCamera({ type: "START_SCANNING" });
     try {
       const { challenge } = await createScanChallenge(sessionCode);
       challengeRef.current = challenge; // tick()/handleScanned() read this directly, never a state closure
-      setStage("scanning");
-      startCamera();
+      await startCameraStream();
     } catch (e) {
-      setStartError(e.message || "Couldn't start the scanner.");
-      setResult({ error: e.message || "Couldn't start the scanner." });
-      setStage("result");
+      dispatchCamera({ type: "FAILED", message: e.message || "Couldn't start the scanner." });
     }
   };
 
+  // Reused by both "Try Again" buttons (camera-acquisition failure, and a
+  // completed scan that failed check-in) — both retry camera
+  // initialization from scratch, matching the pre-existing convention.
+  const retryCamera = () => {
+    scanningLockRef.current = false;
+    setResult(null);
+    startScanning();
+  };
+
   useEffect(() => {
+    // USB mode is ready immediately (no permission concern, no lifecycle
+    // to gate) — mints its own challenge on mount. Camera mode starts
+    // idle; nothing is requested here.
     if (mode === "usb") requestUsbChallenge();
-    else requestChallenge();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -166,7 +189,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
       setResult({ error: e.message || "Couldn't check this player in." });
     } finally {
       challengeRef.current = null; // single-use — spent (or rejected) either way, never reused
-      setStage("result");
+      dispatchCamera({ type: "RESET" }); // camera stream is already stopped (see tick()) — nothing left running
     }
   };
 
@@ -192,9 +215,9 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     rafRef.current = requestAnimationFrame(tick);
   };
 
-  // Mints a fresh single-use challenge for USB mode, without touching
-  // `stage` (camera-mode-only) or starting the camera — USB mode never
-  // requests camera permission or a MediaStream at all.
+  // Mints a fresh single-use challenge for USB mode, without touching the
+  // camera lifecycle or starting the camera — USB mode never requests
+  // camera permission or a MediaStream at all.
   const requestUsbChallenge = async () => {
     challengeRef.current = null;
     setUsbStartError("");
@@ -222,23 +245,24 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     if (mode === "camera") stopCamera(); // stop any active camera tracks before leaving camera mode
     rememberScanMode(nextMode);
     setMode(nextMode);
-    setStartError(""); // clear any leftover camera error immediately on leaving/entering camera mode
+    // Camera mode always re-enters idle — never auto-restarts scanning
+    // (requirement 10). Any leftover camera error/result is cleared so it
+    // can't bleed into the next mode or the next explicit Start Scanning.
+    dispatchCamera({ type: "RESET" });
     setResult(null);
     setUsbResult(null);
     setUsbValue("");
     setUsbStartError("");
     scanningLockRef.current = false;
     usbProcessingRef.current = false;
-    if (nextMode === "usb") {
-      requestUsbChallenge();
-    } else {
-      requestChallenge(); // camera is only ever started here, on an explicit switch into Camera Scanner
-    }
+    if (nextMode === "usb") requestUsbChallenge();
+    // nextMode === "camera": intentionally does nothing further — stays
+    // idle until the organizer presses "Start Scanning".
   };
 
   // Reuses the exact same checkinPlayerViaQr call the camera path uses —
-  // see file header. Stays on-screen (never flips `stage`) so the operator
-  // can immediately scan the next player.
+  // see file header. Stays on-screen (never leaves USB mode) so the
+  // operator can immediately scan the next player.
   const handleUsbScanned = async (playerToken) => {
     const challenge = challengeRef.current;
     setUsbBusy(true);
@@ -282,6 +306,11 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     </div>
   );
 
+  const closeFromCamera = () => {
+    stopCamera();
+    onClose();
+  };
+
   return (
     <div style={styles.dialogOverlay}>
       <div style={styles.dialogCard} onClick={(e) => e.stopPropagation()}>
@@ -289,18 +318,33 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           <h2 style={styles.dialogTitle}>Scan Player QR</h2>
         </div>
 
-        {/* Always visible — including on the camera's terminal error screen —
-            so an organizer whose camera failed can switch straight to USB
-            QR Scanner without first clicking Try Again. */}
+        {/* Always visible — including on the camera's idle/error screens —
+            so an organizer can switch straight to USB QR Scanner at any
+            point without first starting or retrying the camera. */}
         {modeToggle}
 
-        {mode === "camera" && stage === "starting" && !startError && (
+        {mode === "camera" && !result && camera.state === CAMERA_IDLE && (
+          <div style={{ textAlign: "center" }}>
+            <p style={styles.editHint}>Start the camera to scan a player's QR code.</p>
+            <div style={styles.dialogActions}>
+              <button type="button" style={styles.secondaryBtn} onClick={closeFromCamera}>
+                Cancel
+              </button>
+              <button type="button" style={styles.primaryBtn} onClick={startScanning}>
+                <Camera size={14} strokeWidth={2.5} />
+                Start Scanning
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "camera" && !result && camera.state === CAMERA_STARTING && (
           <div style={{ textAlign: "center" }}>
             <p style={styles.editHint}>Starting scanner…</p>
           </div>
         )}
 
-        {mode === "camera" && stage === "scanning" && (
+        {mode === "camera" && !result && camera.state === CAMERA_ACTIVE && (
           <div style={{ textAlign: "center" }}>
             <video ref={videoRef} style={{ width: "100%", borderRadius: 10, marginBottom: 12 }} muted playsInline />
             <p style={styles.editHint}>
@@ -308,45 +352,44 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
               player's QR code.
             </p>
             <div style={styles.dialogActions}>
-              <button
-                type="button"
-                style={styles.secondaryBtn}
-                onClick={() => {
-                  stopCamera();
-                  onClose();
-                }}
-              >
+              <button type="button" style={styles.secondaryBtn} onClick={closeFromCamera}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {mode === "camera" && stage === "result" && (
+        {mode === "camera" && !result && camera.state === CAMERA_ERROR && (
           <div style={{ textAlign: "center" }}>
-            {result?.error ? (
+            <p style={styles.pinError}>{camera.error}</p>
+            <div style={styles.dialogActions}>
+              <button type="button" style={styles.secondaryBtn} onClick={onClose}>
+                Done
+              </button>
+              <button type="button" style={styles.primaryBtn} onClick={retryCamera}>
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "camera" && result && (
+          <div style={{ textAlign: "center" }}>
+            {result.error ? (
               <p style={styles.pinError}>{result.error}</p>
-            ) : result?.status === "already_checked_in" ? (
+            ) : result.status === "already_checked_in" ? (
               <p style={styles.confirmMsg}>Player already checked in.</p>
             ) : (
               <p style={styles.confirmMsg}>
-                <Check size={14} strokeWidth={3} /> {result?.player?.displayName} checked in
+                <Check size={14} strokeWidth={3} /> {result.player?.displayName} checked in
               </p>
             )}
             <div style={styles.dialogActions}>
               <button type="button" style={styles.secondaryBtn} onClick={onClose}>
                 Done
               </button>
-              {result?.error && (
-                <button
-                  type="button"
-                  style={styles.primaryBtn}
-                  onClick={() => {
-                    scanningLockRef.current = false;
-                    setResult(null);
-                    requestChallenge();
-                  }}
-                >
+              {result.error && (
+                <button type="button" style={styles.primaryBtn} onClick={retryCamera}>
                   Try Again
                 </button>
               )}

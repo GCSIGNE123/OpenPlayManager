@@ -16,6 +16,7 @@
 // Usage: node scripts/verify-usb-qr-scanner.mjs
 import { normalizeUsbScanPayload } from "../src/lib/usbScanner.js";
 import { resolveScanMode, SCAN_MODE_STORAGE_KEY } from "../src/lib/scanModePreference.js";
+import { CAMERA_IDLE, CAMERA_STARTING, CAMERA_ACTIVE, CAMERA_ERROR, initialCameraLifecycle, cameraLifecycleReducer } from "../src/lib/cameraLifecycle.js";
 
 let pass = 0, fail = 0;
 function assert(desc, cond) {
@@ -68,6 +69,35 @@ console.log("\nresolveScanMode — Scan Player QR startup behavior fix (no surpr
 console.log("\nSCAN_MODE_STORAGE_KEY — stable, non-empty storage key (regression guard against an accidental rename breaking remembered preferences)");
 {
   assert("storage key is a non-empty string", typeof SCAN_MODE_STORAGE_KEY === "string" && SCAN_MODE_STORAGE_KEY.length > 0);
+}
+
+console.log("\ncameraLifecycleReducer — Camera Scanner never auto-starts (idle-until-Start-Scanning fix)");
+{
+  const initial = initialCameraLifecycle();
+  assert("initial state is idle, with no error", initial.state === CAMERA_IDLE && initial.error === "");
+
+  const starting = cameraLifecycleReducer(initial, { type: "START_SCANNING" });
+  assert("START_SCANNING (Start Scanning / Try Again pressed) -> starting, clears any prior error", starting.state === CAMERA_STARTING && starting.error === "");
+
+  const active = cameraLifecycleReducer(starting, { type: "STREAM_ACQUIRED" });
+  assert("STREAM_ACQUIRED (getUserMedia + challenge succeeded) -> active", active.state === CAMERA_ACTIVE && active.error === "");
+
+  const failedFromStarting = cameraLifecycleReducer(starting, { type: "FAILED", message: "Couldn't access the camera. Check your browser's camera permission." });
+  assert("FAILED from starting -> error, carries the message", failedFromStarting.state === CAMERA_ERROR && failedFromStarting.error === "Couldn't access the camera. Check your browser's camera permission.");
+
+  const failedNoMessage = cameraLifecycleReducer(starting, { type: "FAILED" });
+  assert("FAILED with no message -> error, falls back to the standard camera-permission message", failedNoMessage.state === CAMERA_ERROR && failedNoMessage.error === "Couldn't access the camera. Check your browser's camera permission.");
+
+  const resetFromActive = cameraLifecycleReducer(active, { type: "RESET" });
+  assert("RESET from active (mode switch, modal close, or a completed scan) -> back to idle, no error", resetFromActive.state === CAMERA_IDLE && resetFromActive.error === "");
+
+  const resetFromError = cameraLifecycleReducer(failedFromStarting, { type: "RESET" });
+  assert("RESET from error (switching away) -> idle, error cleared", resetFromError.state === CAMERA_IDLE && resetFromError.error === "");
+
+  const retried = cameraLifecycleReducer(failedFromStarting, { type: "START_SCANNING" });
+  assert("Try Again (START_SCANNING from error) -> starting again, error cleared immediately", retried.state === CAMERA_STARTING && retried.error === "");
+
+  assert("an unknown action leaves the current state unchanged (never crashes)", cameraLifecycleReducer(active, { type: "SOMETHING_ELSE" }) === active);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
