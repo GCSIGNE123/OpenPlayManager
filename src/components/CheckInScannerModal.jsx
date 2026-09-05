@@ -21,13 +21,32 @@
 // successful scan checks the player in immediately; this modal shows the
 // resulting confirmation ("Guil Signe checked in") rather than a
 // Cancel/Check In choice made after already having consumed the QR.
+//
+// USB QR/barcode scanner support (e.g. Eyoyo EV-7130) — a second scanning
+// mode alongside the camera above, chosen via the Camera Scanner/USB QR
+// Scanner toggle below. This class of device is NOT a camera: it's a
+// USB-HID keyboard that "types" the decoded QR payload into whatever input
+// has focus, then sends Enter — it never exposes a camera and needs no
+// video/canvas/requestAnimationFrame polling loop. Both modes funnel into
+// the exact same createScanChallenge/checkinPlayerViaQr calls (see
+// lib/checkinQrApi.js) — there's no separate QR format, payload parsing, or
+// check-in logic for USB; a given QR code produces an identical result
+// whether it's read by the camera or typed by the scanner. USB mode's own
+// state/flow is intentionally NOT routed through the shared `stage`
+// state machine's 'result' screen: a USB scanner is used to check a whole
+// line of players in back to back, so each scan's outcome shows inline and
+// the input immediately refocuses for the next player, rather than
+// replacing the screen with a one-shot result that requires "Try Again"
+// per person.
 import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
-import { Camera, Check } from "lucide-react";
+import { Camera, Check, ScanLine } from "lucide-react";
 import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
+import { normalizeUsbScanPayload } from "../lib/usbScanner.js";
 
 export default function CheckInScannerModal({ sessionCode, onClose }) {
+  const [mode, setMode] = useState("camera"); // 'camera' | 'usb'
   const [stage, setStage] = useState("starting"); // 'starting' | 'scanning' | 'result'
   const [startError, setStartError] = useState("");
   const [result, setResult] = useState(null); // { status, player } | { error }
@@ -47,6 +66,19 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   // staleness — reading challengeRef.current always reflects whichever
   // challenge was most recently assigned, regardless of renders.
   const challengeRef = useRef(null);
+
+  // USB mode's own state — deliberately separate from `stage`/`result`
+  // above (see file header).
+  const [usbBusy, setUsbBusy] = useState(false);
+  const [usbValue, setUsbValue] = useState("");
+  const [usbResult, setUsbResult] = useState(null); // { status, player } | { error } | null
+  const [usbStartError, setUsbStartError] = useState("");
+  const usbInputRef = useRef(null);
+  // Guards against a scanner that fires two Enter keydown events for one
+  // physical scan (e.g. a CR+LF suffix) — without this, the second Enter
+  // could fire a duplicate check-in request before the input has visibly
+  // cleared.
+  const usbProcessingRef = useRef(false);
 
   const stopCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -96,7 +128,8 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   };
 
   useEffect(() => {
-    requestChallenge();
+    if (mode === "usb") requestUsbChallenge();
+    else requestChallenge();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,6 +167,94 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     rafRef.current = requestAnimationFrame(tick);
   };
 
+  // Mints a fresh single-use challenge for USB mode, without touching
+  // `stage` (camera-mode-only) or starting the camera — USB mode never
+  // requests camera permission or a MediaStream at all.
+  const requestUsbChallenge = async () => {
+    challengeRef.current = null;
+    setUsbStartError("");
+    try {
+      const { challenge } = await createScanChallenge(sessionCode);
+      challengeRef.current = challenge;
+    } catch (e) {
+      setUsbStartError(e.message || "Couldn't start the scanner.");
+    }
+  };
+
+  // Refocuses the input once it's actually enabled again (mode==='usb' and
+  // not busy) — doing this here, rather than right after awaiting
+  // createScanChallenge above, matters: setUsbBusy(false) only schedules a
+  // re-render, so calling .focus() synchronously after that would still hit
+  // an element that's disabled in the DOM for one more frame and silently
+  // no-op. Keying an effect on [mode, usbBusy] guarantees the input's
+  // `disabled` attribute has already cleared by the time focus() runs.
+  useEffect(() => {
+    if (mode === "usb" && !usbBusy) usbInputRef.current?.focus();
+  }, [mode, usbBusy]);
+
+  const switchMode = (nextMode) => {
+    if (nextMode === mode) return;
+    if (mode === "camera") stopCamera();
+    setMode(nextMode);
+    setResult(null);
+    setUsbResult(null);
+    setUsbValue("");
+    setUsbStartError("");
+    scanningLockRef.current = false;
+    usbProcessingRef.current = false;
+    if (nextMode === "usb") {
+      requestUsbChallenge();
+    } else {
+      requestChallenge();
+    }
+  };
+
+  // Reuses the exact same checkinPlayerViaQr call the camera path uses —
+  // see file header. Stays on-screen (never flips `stage`) so the operator
+  // can immediately scan the next player.
+  const handleUsbScanned = async (playerToken) => {
+    const challenge = challengeRef.current;
+    setUsbBusy(true);
+    setUsbResult(null);
+    try {
+      const data = await checkinPlayerViaQr(playerToken, challenge);
+      setUsbResult({ status: data.status, player: data.player });
+    } catch (e) {
+      setUsbResult({ error: e.message || "Couldn't check this player in." });
+    } finally {
+      challengeRef.current = null; // single-use — spent (or rejected) either way, never reused
+      setUsbBusy(false);
+      usbProcessingRef.current = false;
+      await requestUsbChallenge(); // ready for the next player right away
+    }
+  };
+
+  const handleUsbKeyDown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const trimmed = normalizeUsbScanPayload(usbValue);
+    setUsbValue(""); // clear immediately — also what stops a duplicate Enter
+    // (e.g. a scanner sending both CR and LF) from re-submitting: by the
+    // time the second Enter event fires, the input is already empty and
+    // this guard below returns early.
+    if (!trimmed || usbProcessingRef.current || usbBusy) return;
+    usbProcessingRef.current = true;
+    handleUsbScanned(trimmed);
+  };
+
+  const modeToggle = (
+    <div style={styles.skillToggle}>
+      <button type="button" style={styles.skillToggleBtn(mode === "camera")} onClick={() => switchMode("camera")}>
+        <Camera size={12} strokeWidth={2.5} style={{ verticalAlign: "middle", marginRight: 4 }} />
+        Camera Scanner
+      </button>
+      <button type="button" style={styles.skillToggleBtn(mode === "usb")} onClick={() => switchMode("usb")}>
+        <ScanLine size={12} strokeWidth={2.5} style={{ verticalAlign: "middle", marginRight: 4 }} />
+        USB QR Scanner
+      </button>
+    </div>
+  );
+
   return (
     <div style={styles.dialogOverlay}>
       <div style={styles.dialogCard} onClick={(e) => e.stopPropagation()}>
@@ -141,13 +262,16 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           <h2 style={styles.dialogTitle}>Scan Player QR</h2>
         </div>
 
-        {stage === "starting" && !startError && (
+        {mode === "camera" && stage !== "result" && modeToggle}
+        {mode === "usb" && modeToggle}
+
+        {mode === "camera" && stage === "starting" && !startError && (
           <div style={{ textAlign: "center" }}>
             <p style={styles.editHint}>Starting scanner…</p>
           </div>
         )}
 
-        {stage === "scanning" && (
+        {mode === "camera" && stage === "scanning" && (
           <div style={{ textAlign: "center" }}>
             <video ref={videoRef} style={{ width: "100%", borderRadius: 10, marginBottom: 12 }} muted playsInline />
             <p style={styles.editHint}>
@@ -169,7 +293,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           </div>
         )}
 
-        {stage === "result" && (
+        {mode === "camera" && stage === "result" && (
           <div style={{ textAlign: "center" }}>
             {result?.error ? (
               <p style={styles.pinError}>{result.error}</p>
@@ -197,6 +321,55 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
                   Try Again
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {mode === "usb" && (
+          <div style={{ textAlign: "center" }}>
+            <p style={styles.editHint}>
+              Connect the USB QR scanner, click the input field, then scan the player's QR code.
+            </p>
+            <input
+              ref={usbInputRef}
+              style={styles.input}
+              placeholder="Scan QR code here"
+              value={usbValue}
+              onChange={(e) => setUsbValue(e.target.value)}
+              onKeyDown={handleUsbKeyDown}
+              autoFocus
+              disabled={usbBusy}
+            />
+            <p style={styles.editHint}>
+              {usbStartError ? (
+                <span style={styles.pinError}>{usbStartError}</span>
+              ) : usbBusy ? (
+                "Checking in…"
+              ) : (
+                <>
+                  <ScanLine size={12} strokeWidth={2.5} style={{ verticalAlign: "middle" }} /> Scanner ready
+                </>
+              )}
+            </p>
+            {usbResult &&
+              (usbResult.error ? (
+                <p style={styles.pinError}>{usbResult.error}</p>
+              ) : usbResult.status === "already_checked_in" ? (
+                <p style={styles.confirmMsg}>Player already checked in.</p>
+              ) : (
+                <p style={styles.confirmMsg}>
+                  <Check size={14} strokeWidth={3} /> {usbResult.player?.displayName} checked in
+                </p>
+              ))}
+            <div style={styles.dialogActions}>
+              {usbStartError ? (
+                <button type="button" style={styles.primaryBtn} onClick={requestUsbChallenge}>
+                  Try Again
+                </button>
+              ) : null}
+              <button type="button" style={styles.secondaryBtn} onClick={onClose}>
+                Done
+              </button>
             </div>
           </div>
         )}
