@@ -12,6 +12,7 @@ import {
   refreshNextMatchups,
   regenerateNextMatchups,
   dissolveMatchupIfReserved,
+  dissolveMatchupsForPausedPlayers,
   manuallyReservedIds,
   maxUpcomingMatchups,
   getPlayerQueueStatus,
@@ -389,6 +390,17 @@ export default function PickleballOpenPlay() {
       // gets removed the instant it's idle, rather than automatic dispatch
       // below immediately re-filling it with a fresh matchup first.
       next = applyPendingCourtRemovals(next);
+      // On Break / Left (PickleKing Player's Open Play Availability
+      // feature) — see lib/utils.js's dissolveMatchupsForPausedPlayers for
+      // why this needs its own step here, right alongside
+      // applyPendingCourtRemovals: playStatus arrives via realtime from an
+      // external write (never a Pro-side action), so nothing else in this
+      // app ever dissolves a stale reservation for it. Runs before
+      // refreshNextMatchups so any teammates freed by this step are
+      // immediately eligible again in this same save(), not one cycle
+      // later. A no-op on every save() where no upcoming matchup currently
+      // holds an on_break/left player — the overwhelmingly common case.
+      next = { ...next, nextMatchups: dissolveMatchupsForPausedPlayers(next.nextMatchups, next.players) };
       // recomputed on every save: appends any newly-possible matchups from
       // players not already locked into one, leaving existing (possibly
       // scorer-edited) matchups untouched — see refreshNextMatchups. Which

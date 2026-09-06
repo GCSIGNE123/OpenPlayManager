@@ -544,8 +544,58 @@ export function getRotationEngine(rotationMode) {
 // permanent for the rest of the session). One shared predicate so
 // refreshNextMatchups/regenerateNextMatchups (and anything else that ever
 // needs this question) can't drift out of sync with each other.
+//
+// On Break / Left (PickleKing Player's Open Play Availability feature) —
+// see PROJECT.md's UX audit finding. `player.playStatus` is written
+// exclusively by the Player app (never by Pro — see
+// WaitingPlayersPanel.jsx's read-only badge, the only other place Pro
+// reads this field) via one of: "available", "on_break",
+// "confirmation_required", "left", or unset (existing sessions predating
+// this field, or a player who has never touched their status — treated
+// exactly like "available", never as an error and never excluded). Only
+// "on_break" and "left" are excluded here: a player has explicitly said
+// "don't call me right now." "confirmation_required" is deliberately NOT
+// excluded — it means a matchup has already been formed with this player
+// in it and they're mid-way through confirming they're still around (see
+// pickleking-player's playStatusRules.js's shouldRequestConfirmation),
+// not "don't select me" — excluding it here would fight the very selection
+// that put them in that state. This is the single shared choke point every
+// rotation mode's candidate pool already flows through (see the comment
+// below on sortMatchupsByPriority), so this one exclusion applies
+// identically under Continuous, Winner Pool, Progressive Skill, and
+// Adaptive Skill Rotation — no engine file needed a matching change.
+function isPausedByPlayerStatus(player) {
+  return player.playStatus === "on_break" || player.playStatus === "left";
+}
+
 function isEligibleForMatchmaking(player) {
-  return Boolean(player) && !player.held && player.status !== "CHECKED_OUT";
+  return Boolean(player) && !player.held && player.status !== "CHECKED_OUT" && !isPausedByPlayerStatus(player);
+}
+
+// On Break / Left — dissolve reservation. holdPlayer/checkoutPlayer (see
+// lib/queueManagement.js) already dissolve a player's nextMatchups
+// reservation the INSTANT they become ineligible, as part of that same
+// Pro-side action/state transition — see dissolveMatchupIfReserved above.
+// playStatus has no equivalent moment: it's written directly into the
+// session row by PickleKing Player's set-play-status Edge Function, not by
+// any Pro-side action, so it arrives here purely via the realtime
+// subscription's plain setState (PickleballOpenPlay.jsx's `load`), with no
+// hook of its own to dissolve anything. Without this, a player who was
+// selected into a matchup while AVAILABLE and then marks On Break/Left
+// stays reserved in that matchup forever (isDispatchEligible below already
+// guarantees it can never be dispatched to a court — see courtDispatch.js —
+// but nothing would ever free their 3 teammates back into the waiting
+// pool). Called from save() (PickleballOpenPlay.jsx), right alongside
+// applyPendingCourtRemovals, before refreshNextMatchups runs — so freed
+// teammates are immediately eligible again in that SAME save(), not one
+// cycle later. A no-op whenever no upcoming matchup currently holds a
+// paused player (the overwhelmingly common case) — same reference-stable
+// no-op precedent every other state-shaping step in this app already
+// follows when there's nothing to do.
+export function dissolveMatchupsForPausedPlayers(nextMatchups, players) {
+  const pausedIds = Object.keys(players || {}).filter((id) => isPausedByPlayerStatus(players[id]));
+  if (pausedIds.length === 0) return nextMatchups;
+  return pausedIds.reduce((matchups, id) => dissolveMatchupIfReserved(matchups, id), nextMatchups || []);
 }
 
 // Smart Queue Management — see PROJECT.md/FEATURES.md. How many upcoming

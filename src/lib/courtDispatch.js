@@ -27,14 +27,22 @@ import { uid } from "./random.js";
 // players never remain reserved in nextMatchups (holdPlayer/checkoutPlayer
 // both dissolve their reservation immediately — see
 // lib/queueManagement.js), so this is never a new source of truth, only a
-// defensive re-check of existing flags.
+// defensive re-check of existing flags. On Break / Left (see
+// lib/utils.js's isEligibleForMatchmaking, the primary enforcement point —
+// this only re-checks the same fact right before an already-built matchup
+// is actually placed on a court) is included in this re-check for the same
+// reason held/CHECKED_OUT already are: a player could in principle change
+// their status between matchup generation and dispatch (both run on every
+// save()), and this is the last checkpoint before a real court assignment
+// is persisted. "confirmation_required" is intentionally never checked
+// here either — same reasoning as isEligibleForMatchmaking.
 export function isDispatchEligible(matchup, players) {
   if (!matchup || matchup.held) return false;
   const ids = [...(matchup.teamA || []), ...(matchup.teamB || [])];
   if (ids.length !== 4) return false; // incomplete or already-dissolved
   return ids.every((id) => {
     const p = players[id];
-    return Boolean(p) && !p.held && p.status !== "CHECKED_OUT";
+    return Boolean(p) && !p.held && p.status !== "CHECKED_OUT" && p.playStatus !== "on_break" && p.playStatus !== "left";
   });
 }
 
