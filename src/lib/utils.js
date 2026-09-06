@@ -735,6 +735,42 @@ function matchupPriorityValue(matchup, players, priority) {
   return ids.reduce((sum, id) => sum + sinceWaiting(players[id]), 0) / ids.length;
 }
 
+// Self-Service Score Reporting — see PROJECT.md/FEATURES.md. Lets the
+// winning team enter both final scores directly from the Scorer tab
+// ("Report Score", next to a live court's LIVE badge) instead of the
+// organizer tapping the +/- score buttons repeatedly. Pure validation +
+// the resulting court patch — reused by BOTH the app (PickleballOpenPlay
+// .jsx's reportScore, which just calls this then save()s the result) and
+// scripts/run-acceptance-test.mjs, so there is exactly one place this
+// decision is made, never a second reimplementation drifting out of sync.
+//
+// Deliberately does NOT trust a client-supplied "winner" flag on its own:
+// `ownTeam` only says which side is submitting — the actual winner is
+// re-derived here from the two scores themselves (ownScore > opponentScore
+// required), so a submission can never claim victory with a losing or
+// tied score no matter what the UI sent. No hardcoded winning score (11,
+// etc.) — any valid non-negative-integer, non-tied final score is
+// accepted, matching whatever match format the organizer actually played.
+// Returns { ok: true, court } on success, or { ok: false, error } —
+// callers must never apply a court patch on the failure path.
+export function applyReportedScore(court, ownTeam, ownScore, opponentScore) {
+  if (!court || (court.status !== "live" && court.status !== "finished")) {
+    return { ok: false, error: "This match is no longer reportable." };
+  }
+  if (ownTeam !== "A" && ownTeam !== "B") {
+    return { ok: false, error: "Couldn't tell which team is reporting." };
+  }
+  if (!Number.isInteger(ownScore) || !Number.isInteger(opponentScore) || ownScore < 0 || opponentScore < 0) {
+    return { ok: false, error: "Enter whole numbers of 0 or greater for both scores." };
+  }
+  if (ownScore <= opponentScore) {
+    return { ok: false, error: "Your score must be higher than your opponent's — the result can't be a tie or a loss." };
+  }
+  const scoreA = ownTeam === "A" ? ownScore : opponentScore;
+  const scoreB = ownTeam === "B" ? ownScore : opponentScore;
+  return { ok: true, court: { ...court, scoreA, scoreB, status: "finished" } };
+}
+
 // records partner/opponent/court history on all 4 players in a just-ended
 // match — feeds the rotation engine's recency scoring next time it runs.
 // Win/loss/streak/points bookkeeping stays in PickleballOpenPlay.jsx's

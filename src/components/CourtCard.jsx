@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Clock, Lock, Megaphone, Pencil, PhoneCall, Play, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
+import { Check, ClipboardEdit, Clock, Lock, Megaphone, Pencil, PhoneCall, Play, RotateCcw, Shuffle, Trophy, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { courtDisplayName } from "../lib/utils.js";
 import Avatar from "./Avatar.jsx";
@@ -31,6 +31,7 @@ export default function CourtCard({
   onRepeatAnnouncement,
   onRename,
   onCancelLiveMatch,
+  onReportScore,
   hideAvatar,
 }) {
   const isLive = court.status === "live" || court.status === "finished";
@@ -147,31 +148,53 @@ export default function CourtCard({
             )}
           </span>
         )}
-        {court.manualLocked ? (
-          <span style={styles.manualBadge}>
-            <Lock size={10} strokeWidth={3} />
-            Manual Assignment
-          </span>
-        ) : reserved && court.status === "open" ? (
-          // Court Booking & Reservations integration — see PROJECT.md.
-          // Only shown for an otherwise-OPEN court — a court already LIVE/
-          // FINISHED keeps its normal badge, since Court Booking never
-          // interrupts a match already in progress, only blocks a NEW one
-          // from being assigned onto a reserved slot.
-          <span style={styles.resultTag("loss")}>RESERVED</span>
-        ) : (
-          <span style={styles.statusTag(court.status)}>
-            {court.awaitingPair
-              ? "WAITING"
-              : court.status === "open"
-                ? "OPEN"
-                : court.status === "dispatching"
-                  ? "CALLING PLAYERS..."
-                  : court.status === "finished"
-                    ? "MATCH POINT"
-                    : "LIVE"}
-          </span>
-        )}
+        <span style={styles.courtHeadRightGroup}>
+          {court.manualLocked ? (
+            <span style={styles.manualBadge}>
+              <Lock size={10} strokeWidth={3} />
+              Manual Assignment
+            </span>
+          ) : reserved && court.status === "open" ? (
+            // Court Booking & Reservations integration — see PROJECT.md.
+            // Only shown for an otherwise-OPEN court — a court already LIVE/
+            // FINISHED keeps its normal badge, since Court Booking never
+            // interrupts a match already in progress, only blocks a NEW one
+            // from being assigned onto a reserved slot.
+            <span style={styles.resultTag("loss")}>RESERVED</span>
+          ) : (
+            <span style={styles.statusTag(court.status)}>
+              {court.awaitingPair
+                ? "WAITING"
+                : court.status === "open"
+                  ? "OPEN"
+                  : court.status === "dispatching"
+                    ? "CALLING PLAYERS..."
+                    : court.status === "finished"
+                      ? "MATCH POINT"
+                      : "LIVE"}
+            </span>
+          )}
+          {/* Self-Service Score Reporting — see PROJECT.md/FEATURES.md.
+              Immediately next to the LIVE badge, only while the match is
+              actually live (not yet at match point, not mid-pooling-wait) —
+              lets the organizer hand the device to the winning team to type
+              in both final scores directly, instead of tapping +/- for the
+              whole game. Reuses the exact same authoritative reportScore
+              path (lib/utils.js's applyReportedScore) as every other
+              scoring action here; never a separate/parallel completion
+              system. */}
+          {!readOnly && onReportScore && court.status === "live" && !court.awaitingPair && (
+            <button
+              style={styles.reportScoreBtn}
+              onClick={onReportScore}
+              aria-label={`report score for ${courtDisplayName(court)}`}
+              title="Report Score — let the winning team enter both final scores directly"
+            >
+              <ClipboardEdit size={12} strokeWidth={2.5} />
+              Report Score
+            </button>
+          )}
+        </span>
       </div>
 
       {!isLive && !isDispatching && (

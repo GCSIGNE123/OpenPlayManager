@@ -25,6 +25,7 @@ import {
   uid,
   resizeImageToAvatar,
   computeLatecomerPriorityPreview,
+  applyReportedScore,
 } from "./lib/utils.js";
 import {
   holdPlayer as holdPlayerAction,
@@ -1599,6 +1600,26 @@ export default function PickleballOpenPlay() {
     save({ ...state, courts });
   };
 
+  // Self-Service Score Reporting — see PROJECT.md/FEATURES.md and
+  // ReportScoreScreen.jsx. Thin wrapper, same "call the pure function,
+  // save() what it returns" pattern as reassignTeams/editMatchHistoryScore
+  // above: applyReportedScore (lib/utils.js) does every real decision
+  // (validation, re-deriving scoreA/scoreB from ownTeam rather than
+  // trusting a raw winner flag) — this only re-reads the CURRENT court by
+  // index (never a stale snapshot the caller might be holding) and saves
+  // the result. Returns the same { ok, error } shape so the full-screen
+  // reporting view can show a specific message without a second copy of
+  // the validation logic. A rejected report never calls save() at all —
+  // no partial/inconsistent state is ever written.
+  const reportScore = (courtIdx, ownTeam, ownScore, opponentScore) => {
+    const court = state.courts[courtIdx];
+    const result = applyReportedScore(court, ownTeam, ownScore, opponentScore);
+    if (!result.ok) return result;
+    const courts = state.courts.map((c, i) => (i === courtIdx ? result.court : c));
+    save({ ...state, courts });
+    return result;
+  };
+
   const endMatch = (courtIdx) => {
     // "Undo last round" restores this exact pre-match state (court still
     // live with its original teams/score, players' stats and rotation
@@ -2603,6 +2624,7 @@ export default function PickleballOpenPlay() {
                   fillAllCourts={fillAllCourts}
                   adjustScore={adjustScore}
                   declareWinner={declareWinner}
+                  reportScore={reportScore}
                   endMatch={endMatch}
                   reassignTeams={reassignTeams}
                   substitutePlayer={substitutePlayer}

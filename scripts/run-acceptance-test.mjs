@@ -28,6 +28,7 @@ import {
   dissolveMatchupIfReserved,
   recordRotationHistory,
   reservedMatchupIds,
+  applyReportedScore,
 } from "../src/lib/utils.js";
 import { calculatePerformanceRating } from "../src/lib/performanceRating.js";
 import { uid } from "../src/lib/random.js";
@@ -321,6 +322,63 @@ assert("History", "matchHistory has exactly 1 completed game recorded", state.ma
 const historyEntry = state.matchHistory[0];
 assert("History", "history entry has round/court/teams/score/winner/endedAt — the reusable shape PROJECT.md documents", ["round", "court", "teamA", "teamB", "winner", "scoreA", "scoreB", "endedAt"].every((k) => k in historyEntry));
 assert("History", "history entry is immutable player-id data, not display strings (names resolved at render/export time)", typeof historyEntry.teamA[0] === "string" && !historyEntry.teamA[0].includes(" "));
+
+// ---------------------------------------------------------------------
+// Self-Service Score Reporting — applyReportedScore (lib/utils.js) is the
+// SAME function PickleballOpenPlay.jsx's reportScore calls directly, so
+// this exercises the real, actual implementation, not a miniature
+// reimplementation (unlike adjustScore/endMatch above, which are closures
+// only reachable from inside the component). Runs against an isolated
+// mock court — never state.courts[1], so it can't disturb the "Court 2
+// still live" End Session checks that follow.
+// ---------------------------------------------------------------------
+section("14. Self-Service Score Reporting");
+
+{
+  const liveCourt = { number: 9, status: "live", teamA: ["px1", "px2"], teamB: ["px3", "px4"], scoreA: 3, scoreB: 5 };
+
+  const win = applyReportedScore(liveCourt, "A", 11, 7);
+  assert("Score Reporting", "a valid submission (own > opponent) succeeds", win.ok === true);
+  assert("Score Reporting", "scoreA/scoreB are re-derived from ownTeam, not merely echoed", win.ok && win.court.scoreA === 11 && win.court.scoreB === 7);
+  assert("Score Reporting", "court is marked 'finished' on success — the SAME terminal state adjustScore reaches at game point, no parallel completion system", win.ok && win.court.status === "finished");
+  assert("Score Reporting", "team membership is untouched by a score report", win.ok && win.court.teamA.length === 2 && win.court.teamB.length === 2);
+
+  const winOtherSide = applyReportedScore(liveCourt, "B", 15, 13);
+  assert("Score Reporting", "supports match formats other than 11 (e.g. 15-13) — no hardcoded winning score", winOtherSide.ok && winOtherSide.court.scoreA === 13 && winOtherSide.court.scoreB === 15);
+
+  const tie = applyReportedScore(liveCourt, "A", 10, 10);
+  assert("Score Reporting", "a tied score is rejected", tie.ok === false);
+
+  const loss = applyReportedScore(liveCourt, "A", 7, 11);
+  assert("Score Reporting", "a submission where the 'own' team's score is LOWER is rejected — a client-side winner flag alone is never trusted", loss.ok === false);
+
+  const negative = applyReportedScore(liveCourt, "A", -1, 5);
+  assert("Score Reporting", "a negative score is rejected", negative.ok === false);
+
+  const nonInteger = applyReportedScore(liveCourt, "A", 11.5, 7);
+  assert("Score Reporting", "a non-integer score is rejected", nonInteger.ok === false);
+
+  const missingBoth = applyReportedScore(liveCourt, "A", undefined, undefined);
+  assert("Score Reporting", "missing/undefined scores are rejected, not coerced to 0", missingBoth.ok === false);
+
+  const badTeam = applyReportedScore(liveCourt, "C", 11, 7);
+  assert("Score Reporting", "an invalid team identifier is rejected", badTeam.ok === false);
+
+  const openCourt = { number: 9, status: "open", teamA: [], teamB: [], scoreA: 0, scoreB: 0 };
+  const onOpenCourt = applyReportedScore(openCourt, "A", 11, 7);
+  assert("Score Reporting", "a court that is no longer live/finished (e.g. already ended and reset to open) is not reportable", onOpenCourt.ok === false);
+
+  const missingCourt = applyReportedScore(null, "A", 11, 7);
+  assert("Score Reporting", "a missing/deleted court is not reportable rather than throwing", missingCourt.ok === false);
+
+  // Duplicate-submit safety — the SAME call applied twice in a row (as a
+  // duplicate tap would) must not corrupt or double-apply anything; the
+  // second call is simply evaluated fresh against the (now-finished)
+  // court and still produces the identical, correct result.
+  const firstTap = applyReportedScore(liveCourt, "A", 11, 9);
+  const secondTap = applyReportedScore(firstTap.court, "A", 11, 9);
+  assert("Score Reporting", "an identical duplicate submission after the first succeeds is idempotent, not additive or corrupting", secondTap.ok && secondTap.court.scoreA === 11 && secondTap.court.scoreB === 9);
+}
 
 // ---------------------------------------------------------------------
 // Step 5 (End Session) — logic-layer check only; the actual Supabase

@@ -13,6 +13,7 @@ import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import FixedPartnerPanel from "./FixedPartnerPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
 import LatecomerPriorityDialog from "./LatecomerPriorityDialog.jsx";
+import ReportScoreScreen from "./ReportScoreScreen.jsx";
 
 // Queue Activity Log — see PROJECT.md/FEATURES.md. One shared, generic log
 // (state.queueActivityLog) holds every kind of entry Queue Management and
@@ -99,6 +100,7 @@ export default function ScorerView({
   fillAllCourts,
   adjustScore,
   declareWinner,
+  reportScore,
   endMatch,
   reassignTeams,
   substitutePlayer,
@@ -178,6 +180,15 @@ export default function ScorerView({
   // deep via CourtCard -> TeamRow -> PlayerChip, so this state lives here
   // rather than threading a dialog down through all three).
   const [confirmingCheckoutId, setConfirmingCheckoutId] = useState(null);
+  // Self-Service Score Reporting — see PROJECT.md/FEATURES.md. Just the
+  // index of the court whose full-screen "Report Score" view is open, or
+  // null. The view itself always reads state.courts[reportingCourtIdx]
+  // fresh on every render (see its render call below) rather than a
+  // frozen snapshot, so an organizer action elsewhere (End match, Cancel
+  // match, reassign teams) while the view is open is reflected the moment
+  // it happens — see ReportScoreScreen.jsx's own "no longer reportable"
+  // handling for what happens then.
+  const [reportingCourtIdx, setReportingCourtIdx] = useState(null);
   // Redesign Scorer Tab for Clarity — expanded log defaults to only the
   // latest 5 entries ("Showing latest N of M"); "View full log" reveals the
   // rest without changing the collapsed/expanded state itself.
@@ -457,6 +468,7 @@ export default function ScorerView({
                 onRepeatAnnouncement={() => repeatAnnouncement(court.number)}
                 onRename={renameCourt ? (name) => renameCourt(court.number, name) : null}
                 onCancelLiveMatch={cancelLiveMatch ? () => cancelLiveMatch(court.number) : null}
+                onReportScore={reportScore ? () => setReportingCourtIdx(i) : null}
                 hideAvatar
               />
             );
@@ -711,6 +723,22 @@ export default function ScorerView({
           players={state.players}
           onCancel={onCancelLatecomerPriority}
           onApply={onApplyLatecomerPriority}
+        />
+      )}
+
+      {/* Self-Service Score Reporting — see PROJECT.md/FEATURES.md. Reads
+          state.courts[reportingCourtIdx] fresh every render (never a
+          frozen snapshot from the moment "Report Score" was tapped), so
+          the view immediately reflects the organizer ending, cancelling,
+          or reassigning this exact match while it's open — see
+          ReportScoreScreen.jsx's own handling of that court becoming null
+          or no longer live. */}
+      {reportingCourtIdx !== null && (
+        <ReportScoreScreen
+          court={state.courts[reportingCourtIdx]}
+          players={state.players}
+          onSubmit={(ownTeam, ownScore, opponentScore) => reportScore(reportingCourtIdx, ownTeam, ownScore, opponentScore)}
+          onClose={() => setReportingCourtIdx(null)}
         />
       )}
     </div>

@@ -589,6 +589,30 @@ export const styles = {
     alignItems: "center",
     marginBottom: 12,
   },
+  // Self-Service Score Reporting — groups the status badge (LIVE/MATCH
+  // POINT/etc.) with the "Report Score" button so courtHeadRow's own
+  // space-between layout still only ever sees two children (the court's
+  // name badge, and this group), regardless of whether Report Score is
+  // shown.
+  courtHeadRightGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  reportScoreBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    background: "var(--ball)",
+    color: "#1a1a1a",
+    border: "none",
+    borderRadius: 7,
+    padding: "5px 9px",
+    fontWeight: 700,
+    fontSize: 10.5,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
   courtBadge: {
     display: "inline-flex",
     alignItems: "center",
@@ -2918,6 +2942,70 @@ export const styles = {
     justifyContent: "flex-end",
     gap: 8,
     marginTop: 18,
+  },
+  // Self-Service Score Reporting — see ReportScoreScreen.jsx. A full-screen
+  // (not small centered-dialog) card, sized for a phone/tablet held
+  // courtside — reuses dialogOverlay as-is (already position:fixed,
+  // inset:0) but the card itself takes the full viewport height rather
+  // than dialogCard's own maxHeight:90vh/maxWidth:420 — this is a
+  // dedicated screen, not a small confirmation popup.
+  reportScoreCard: {
+    background: "var(--color-surface)",
+    borderRadius: 12,
+    border: "1.5px solid var(--line)",
+    padding: 20,
+    width: "100%",
+    maxWidth: 480,
+    maxHeight: "92vh",
+    overflowY: "auto",
+  },
+  reportScoreStaleBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
+    padding: "24px 8px",
+  },
+  reportScoreTeamPicker: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 16,
+  },
+  reportScoreTeamBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    background: "var(--color-surface)",
+    color: "var(--ink)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 9,
+    padding: "16px 12px",
+    fontWeight: 700,
+    fontSize: 15,
+    cursor: "pointer",
+  },
+  reportScoreTeamBtnActive: {
+    background: "var(--ball)",
+    borderColor: "var(--ball)",
+    color: "#1a1a1a",
+  },
+  reportScoreInputRow: {
+    display: "flex",
+    gap: 12,
+    marginBottom: 4,
+  },
+  reportScoreInput: {
+    width: "100%",
+    fontSize: 24,
+    fontWeight: 700,
+    textAlign: "center",
+    padding: "14px 8px",
+    borderRadius: 9,
+    border: "1.5px solid var(--line)",
+    background: "var(--color-surface)",
+    color: "var(--ink)",
   },
   // Session Analytics Engine (Sprint 4A) — a wider variant of dialogCard
   // for a data-heavy report; reuses dialogOverlay/dialogHeadRow/dialogTitle
