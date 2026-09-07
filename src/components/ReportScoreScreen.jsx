@@ -19,12 +19,14 @@ function sameTeamMembers(a, b) {
 // Self-Service Score Reporting — full-screen "Report Score" view opened
 // from a live court's Scorer card (see CourtCard.jsx/ScorerView.jsx). Lets
 // the winning team enter both final scores directly, courtside, instead of
-// the organizer tapping +/- through the whole game. Persists through the
-// exact same authoritative path every other score change already uses
+// the organizer tapping +/- through the whole game AND then separately
+// pressing "End match & requeue players" — a valid submission now performs
+// BOTH in one step. Persists through the exact same authoritative path
 // (PickleballOpenPlay.jsx's reportScore -> lib/utils.js's
-// applyReportedScore -> save()) — no parallel/second completion system,
-// no client-trusted "winner" flag (the write itself re-derives the winner
-// from the two scores).
+// applyReportedScore for validation, then straight into endMatch — the
+// SAME function the manual "End match & requeue players" button calls) —
+// no parallel/second completion system, no client-trusted "winner" flag
+// (the write itself re-derives the winner from the two scores).
 //
 // `court` is always the LIVE, current court from state.courts — passed
 // down fresh on every ScorerView render, never a frozen snapshot — so an
@@ -85,12 +87,25 @@ export default function ReportScoreScreen({ court, players, onSubmit, onClose })
     setSubmitting(true);
     setError(null);
     try {
-      const result = onSubmit(ownTeam, ownScore, opponentScore);
+      // expectedTeamIds — the ORIGINAL team members this view opened
+      // with, threaded through to the actual mutation (see
+      // PickleballOpenPlay.jsx's reportScore) as a second, server-side
+      // "is this still the same match" check — never trusting only this
+      // screen's own `reportable` guard above, which is client-side and
+      // could theoretically miss a race in the instant between its last
+      // render and this click.
+      const result = onSubmit(ownTeam, ownScore, opponentScore, [...(original.teamA || []), ...(original.teamB || [])]);
       if (result && result.ok === false) {
         setError(result.error || "Couldn't submit this score. Please try again.");
         setSubmitting(false);
         return;
       }
+      // Submit Score now performs the FULL finalization (match history,
+      // stats, rotation, court release, next-matchup dispatch) in one
+      // authoritative step — see reportScore/endMatch. A truthy, non-{ok:
+      // false} result means that already happened synchronously; closing
+      // immediately is correct, not premature — there is no separate
+      // "now wait for the organizer" step left to perform.
       onClose();
     } catch {
       setError("Couldn't submit this score. Please try again.");
@@ -179,7 +194,7 @@ export default function ReportScoreScreen({ court, players, onSubmit, onClose })
           </button>
           <button type="button" style={{ ...styles.primaryBtn, ...(!canSubmit ? styles.btnDisabled : {}) }} onClick={handleSubmit} disabled={!canSubmit}>
             <Trophy size={14} strokeWidth={2.5} />
-            {submitting ? "Submitting…" : "Submit Score"}
+            {submitting ? "Finalizing…" : "Submit Score"}
           </button>
         </div>
       </div>

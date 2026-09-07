@@ -356,6 +356,18 @@ export default function PickleballOpenPlay() {
   // ref avoids adding a function to save()'s own useCallback dependency
   // array that would otherwise have to be defined before save() itself.
   const scheduleAnnouncementsRef = useRef(() => {});
+  // Self-Service Score Reporting — Match Finalization Idempotency. See
+  // endMatch's own comment for why this exists: a genuine double-tap on
+  // "Submit Score," or a self-report racing the organizer's manual "End
+  // match & requeue players" on the exact same match, must never both run
+  // the full finalization (duplicate matchHistory entry, players requeued
+  // twice, ratings/stats applied twice). Keyed by courtIdx + this
+  // match's OWN team member ids (not courtIdx alone) — a genuinely
+  // different, later match immediately re-dispatched to the same court
+  // index is a different key and is never blocked by this. Cleared once
+  // save()'s own returned promise settles, so the guard's lifetime is
+  // exactly one finalize-and-persist cycle, never left stuck.
+  const finalizingMatchesRef = useRef(new Set());
 
   const load = useCallback(async () => {
     if (!sessionCode) return;
@@ -1601,31 +1613,75 @@ export default function PickleballOpenPlay() {
   };
 
   // Self-Service Score Reporting — see PROJECT.md/FEATURES.md and
-  // ReportScoreScreen.jsx. Thin wrapper, same "call the pure function,
-  // save() what it returns" pattern as reassignTeams/editMatchHistoryScore
-  // above: applyReportedScore (lib/utils.js) does every real decision
-  // (validation, re-deriving scoreA/scoreB from ownTeam rather than
-  // trusting a raw winner flag) — this only re-reads the CURRENT court by
-  // index (never a stale snapshot the caller might be holding) and saves
-  // the result. Returns the same { ok, error } shape so the full-screen
-  // reporting view can show a specific message without a second copy of
-  // the validation logic. A rejected report never calls save() at all —
-  // no partial/inconsistent state is ever written.
-  const reportScore = (courtIdx, ownTeam, ownScore, opponentScore) => {
+  // ReportScoreScreen.jsx. applyReportedScore (lib/utils.js) does every
+  // real validation decision (both scores present/non-negative integers,
+  // no tie, re-deriving scoreA/scoreB from ownTeam rather than trusting a
+  // raw winner flag). Once a report is valid, this does NOT stop at
+  // status:"finished" waiting for the organizer — it immediately runs the
+  // exact same authoritative finalization endMatch already performs for
+  // the manual "End match & requeue players" button (stats, matchHistory,
+  // rotation, court release, and — via save()'s own always-on Smart Court
+  // Dispatch step — automatic dispatch of the next eligible matchup onto
+  // this same court). No parallel/second completion system: endMatch is
+  // called directly, on a courts array with ONLY this court's score
+  // patched in (courtsOverride) — never a second read of state.courts
+  // that could disagree with what was just validated.
+  //
+  // `expectedTeamIds`: the exact team member ids ReportScoreScreen
+  // captured when it first opened (see its own originalCourtRef) — a
+  // second, server-side check (never trusting the client screen's own
+  // "still reportable" check alone) that THIS is still the same match,
+  // not one the organizer already ended/reassigned/requeued in the
+  // meantime (see the Concurrent Organizer Action review). A stale/
+  // no-longer-matching match is rejected before anything is written.
+  const reportScore = (courtIdx, ownTeam, ownScore, opponentScore, expectedTeamIds) => {
     const court = state.courts[courtIdx];
+    if (expectedTeamIds) {
+      const currentIds = new Set([...(court?.teamA || []), ...(court?.teamB || [])]);
+      const expected = new Set(expectedTeamIds);
+      const sameMatch = currentIds.size === expected.size && [...currentIds].every((id) => expected.has(id));
+      if (!sameMatch) {
+        return { ok: false, error: "This match is no longer reportable — it was already ended or changed." };
+      }
+    }
     const result = applyReportedScore(court, ownTeam, ownScore, opponentScore);
     if (!result.ok) return result;
-    const courts = state.courts.map((c, i) => (i === courtIdx ? result.court : c));
-    save({ ...state, courts });
+    const courtsOverride = state.courts.map((c, i) => (i === courtIdx ? result.court : c));
+    endMatch(courtIdx, courtsOverride);
     return result;
   };
 
-  const endMatch = (courtIdx) => {
+  // `courtsOverride` — Self-Service Score Reporting's own hook into this
+  // SAME authoritative function (see reportScore above): when set, this
+  // is state.courts with ONLY the just-reported court's score/status
+  // patched in, so every read below (the court's own score/teams, its
+  // pooling pair partner, the final court-array rewrite) sees that
+  // freshly-validated result rather than a second, potentially-stale
+  // re-read of state.courts[courtIdx]. undefined for the ordinary manual
+  // "End match & requeue players" / "End match early" button, which is
+  // unchanged — it still just reads state.courts directly.
+  const endMatch = (courtIdx, courtsOverride) => {
+    const sourceCourts = courtsOverride || state.courts;
+    const court = sourceCourts[courtIdx];
+    if (!court) return; // no such court — never operate on undefined
+    // Idempotency guard — see finalizingMatchesRef's own comment above.
+    // Keyed by this SPECIFIC match's players, not just courtIdx, so a
+    // genuinely different match already re-dispatched to the same court
+    // index is never blocked by an in-flight finalize of the previous one.
+    const matchKey = `${courtIdx}:${[...court.teamA, ...court.teamB].slice().sort().join(",")}`;
+    if (finalizingMatchesRef.current.has(matchKey)) return; // already finalizing/just finalized this exact match — never double-run
+    finalizingMatchesRef.current.add(matchKey);
+    const releaseGuard = () => finalizingMatchesRef.current.delete(matchKey);
+
     // "Undo last round" restores this exact pre-match state (court still
     // live with its original teams/score, players' stats and rotation
     // history, matchHistory, queueIds) in one shot — see undoLastRound.
-    const preMatchState = state;
-    const court = state.courts[courtIdx];
+    // Built from sourceCourts so a self-reported match's "pre-match"
+    // snapshot is the state right as it was actually finalized (score
+    // already applied), matching exactly what the manual button's own
+    // preMatchState already looked like (state.courts already carrying
+    // the finished score by the time that button is ever clickable).
+    const preMatchState = courtsOverride ? { ...state, courts: sourceCourts } : state;
     const { teamA, teamB, scoreA, scoreB } = court;
     const playedIds = [...teamA, ...teamB];
     let players = { ...state.players };
@@ -1773,8 +1829,8 @@ export default function PickleballOpenPlay() {
     // "awaitingPair" (committed to pooling when *it* finished), so a phase
     // boundary crossed between the two courts finishing can't strand the
     // partner in that held state forever.
-    const partnerIdx = getPairPartnerIndex(state.courts, courtIdx);
-    const partnerAwaitingPair = partnerIdx !== null && state.courts[partnerIdx]?.awaitingPair;
+    const partnerIdx = getPairPartnerIndex(sourceCourts, courtIdx);
+    const partnerAwaitingPair = partnerIdx !== null && sourceCourts[partnerIdx]?.awaitingPair;
     if (isPoolingRotation(state.rotationMode, phasePlayed) || partnerAwaitingPair) {
       // hold this court (and its pair partner, if also done) instead of
       // requeuing everyone individually — see winnerPoolRound.js. Once both
@@ -1782,20 +1838,26 @@ export default function PickleballOpenPlay() {
       // the queue/nextMatchups (not straight back onto the same 2 courts),
       // so other waiting players get first turn on the courts that just
       // opened up.
-      const { courts, requeueIds, newMatchups } = resolveWinnerPoolMatch(state.courts, players, courtIdx);
+      const { courts, requeueIds, newMatchups } = resolveWinnerPoolMatch(sourceCourts, players, courtIdx);
       const queueIds = [...state.queueIds, ...requeueIds];
       const nextMatchups = [...(state.nextMatchups || []), ...newMatchups];
       setRegenerateSnapshot(null); // stale after this round's requeue/repool
       setLastRoundSnapshot(preMatchState);
-      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory, skillChangeLog });
+      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory, skillChangeLog }).finally(releaseGuard);
       return;
     }
 
     const queueIds = [...state.queueIds, ...playedIds];
-    const courts = state.courts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
+    // Smart Court Dispatch (see save()'s own always-on dispatchAvailableCourts
+    // step) is what actually assigns the next eligible matchup onto this
+    // now-open court — resetCourtForNextMatch below only ever releases it;
+    // dispatch itself is never duplicated here, it's the same single save()
+    // pipeline every other court-freeing action (manual End Match, Cancel
+    // Match, Undo, ...) already goes through.
+    const courts = sourceCourts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
     setRegenerateSnapshot(null); // stale after this round's requeue
     setLastRoundSnapshot(preMatchState);
-    save({ ...state, courts, players, queueIds, matchHistory, skillChangeLog });
+    save({ ...state, courts, players, queueIds, matchHistory, skillChangeLog }).finally(releaseGuard);
   };
 
   // restores the full app state from right before the last "End match"

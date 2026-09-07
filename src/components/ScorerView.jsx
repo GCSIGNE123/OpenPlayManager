@@ -737,7 +737,7 @@ export default function ScorerView({
         <ReportScoreScreen
           court={state.courts[reportingCourtIdx]}
           players={state.players}
-          onSubmit={(ownTeam, ownScore, opponentScore) => reportScore(reportingCourtIdx, ownTeam, ownScore, opponentScore)}
+          onSubmit={(ownTeam, ownScore, opponentScore, expectedTeamIds) => reportScore(reportingCourtIdx, ownTeam, ownScore, opponentScore, expectedTeamIds)}
           onClose={() => setReportingCourtIdx(null)}
         />
       )}

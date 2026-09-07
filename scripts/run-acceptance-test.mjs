@@ -19,7 +19,8 @@
 //
 // Usage: node scripts/run-acceptance-test.mjs
 
-import { emptyCourt, ROTATION_MODES } from "../src/lib/constants.js";
+import { emptyCourt, resetCourtForNextMatch, ROTATION_MODES } from "../src/lib/constants.js";
+import { dispatchAvailableCourts } from "../src/lib/courtDispatch.js";
 import {
   getRotationEngine,
   refreshNextMatchups,
@@ -378,6 +379,152 @@ section("14. Self-Service Score Reporting");
   const firstTap = applyReportedScore(liveCourt, "A", 11, 9);
   const secondTap = applyReportedScore(firstTap.court, "A", 11, 9);
   assert("Score Reporting", "an identical duplicate submission after the first succeeds is idempotent, not additive or corrupting", secondTap.ok && secondTap.court.scoreA === 11 && secondTap.court.scoreB === 9);
+}
+
+// ---------------------------------------------------------------------
+// Self-Service Score Reporting — Full Completion Flow. A valid Submit
+// Score no longer stops at status:"finished" — it runs the SAME
+// finalization the manual "End match & requeue players" button does
+// (PickleballOpenPlay.jsx's endMatch), then relies on save()'s own
+// always-on Smart Court Dispatch step (dispatchAvailableCourts,
+// lib/courtDispatch.js) to immediately redispatch the next eligible
+// matchup onto the very same, now-open court. This mirrors that EXACT
+// non-pooling endMatch sequence using the real, imported library
+// functions endMatch itself calls (recordRotationHistory,
+// resetCourtForNextMatch, dispatchAvailableCourts) — never a
+// reimplementation of the finalize decision itself (applyReportedScore is
+// imported and called for real, unmodified).
+// ---------------------------------------------------------------------
+section("15. Self-Service Score Reporting — Full Completion Flow");
+
+function finalizeSelfReportedMatch(input, courtIdx, ownTeam, ownScore, opponentScore) {
+  const court = input.courts[courtIdx];
+  const result = applyReportedScore(court, ownTeam, ownScore, opponentScore);
+  if (!result.ok) return { ok: false, error: result.error, state: input };
+
+  const finishedCourt = result.court;
+  const { teamA, teamB, scoreA, scoreB } = finishedCourt;
+  const playedIds = [...teamA, ...teamB];
+  let players = { ...input.players };
+  const aWon = scoreA > scoreB;
+  const bWon = scoreB > scoreA;
+  teamA.forEach((id) => {
+    const p = players[id];
+    if (!p) return;
+    players[id] = { ...p, games: (p.games || 0) + 1, wins: (p.wins || 0) + (aWon ? 1 : 0), losses: (p.losses || 0) + (bWon ? 1 : 0), pointsFor: (p.pointsFor || 0) + scoreA, pointsAgainst: (p.pointsAgainst || 0) + scoreB };
+  });
+  teamB.forEach((id) => {
+    const p = players[id];
+    if (!p) return;
+    players[id] = { ...p, games: (p.games || 0) + 1, wins: (p.wins || 0) + (bWon ? 1 : 0), losses: (p.losses || 0) + (aWon ? 1 : 0), pointsFor: (p.pointsFor || 0) + scoreB, pointsAgainst: (p.pointsAgainst || 0) + scoreA };
+  });
+  players = recordRotationHistory(players, teamA, teamB, finishedCourt.number);
+
+  const matchRecord = { round: (input.matchHistory || []).length + 1, court: finishedCourt.number, teamA, teamB, winner: aWon ? "A" : bWon ? "B" : null, scoreA, scoreB, endedAt: Date.now(), phase: null };
+  const matchHistory = [...(input.matchHistory || []), matchRecord];
+  const queueIds = [...input.queueIds, ...playedIds];
+  const courtsAfterReset = input.courts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
+
+  // save()'s own always-on Smart Court Dispatch step — the SAME call
+  // endMatch's save() triggers for every court-freeing action.
+  const dispatchResult = dispatchAvailableCourts({
+    courts: courtsAfterReset,
+    nextMatchups: input.nextMatchups || [],
+    queueIds,
+    players,
+    autoFillCourts: true,
+    isCourtReserved: () => false,
+  });
+
+  return {
+    ok: true,
+    state: {
+      ...input,
+      courts: dispatchResult.courts,
+      nextMatchups: dispatchResult.nextMatchups,
+      queueIds: dispatchResult.queueIds,
+      players,
+      matchHistory,
+    },
+    dispatched: dispatchResult.dispatched,
+  };
+}
+
+// ---- A/B: valid self-reported score (11 and a non-11 format) fully completes ----
+{
+  const base = {
+    players: {
+      a1: { id: "a1", name: "Alfred", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 },
+      a2: { id: "a2", name: "Eubert", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 },
+      b1: { id: "b1", name: "Mae", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 },
+      b2: { id: "b2", name: "Roel", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 },
+      q1: { id: "q1", name: "Queued1" },
+      q2: { id: "q2", name: "Queued2" },
+      q3: { id: "q3", name: "Queued3" },
+      q4: { id: "q4", name: "Queued4" },
+    },
+    courts: [{ number: 1, status: "live", teamA: ["a1", "a2"], teamB: ["b1", "b2"], scoreA: 6, scoreB: 8, assignmentMode: "automatic" }],
+    nextMatchups: [{ id: "nm1", teamA: ["q1", "q2"], teamB: ["q3", "q4"] }],
+    queueIds: [],
+    matchHistory: [],
+  };
+
+  const outcome = finalizeSelfReportedMatch(base, 0, "B", 11, 8);
+  assert("Self-Service Completion", "a valid submission (11-8) is accepted and fully finalized in one step", outcome.ok === true);
+  assert("Self-Service Completion", "exactly one matchHistory entry is recorded for this match", outcome.state.matchHistory.length === 1 && outcome.state.matchHistory[0].scoreA === 8 && outcome.state.matchHistory[0].scoreB === 11 && outcome.state.matchHistory[0].winner === "B");
+  assert("Self-Service Completion", "the winning team's players are credited a win, losing team a loss — same stat bookkeeping as manual End Match", outcome.state.players.b1.wins === 1 && outcome.state.players.a1.losses === 1);
+  assert("Self-Service Completion", "old players (Alfred/Eubert/Mae/Roel) no longer occupy Court 1 — a NEW matchup is there instead", !outcome.state.courts[0].teamA.includes("a1") && !outcome.state.courts[0].teamB.includes("b1"));
+  assert("Self-Service Completion", "the next queued matchup was immediately dispatched onto the SAME court (Court 1), not left open waiting for the organizer", outcome.state.courts[0].status === "dispatching" && outcome.state.courts[0].teamA.includes("q1"));
+  assert("Self-Service Completion", "the dispatched matchup is consumed from nextMatchups exactly once — no duplicate matchup left behind", outcome.state.nextMatchups.length === 0);
+  assert("Self-Service Completion", "the dispatch event log reports exactly one court dispatched, not two", outcome.dispatched.length === 1);
+
+  // B: non-11 final score (15-13) — no hardcoded winning score anywhere in this path
+  const base2 = { ...base, courts: [{ ...base.courts[0], scoreA: 12, scoreB: 12 }] };
+  const outcome2 = finalizeSelfReportedMatch(base2, 0, "A", 15, 13);
+  assert("Self-Service Completion", "a non-11 final score (15-13) completes the exact same full lifecycle", outcome2.ok === true && outcome2.state.matchHistory[0].scoreA === 15 && outcome2.state.matchHistory[0].scoreB === 13);
+  assert("Self-Service Completion", "15-13's winner (Team A) is credited correctly, and the same court still gets redispatched", outcome2.state.players.a1.wins === 1 && outcome2.state.courts[0].status === "dispatching");
+}
+
+// ---- C: duplicate submit safety (data-level) — a second finalize attempt against the ALREADY-finalized court is rejected, never double-applied ----
+{
+  const base = {
+    players: { a1: { id: "a1", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, a2: { id: "a2", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, b1: { id: "b1", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, b2: { id: "b2", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 } },
+    courts: [{ number: 1, status: "live", teamA: ["a1", "a2"], teamB: ["b1", "b2"], scoreA: 9, scoreB: 6, assignmentMode: "automatic" }],
+    nextMatchups: [],
+    queueIds: [],
+    matchHistory: [],
+  };
+  const firstSubmit = finalizeSelfReportedMatch(base, 0, "A", 11, 6);
+  assert("Self-Service Completion", "the first submission of a double-tap succeeds", firstSubmit.ok === true);
+  assert("Self-Service Completion", "exactly one match history entry after the first submission", firstSubmit.state.matchHistory.length === 1);
+
+  // A second call with the exact same courtIdx now sees the ALREADY-reset
+  // court (status:'open' with different/no teams) — the SAME
+  // applyReportedScore status check that protects the manual path also
+  // protects this: it is no longer 'live'/'finished', so it's rejected,
+  // never double-applied. (In the real app, the finalizingMatchesRef guard
+  // in PickleballOpenPlay.jsx additionally blocks a same-tick duplicate
+  // before even reaching this check — see the browser verification.)
+  const secondSubmit = finalizeSelfReportedMatch(firstSubmit.state, 0, "A", 11, 6);
+  assert("Self-Service Completion", "a duplicate submission against the same court after it was already finalized/reset is rejected, not double-applied", secondSubmit.ok === false);
+  assert("Self-Service Completion", "matchHistory still has exactly ONE entry after the rejected duplicate — no double-counting", secondSubmit.state.matchHistory.length === 1);
+  assert("Self-Service Completion", "player stats were not incremented twice by the rejected duplicate", secondSubmit.state.players.a1.wins === 1);
+}
+
+// ---- F: no next matchup available — match still finalizes correctly, court simply stays open ----
+{
+  const base = {
+    players: { a1: { id: "a1", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, a2: { id: "a2", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, b1: { id: "b1", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }, b2: { id: "b2", games: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 } },
+    courts: [{ number: 1, status: "live", teamA: ["a1", "a2"], teamB: ["b1", "b2"], scoreA: 4, scoreB: 11, assignmentMode: "automatic" }],
+    nextMatchups: [], // nothing queued
+    queueIds: [],
+    matchHistory: [],
+  };
+  const outcome = finalizeSelfReportedMatch(base, 0, "B", 11, 4);
+  assert("Self-Service Completion", "with no next matchup available, the match still finalizes correctly (recorded, stats applied)", outcome.ok === true && outcome.state.matchHistory.length === 1);
+  assert("Self-Service Completion", "the court is released to 'open' (existing no-next-match behavior), never left showing the old finished match", outcome.state.courts[0].status === "open" && outcome.state.courts[0].teamA.length === 0);
+  assert("Self-Service Completion", "no fabricated players/matchup ever appear when nothing is queued", outcome.dispatched.length === 0);
+  assert("Self-Service Completion", "the just-finished players are correctly requeued into queueIds (existing behavior), not stranded", ["a1", "a2", "b1", "b2"].every((id) => outcome.state.queueIds.includes(id)));
 }
 
 // ---------------------------------------------------------------------
