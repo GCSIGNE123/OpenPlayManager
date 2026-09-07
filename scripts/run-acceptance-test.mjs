@@ -22,6 +22,16 @@
 import { emptyCourt, resetCourtForNextMatch, ROTATION_MODES } from "../src/lib/constants.js";
 import { dispatchAvailableCourts } from "../src/lib/courtDispatch.js";
 import {
+  CAMERA_IDLE,
+  CAMERA_STARTING,
+  CAMERA_ACTIVE,
+  CAMERA_ERROR,
+  initialCameraLifecycle,
+  cameraLifecycleReducer,
+  mapCameraError,
+  isCameraSupported,
+} from "../src/lib/cameraLifecycle.js";
+import {
   getRotationEngine,
   refreshNextMatchups,
   manuallyReservedIds,
@@ -525,6 +535,79 @@ function finalizeSelfReportedMatch(input, courtIdx, ownTeam, ownScore, opponentS
   assert("Self-Service Completion", "the court is released to 'open' (existing no-next-match behavior), never left showing the old finished match", outcome.state.courts[0].status === "open" && outcome.state.courts[0].teamA.length === 0);
   assert("Self-Service Completion", "no fabricated players/matchup ever appear when nothing is queued", outcome.dispatched.length === 0);
   assert("Self-Service Completion", "the just-finished players are correctly requeued into queueIds (existing behavior), not stranded", ["a1", "a2", "b1", "b2"].every((id) => outcome.state.queueIds.includes(id)));
+}
+
+// ---------------------------------------------------------------------
+// Camera QR Scanner — Preview Regression fix. See
+// CheckInScannerModal.jsx's startCameraStream for the full root-cause
+// writeup: the <video> element used to only mount once camera.state
+// reached 'active', but that transition only ever happened AFTER the code
+// tried (and, because the element didn't exist yet, silently failed) to
+// attach the just-acquired MediaStream to it — so STREAM_ACQUIRED
+// dispatched unconditionally, reporting success with nothing ever
+// actually displayed. These tests cover the pure, exported pieces of that
+// fix (the state machine's own transitions, plus the two new pure helpers)
+// — the getUserMedia()/videoRef wiring itself needs a real browser DOM and
+// is covered by the browser verification pass instead.
+// ---------------------------------------------------------------------
+section("16. Camera QR Scanner — Preview Regression Fix");
+
+{
+  const idle = initialCameraLifecycle();
+  assert("Camera Scanner", "initial lifecycle is 'idle' with no error", idle.state === CAMERA_IDLE && idle.error === "");
+
+  const starting = cameraLifecycleReducer(idle, { type: "START_SCANNING" });
+  assert("Camera Scanner", "START_SCANNING transitions idle -> starting", starting.state === CAMERA_STARTING);
+
+  const active = cameraLifecycleReducer(starting, { type: "STREAM_ACQUIRED" });
+  assert("Camera Scanner", "STREAM_ACQUIRED transitions starting -> active, clearing any error", active.state === CAMERA_ACTIVE && active.error === "");
+
+  const failed = cameraLifecycleReducer(starting, { type: "FAILED", message: "Camera permission was denied." });
+  assert("Camera Scanner", "FAILED transitions starting -> error, carrying the message", failed.state === CAMERA_ERROR && failed.error === "Camera permission was denied.");
+
+  const failedNoMessage = cameraLifecycleReducer(starting, { type: "FAILED" });
+  assert("Camera Scanner", "FAILED with no message falls back to the generic camera-permission message, never a blank error", failedNoMessage.error.length > 0);
+
+  const resetFromActive = cameraLifecycleReducer(active, { type: "RESET" });
+  assert("Camera Scanner", "RESET always returns to idle regardless of the prior state (mode-switch/mount safety)", resetFromActive.state === CAMERA_IDLE && resetFromActive.error === "");
+
+  const resetFromError = cameraLifecycleReducer(failed, { type: "RESET" });
+  assert("Camera Scanner", "RESET from an error state also clears the error message — a stale error never bleeds into the next attempt", resetFromError.state === CAMERA_IDLE && resetFromError.error === "");
+
+  assert("Camera Scanner", "an unknown action never changes the current state (defensive default)", cameraLifecycleReducer(active, { type: "SOMETHING_ELSE" }) === active);
+}
+
+// ---- mapCameraError — human-readable messages per real getUserMedia() rejection type ----
+{
+  assert("Camera Scanner", "NotAllowedError (permission denied) maps to a message that explains permission is required", /permission/i.test(mapCameraError({ name: "NotAllowedError" })));
+  assert("Camera Scanner", "PermissionDeniedError (older browsers' name for the same thing) maps the same way", /permission/i.test(mapCameraError({ name: "PermissionDeniedError" })));
+  assert("Camera Scanner", "NotFoundError (no camera hardware) maps to a message naming the real condition, and points at USB QR Scanner as the fallback", /no camera/i.test(mapCameraError({ name: "NotFoundError" })) && /usb/i.test(mapCameraError({ name: "NotFoundError" })));
+  assert("Camera Scanner", "NotReadableError (camera already in use) maps to a message naming that real condition", /already/i.test(mapCameraError({ name: "NotReadableError" })));
+  assert("Camera Scanner", "an unrecognized/missing error name falls back to the existing generic message, never a raw technical string", mapCameraError({ name: "SomeWeirdBrowserQuirk" }).length > 0 && mapCameraError(undefined).length > 0);
+}
+
+// ---- isCameraSupported — the upfront browser-capability check ----
+// Node's own built-in `navigator` global is a getter-only property (can't
+// be reassigned directly) — defineProperty with configurable:true lets
+// this stub it out and restore the original afterward without leaking
+// into any later section of the script.
+{
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  function setNavigator(value) {
+    Object.defineProperty(globalThis, "navigator", { value, configurable: true, writable: true });
+  }
+  try {
+    setNavigator({ mediaDevices: { getUserMedia: () => {} } });
+    assert("Camera Scanner", "a browser exposing mediaDevices.getUserMedia is reported as supported", isCameraSupported() === true);
+
+    setNavigator({ mediaDevices: {} });
+    assert("Camera Scanner", "mediaDevices present but getUserMedia missing is reported as NOT supported", isCameraSupported() === false);
+
+    setNavigator({});
+    assert("Camera Scanner", "no mediaDevices at all (older/non-HTTPS context) is reported as NOT supported, never throws", isCameraSupported() === false);
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, "navigator", originalDescriptor);
+  }
 }
 
 // ---------------------------------------------------------------------

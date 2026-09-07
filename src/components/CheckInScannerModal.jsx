@@ -53,7 +53,16 @@ import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
 import { normalizeUsbScanPayload } from "../lib/usbScanner.js";
 import { SCAN_MODE_STORAGE_KEY, resolveScanMode } from "../lib/scanModePreference.js";
-import { CAMERA_IDLE, CAMERA_STARTING, CAMERA_ACTIVE, CAMERA_ERROR, initialCameraLifecycle, cameraLifecycleReducer } from "../lib/cameraLifecycle.js";
+import {
+  CAMERA_IDLE,
+  CAMERA_STARTING,
+  CAMERA_ACTIVE,
+  CAMERA_ERROR,
+  initialCameraLifecycle,
+  cameraLifecycleReducer,
+  mapCameraError,
+  isCameraSupported,
+} from "../lib/cameraLifecycle.js";
 
 function loadRememberedScanMode() {
   try {
@@ -133,19 +142,60 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   // startScanning() below, itself only ever called from the explicit
   // "Start Scanning"/"Try Again" button handlers. Never called from a
   // mount effect or a mode switch.
+  //
+  // Camera Preview Regression fix — see PROJECT.md. The <video> element
+  // below is now mounted for BOTH camera.state 'starting' and 'active'
+  // (not only 'active'), specifically so videoRef.current already exists
+  // by the time this function's getUserMedia() promise resolves — dispatch
+  // START_SCANNING (in startScanning, before this ever runs) puts
+  // camera.state at 'starting' and lets that render commit while this
+  // function is still awaiting the permission prompt. Before this fix, the
+  // <video> tag only rendered once camera.state reached 'active', which
+  // only happened AFTER this exact assignment attempt — videoRef.current
+  // was always null here, so `if (videoRef.current)` silently skipped
+  // srcObject/play() entirely, yet STREAM_ACQUIRED still dispatched
+  // unconditionally right after: the lifecycle reported success with no
+  // stream ever attached to any DOM element, so nothing ever appeared.
+  // Now a missing videoRef.current is treated as a real failure (see the
+  // guard below) instead of a silent no-op "success," per direction ("do
+  // not treat an unplayed video element as a successfully initialized
+  // scanner").
   const startCameraStream = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      dispatchCamera({ type: "STREAM_ACQUIRED" });
-      tick();
-    } catch (e) {
-      dispatchCamera({ type: "FAILED", message: "Couldn't access the camera. Check your browser's camera permission." });
+    if (!isCameraSupported()) {
+      dispatchCamera({ type: "FAILED", message: "This browser doesn't support camera access. Use USB QR Scanner instead." });
+      return;
     }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    } catch (e) {
+      dispatchCamera({ type: "FAILED", message: mapCameraError(e) });
+      return;
+    }
+    if (!videoRef.current) {
+      // The modal was closed, or the mode was switched away, in the
+      // instant between requesting the camera and it actually being
+      // granted — stop the just-acquired stream immediately (never leave
+      // an orphaned track running) and surface this as a real failure
+      // rather than a stream nothing will ever display.
+      stream.getTracks().forEach((t) => t.stop());
+      dispatchCamera({ type: "FAILED", message: "Couldn't start the camera preview. Please try again." });
+      return;
+    }
+    streamRef.current = stream;
+    videoRef.current.srcObject = stream;
+    try {
+      await videoRef.current.play();
+    } catch (e) {
+      // A rejected play() promise (autoplay policy, device asleep, etc.)
+      // means there is no actual live preview — never report this as a
+      // successfully started scanner.
+      stopCamera();
+      dispatchCamera({ type: "FAILED", message: "Couldn't start the camera preview. Please try again." });
+      return;
+    }
+    dispatchCamera({ type: "STREAM_ACQUIRED" });
+    tick();
   };
 
   // Mints a fresh single-use challenge, then requests the camera. Called
@@ -338,24 +388,36 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
           </div>
         )}
 
-        {mode === "camera" && !result && camera.state === CAMERA_STARTING && (
-          <div style={{ textAlign: "center" }}>
-            <p style={styles.editHint}>Starting scanner…</p>
-          </div>
-        )}
-
-        {mode === "camera" && !result && camera.state === CAMERA_ACTIVE && (
+        {/* Camera Preview Regression fix — the <video> element is mounted
+            for BOTH 'starting' and 'active' now, not only 'active'. See
+            startCameraStream's own header comment for why: getUserMedia()
+            is awaited while camera.state is already 'starting', so
+            videoRef.current must already point at a real, mounted <video>
+            by the time that promise resolves — it never did before this
+            fix, since the tag only rendered once 'active' was reached,
+            which only happened AFTER the (silently-skipped) attempt to
+            attach the stream to it. The element itself shows nothing
+            until real frames arrive regardless, so mounting it one state
+            earlier is purely a wiring fix, not a visible change once the
+            stream actually starts. */}
+        {mode === "camera" && !result && (camera.state === CAMERA_STARTING || camera.state === CAMERA_ACTIVE) && (
           <div style={{ textAlign: "center" }}>
             <video ref={videoRef} style={{ width: "100%", borderRadius: 10, marginBottom: 12 }} muted playsInline />
-            <p style={styles.editHint}>
-              <Camera size={12} strokeWidth={2.5} style={{ verticalAlign: "middle" }} /> Point the camera at the
-              player's QR code.
-            </p>
-            <div style={styles.dialogActions}>
-              <button type="button" style={styles.secondaryBtn} onClick={closeFromCamera}>
-                Cancel
-              </button>
-            </div>
+            {camera.state === CAMERA_STARTING ? (
+              <p style={styles.editHint}>Starting scanner…</p>
+            ) : (
+              <>
+                <p style={styles.editHint}>
+                  <Camera size={12} strokeWidth={2.5} style={{ verticalAlign: "middle" }} /> Point the camera at the
+                  player's QR code.
+                </p>
+                <div style={styles.dialogActions}>
+                  <button type="button" style={styles.secondaryBtn} onClick={closeFromCamera}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
