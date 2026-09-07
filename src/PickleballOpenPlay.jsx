@@ -80,6 +80,7 @@ import HistoryView from "./components/HistoryView.jsx";
 import SessionAnalyticsReport from "./components/SessionAnalyticsReport.jsx";
 import OpenPlaySessionHistoryScreen from "./components/OpenPlaySessionHistoryScreen.jsx";
 import PaymentView from "./components/PaymentView.jsx";
+import MessagesView from "./components/MessagesView.jsx";
 import TournamentDashboardView from "./components/TournamentDashboardView.jsx";
 import TournamentDisplayView from "./components/TournamentDisplayView.jsx";
 import OpenPlayTVModePage from "./components/OpenPlayTVModePage.jsx";
@@ -120,6 +121,10 @@ export default function PickleballOpenPlay() {
   const { activeVenueId } = useActiveVenue();
   const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | venueManagement | courtBooking | ratings
   const [sessionCode, setSessionCode] = useState(null);
+  // Open Play Messaging — see MessagesView.jsx's own header comment for
+  // why this is only ever refreshed while that view is actually mounted
+  // (no background polling elsewhere in the app for this).
+  const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
   // Tournament Display Mode ("TV Mode") — separate from `sessionCode`
   // above so a second device can land directly on Display Mode via a
   // `?display=CODE` URL without ever going through Create/Join at all.
@@ -2588,6 +2593,7 @@ export default function PickleballOpenPlay() {
                   { id: "scorer", label: "Scorer" },
                   { id: "payment", label: "Payment" },
                   { id: "history", label: "History" },
+                  { id: "messages", label: "Messages" },
                   ...(state.sessionType === "tournament" ? [{ id: "tournament", label: "Tournament" }] : []),
                 ].map((t) => (
                   <button
@@ -2596,6 +2602,9 @@ export default function PickleballOpenPlay() {
                     style={{ ...styles.navBtn, ...(view === t.id ? styles.navBtnActive : {}) }}
                   >
                     {t.label}
+                    {t.id === "messages" && messagesUnreadCount > 0 && (
+                      <span style={styles.messagesTabBadge}>{messagesUnreadCount}</span>
+                    )}
                   </button>
                 ))}
               </nav>
@@ -2662,6 +2671,14 @@ export default function PickleballOpenPlay() {
                   players={state.players}
                   onSetPayment={setPlayerPayment}
                   paymentStats={derivePaymentStats(state.players)}
+                />
+              )}
+
+              {loaded && view === "messages" && (
+                <MessagesView
+                  sessionCode={sessionCode}
+                  sessionStartedAt={state.sessionStartedAt}
+                  onUnreadCountChange={setMessagesUnreadCount}
                 />
               )}
 
