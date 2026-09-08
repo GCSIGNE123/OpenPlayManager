@@ -15,6 +15,18 @@
 // Edge Function.
 import { SESSION_AUTO_END_AGE_MS, SESSION_INACTIVITY_AGE_MS } from "./constants.js";
 
+// Clock-Skew Tolerance — see PickleKing Player's analogous
+// src/lib/liveSessionLifecycle.js for the live production case this fixes
+// (kept in sync here per this file's own header: Player must never
+// recognize a looser or different "current" definition than Pro does).
+// sessionStartedAt/lastActivityAt are written from whatever DEVICE last
+// touched the session, never a single trusted server clock — ordinary
+// clock drift between devices (a phone or laptop a few minutes fast) must
+// never make an actively-running session look stale. Only a timestamp
+// further in the future than this is still treated as implausible/
+// fail-closed.
+export const CLOCK_SKEW_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes
+
 // A session is current only if BOTH hold:
 //   (now - sessionStartedAt) < SESSION_AUTO_END_AGE_MS        (3-day ceiling, existing rule)
 //   (now - lastActivityAt)   < SESSION_INACTIVITY_AGE_MS      (24h inactivity, new rule)
@@ -29,7 +41,7 @@ export function isSessionCurrent(state, now = Date.now(), { maxAgeMs = SESSION_A
   const lastActivityAt = typeof state.lastActivityAt === "number" && Number.isFinite(state.lastActivityAt) ? state.lastActivityAt : startedAt;
   const age = now - startedAt;
   const inactivity = now - lastActivityAt;
-  if (age < 0 || inactivity < 0) return false; // future-dated timestamp — never treated as "fresh"
+  if (age < -CLOCK_SKEW_TOLERANCE_MS || inactivity < -CLOCK_SKEW_TOLERANCE_MS) return false; // far-future timestamp — never treated as "fresh"
   return age < maxAgeMs && inactivity < maxInactivityMs;
 }
 
