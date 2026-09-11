@@ -664,7 +664,12 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
   const room = Math.max(0, maxUpcoming - existingMatchups.length);
   if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase }, true);
+  // `priority` also reaches the engine so BalancedRotationEngine's Stage 1
+  // fairness SELECTION can order its waiting stack by the organizer's chosen
+  // key (longest wait by default) — see that engine's header comment.
+  // sortMatchupsByPriority below still runs as the post-hoc matchup re-sort
+  // for every engine, exactly as before.
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, priority: matchmakingPriority }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...existingMatchups, ...ordered.slice(0, room)];
 }
@@ -689,7 +694,7 @@ export function regenerateNextMatchups(queueIds, players, existingMatchups, engi
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
-    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase }, true);
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, priority: matchmakingPriority }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...protectedMatchups, ...ordered.slice(0, room)];
 }
