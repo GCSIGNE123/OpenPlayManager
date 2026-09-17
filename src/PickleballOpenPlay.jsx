@@ -1327,13 +1327,12 @@ export default function PickleballOpenPlay() {
   const quickAddCheckIn = async () => {
     const name = nameInput.trim();
     if (!name) return;
-    // Player Photos & Broadcast Experience — see PROJECT.md. Required for
-    // every newly checked-in walk-in going forward, same rule
-    // CreateSessionScreen's new-player form now enforces — this button's
-    // own `disabled` covers the mouse click, but the Enter-key shortcut
-    // (CheckinView's onKeyDown) calls this function directly, so the guard
-    // needs to live here too.
-    if (!photoDataUrl) return;
+    // Player Photos & Broadcast Experience — see PROJECT.md. Photos are
+    // now OPTIONAL for every newly checked-in walk-in (product decision
+    // reversal — see PROJECT.md's Optional Player Photos note): a
+    // photo-less player is never blocked from checking in. Avatar.jsx's
+    // existing initials/colorForName fallback already covers rendering
+    // for a null photo everywhere this player subsequently appears.
     const skill = skillInput === "intermediate" ? "intermediate" : "beginner";
     const record = emptyPlayerRecord({ firstName: name, displayName: name, photo: photoDataUrl, skill });
     try {

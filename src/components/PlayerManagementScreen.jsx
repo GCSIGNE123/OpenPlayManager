@@ -425,8 +425,8 @@ function PlayerProfile({ player, ratingView, onBack, onSaved }) {
 // A lighter-weight registration form than Create Session's own (no session
 // roster to add to here) — same fields, same emptyPlayerRecord/
 // savePlayerRecord/resizeImageToAvatar, per "reuse the current Player
-// model, do not duplicate business logic." Photo is required, matching
-// the same rule Create Session's new-player form already enforces.
+// model, do not duplicate business logic." Photo is optional here too —
+// see PROJECT.md's Optional Player Photos note.
 function AddPlayerForm({ onBack, onCreated }) {
   const { activeVenueId } = useActiveVenue();
   const [firstName, setFirstName] = useState("");
@@ -445,10 +445,10 @@ function AddPlayerForm({ onBack, onCreated }) {
       setError("First name is required.");
       return;
     }
-    if (!photo) {
-      setError("A profile photo is required to add a new player.");
-      return;
-    }
+    // Player Photos & Broadcast Experience — see PROJECT.md's Optional
+    // Player Photos note. A profile photo is now OPTIONAL here too —
+    // Avatar's existing initials/colorForName fallback covers a
+    // photo-less player everywhere they subsequently render.
     setSaving(true);
     setError("");
     try {
