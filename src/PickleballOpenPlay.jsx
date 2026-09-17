@@ -4,6 +4,8 @@ import { styles, fontImport } from "./styles.js";
 import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
 import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
 import { resolveDatabaseCheckIn, emptyPlayerRecord, savePlayerRecord, fetchPlayer } from "./lib/playerDatabase.js";
+import { supabase } from "./lib/supabaseClient.js";
+import { uploadPlayerPhoto } from "./lib/photoStorage.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -1334,7 +1336,19 @@ export default function PickleballOpenPlay() {
     // existing initials/colorForName fallback already covers rendering
     // for a null photo everywhere this player subsequently appears.
     const skill = skillInput === "intermediate" ? "intermediate" : "beginner";
-    const record = emptyPlayerRecord({ firstName: name, displayName: name, photo: photoDataUrl, skill });
+    const record = emptyPlayerRecord({ firstName: name, displayName: name, photo: null, skill });
+    // Phase 3B: a newly-picked photo is always uploaded to Storage, never
+    // written as base64 — an upload failure never blocks this walk-in from
+    // checking in (same "a save failure doesn't block the walk-in" precedent
+    // this function already follows for savePlayerRecord itself below); the
+    // walk-in simply joins without a photo instead.
+    if (photoDataUrl) {
+      try {
+        record.photo = await uploadPlayerPhoto(supabase, record.id, photoDataUrl);
+      } catch (e) {
+        // upload failed — record.photo stays null, walk-in still proceeds
+      }
+    }
     try {
       await savePlayerRecord(record);
     } catch (e) {
@@ -1375,7 +1389,7 @@ export default function PickleballOpenPlay() {
         recentOpponentIds: [],
         courtCounts: {},
         lastCourt: null,
-        photo: photoDataUrl || null,
+        photo: record.photo, // Phase 3B: the Storage URL just uploaded above (or null) — never the raw photoDataUrl, so the session roster and the Player Database record never disagree
       },
     };
     const queueIds = [...state.queueIds, id];

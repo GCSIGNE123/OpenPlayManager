@@ -11,6 +11,8 @@ import {
   savePlayerRecord,
 } from "../lib/playerDatabase.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
+import { supabase } from "../lib/supabaseClient.js";
+import { uploadPlayerPhoto } from "../lib/photoStorage.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
@@ -181,13 +183,24 @@ export default function CreateSessionScreen({
       lastName,
       displayName: displayName.trim() || trimmedFirst,
       nickname,
-      photo: photoDataUrl || null,
+      photo: null,
       gender: gender || null,
       skill: skillInput,
       duprRating,
       contactNumber,
       notes,
     });
+    // Phase 3B: a newly-picked photo is always uploaded to Storage, never
+    // written as base64 — an upload failure never blocks this player from
+    // joining (same "a save failure doesn't block the roster add" precedent
+    // this function already follows for savePlayerRecord itself below).
+    if (photoDataUrl) {
+      try {
+        record.photo = await uploadPlayerPhoto(supabase, record.id, photoDataUrl);
+      } catch (e) {
+        setSaveError(`Couldn't upload ${record.displayName}'s photo, but they've been added without one.`);
+      }
+    }
     try {
       await savePlayerRecord(record);
       setPlayerDb((db) => [...db, record]);

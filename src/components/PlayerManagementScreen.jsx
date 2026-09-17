@@ -7,6 +7,7 @@ import { RatingEngine } from "../engines/RatingEngine.js";
 import { resizeImageToAvatar } from "../lib/utils.js";
 import { useActiveVenue } from "../context/ActiveVenueContext.jsx";
 import { supabase } from "../lib/supabaseClient.js";
+import { uploadPlayerPhoto, isFreshlyPickedPhoto } from "../lib/photoStorage.js";
 import Avatar from "./Avatar.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SkillToggle from "./SkillToggle.jsx";
@@ -363,13 +364,23 @@ function PlayerProfile({ player, ratingView, onBack, onSaved }) {
     setSaving(true);
     setError("");
     try {
+      // Phase 3B: only a photo the user just picked in this form (a fresh
+      // data: URL, not whatever was already on the record) goes to
+      // Storage — an untouched existing base64/Storage-URL photo is
+      // carried forward exactly as-is, never migrated. If the upload
+      // fails, the whole save fails (matching this form's existing
+      // block-on-error behavior below) rather than writing a broken photo.
+      let photoToSave = photo;
+      if (isFreshlyPickedPhoto(photo, player.photo)) {
+        photoToSave = await uploadPlayerPhoto(supabase, player.id, photo);
+      }
       const updated = await savePlayerRecord({
         ...player,
         firstName: trimmedFirst,
         lastName: lastName.trim() || null,
         contactNumber: contactNumber.trim() || null,
         skill,
-        photo,
+        photo: photoToSave,
       });
       onSaved(updated);
     } catch (e) {
@@ -452,7 +463,16 @@ function AddPlayerForm({ onBack, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      const record = emptyPlayerRecord({ firstName: trimmedFirst, lastName, nickname, photo, skill, contactNumber, venueId: activeVenueId });
+      // Phase 3B: a brand-new player's photo (if any) is always freshly
+      // picked — build the record with photo:null first so the record's
+      // own generated id exists, upload using that id, then attach the
+      // resulting Storage URL before the one savePlayerRecord write. An
+      // upload failure fails the whole create (same block-on-error
+      // behavior this form already has), never a silently photo-less save.
+      const record = emptyPlayerRecord({ firstName: trimmedFirst, lastName, nickname, photo: null, skill, contactNumber, venueId: activeVenueId });
+      if (photo) {
+        record.photo = await uploadPlayerPhoto(supabase, record.id, photo);
+      }
       await savePlayerRecord(record);
       onCreated(record);
     } catch (e) {
