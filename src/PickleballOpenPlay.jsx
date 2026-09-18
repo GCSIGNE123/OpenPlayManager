@@ -6,6 +6,7 @@ import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, 
 import { resolveDatabaseCheckIn, emptyPlayerRecord, savePlayerRecord, fetchPlayer } from "./lib/playerDatabase.js";
 import { supabase } from "./lib/supabaseClient.js";
 import { uploadPlayerPhoto } from "./lib/photoStorage.js";
+import { resolveRealtimeUpdate } from "./lib/realtimeStorageEvents.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
@@ -393,6 +394,36 @@ export default function PickleballOpenPlay() {
       setLoaded(true);
     }
   }, [sessionCode]);
+
+  // Phase 5b egress fix — applies a normal INSERT/UPDATE Realtime payload
+  // directly (no window.storage.get()), keeping load()'s own updatedAt
+  // staleness guard exactly as-is so a slightly-stale echo of the
+  // organizer's own recent save() never clobbers newer local state. A
+  // DELETE (session row gone) is treated the same as load()'s own
+  // catch-all for a missing row: state is left untouched. A payload this
+  // app can't trust (malformed/missing new.value) falls back to load()'s
+  // real, guarded fetch — the same robustness the old discard-and-refetch
+  // always had, just no longer paid for on every ordinary change. The one
+  // legitimate reconnect re-fetch still goes through load() itself, passed
+  // separately as subscribeToKey's onResync argument below.
+  const applyRealtimeSessionChange = useCallback(
+    (payload) => {
+      const result = resolveRealtimeUpdate(payload, stateRef.current.updatedAt);
+      if (result.action === "refetch") {
+        load();
+        return;
+      }
+      if (result.action === "apply") {
+        setState(result.value);
+      }
+      // "stale" and "deleted" both leave state untouched — a stale echo
+      // loses to the newer local state already in stateRef.current; a
+      // deleted row matches load()'s own long-standing behavior of
+      // silently ignoring a missing session row.
+      setLoaded(true);
+    },
+    [load]
+  );
 
   const save = useCallback(
     // 24-Hour Inactivity Auto-Close — see lib/constants.js's SESSION_INACTIVITY_AGE_MS
@@ -889,12 +920,20 @@ export default function PickleballOpenPlay() {
   useEffect(() => {
     if (screen !== "app" || !sessionCode) return;
     load();
-    // Realtime replaces polling: re-fetch whenever Supabase reports a change
-    // to this session's row, so every connected device updates within
-    // roughly a second of any other device's edit.
-    const unsubscribe = window.storage.subscribeToKey(`${STORAGE_PREFIX}${sessionCode}`, true, load);
+    // Realtime replaces polling: apply every change to this session's row
+    // directly from the payload (Phase 5b), so every connected device
+    // updates within roughly a second of any other device's edit — without
+    // a redundant full-row fetch on every single change. load() itself is
+    // still passed as onResync, the one legitimate re-fetch after a
+    // reconnect (see applyRealtimeSessionChange's own comment above).
+    const unsubscribe = window.storage.subscribeToKey(
+      `${STORAGE_PREFIX}${sessionCode}`,
+      true,
+      applyRealtimeSessionChange,
+      load
+    );
     return unsubscribe;
-  }, [screen, sessionCode, load]);
+  }, [screen, sessionCode, load, applyRealtimeSessionChange]);
 
   // ---- session lifecycle ----
 

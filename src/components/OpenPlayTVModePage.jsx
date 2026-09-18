@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize, LogOut } from "lucide-react";
 import { STORAGE_PREFIX } from "../lib/constants.js";
+import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { fetchVenue } from "../lib/venueModel.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
 import { APP_NAME } from "../lib/brand.js";
@@ -369,7 +370,23 @@ export default function OpenPlayTVModePage({ sessionCode, onExit }) {
       }
     };
     loadSession();
-    const unsubscribe = window.storage.subscribeToKey(`${STORAGE_PREFIX}${sessionCode}`, true, loadSession);
+    // Phase 5a egress fix — apply the Realtime payload directly instead of
+    // discarding it and re-fetching the whole row on every change; a fresh
+    // fetch (loadSession, passed as onResync) now only happens after a
+    // genuine reconnect. See lib/realtimeStorageEvents.js's own header.
+    const unsubscribe = window.storage.subscribeToKey(
+      `${STORAGE_PREFIX}${sessionCode}`,
+      true,
+      (payload) => {
+        const event = parseStorageChangePayload(payload);
+        if (!event || event.deleted) {
+          if (!cancelled) setError("Session not found — check the code and try again.");
+          return;
+        }
+        if (!cancelled) setSession(event.value);
+      },
+      loadSession
+    );
     return () => {
       cancelled = true;
       unsubscribe();

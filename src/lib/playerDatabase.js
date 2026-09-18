@@ -19,6 +19,7 @@
 // statistics, rankings, or tournament logic reads this yet. See PROJECT.md.
 import { uid } from "./random.js";
 import { PLAYER_DB_PREFIX } from "./constants.js";
+import { createAsyncCache } from "./asyncCache.js";
 
 // id -> {
 //   id, firstName, lastName (nullable), displayName, nickname (nullable —
@@ -125,23 +126,42 @@ export function generateMemberId() {
   return `M-${uid().slice(0, 6).toUpperCase()}`;
 }
 
-// Every player record in the database. N+1 (list then get-each) rather than
-// a bulk fetch — window.storage has no batch-get, and club-sized rosters
-// (dozens to a few hundred players) make this a non-issue for now; worth
-// revisiting if this ever needs to scale further.
-export async function fetchAllPlayers() {
-  const { keys } = await window.storage.list(PLAYER_DB_PREFIX, true);
-  const records = await Promise.all(
-    keys.map(async (key) => {
-      try {
-        const res = await window.storage.get(key, true);
-        return JSON.parse(res.value);
-      } catch (e) {
-        return null; // a record that vanished between list and get — skip it
-      }
-    })
-  );
+// Phase 5c egress fix — one bulk `select(key, value)`
+// (window.storage.listWithValues) instead of a list() for keys followed
+// by an individual get() per key (330 requests for 330 players,
+// measured). Returned shape/semantics are unchanged: the same records, in
+// whatever order the query returns them (neither this nor the old
+// list()+get() pattern ever guaranteed an order), with a
+// malformed/unparseable row's value skipped exactly as before — the old
+// "vanished between list and get" race is no longer possible (one atomic
+// query instead of two round-trips), which only removes a failure mode,
+// never adds one.
+async function fetchAllPlayersUncached() {
+  const { rows } = await window.storage.listWithValues(PLAYER_DB_PREFIX, true);
+  const records = rows.map((row) => {
+    try {
+      return JSON.parse(row.value);
+    } catch (e) {
+      return null; // malformed stored value — skip it, same as before
+    }
+  });
   return records.filter(Boolean);
+}
+
+// Phase 5d egress fix — up to 8 Pro screens (Check-In, Court Booking,
+// Create Session, League Manager, Membership, Player Management, Ratings,
+// Venue Management) each independently called fetchAllPlayersUncached()
+// on their own mount, every one paying the full ~2.64 MB roster cost even
+// when another screen had just fetched the identical data. Same
+// createAsyncCache primitive (asyncCache.js) already proven for exactly
+// this shape of problem — see that file's own header. savePlayerRecord()
+// below invalidates this cache after every successful write, so an
+// add/edit is visible on the very next fetchAllPlayers() call, never
+// masked by a stale cached roster.
+const playersCache = createAsyncCache(fetchAllPlayersUncached);
+
+export async function fetchAllPlayers() {
+  return playersCache.get();
 }
 
 // Single-record lookup — used by the Club Rating & Ranking Engine to check
@@ -159,6 +179,11 @@ export async function fetchPlayer(id) {
 export async function savePlayerRecord(record) {
   const stamped = { ...record, updatedAt: Date.now() };
   await window.storage.set(`${PLAYER_DB_PREFIX}${record.id}`, JSON.stringify(stamped), true);
+  // Phase 5d — invalidate ONLY after the write succeeds (a rejected set()
+  // above throws and skips this line entirely, leaving a previously
+  // cached roster in place rather than wiping it out for a save that
+  // never actually happened).
+  playersCache.invalidate();
   return stamped;
 }
 

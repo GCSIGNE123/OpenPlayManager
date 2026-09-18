@@ -32,6 +32,11 @@ function makeFakeStorage() {
     async list(prefix) {
       return { keys: [...map.keys()].filter((k) => k.startsWith(prefix)) };
     },
+    async listWithValues(prefix) {
+      return {
+        rows: [...map.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, value]) => ({ key, value })),
+      };
+    },
     _map: map,
   };
 }

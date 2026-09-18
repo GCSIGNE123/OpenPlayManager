@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, LogIn, Search } from "lucide-react";
 import { styles } from "../styles.js";
 import { STORAGE_PREFIX, TOURNAMENT_PREFIX } from "../lib/constants.js";
+import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { PlayerPortalService } from "../engines/PlayerPortalService.js";
 import PlayerTournamentView from "./PlayerTournamentView.jsx";
 import SectionLabel from "./SectionLabel.jsx";
@@ -43,7 +44,23 @@ export default function PlayerPortalScreen({ initialCode, onExit }) {
       }
     };
     loadSession();
-    const unsubscribe = window.storage.subscribeToKey(`${STORAGE_PREFIX}${sessionCode}`, true, loadSession);
+    // Phase 5a egress fix — apply the Realtime payload directly instead of
+    // discarding it and re-fetching the whole row on every change; a fresh
+    // fetch (loadSession, passed as onResync) now only happens after a
+    // genuine reconnect. See lib/realtimeStorageEvents.js's own header.
+    const unsubscribe = window.storage.subscribeToKey(
+      `${STORAGE_PREFIX}${sessionCode}`,
+      true,
+      (payload) => {
+        const event = parseStorageChangePayload(payload);
+        if (!event || event.deleted) {
+          if (!cancelled) setLookupError("Session not found — check the code and try again.");
+          return;
+        }
+        if (!cancelled) setSession(event.value);
+      },
+      loadSession
+    );
     return () => {
       cancelled = true;
       unsubscribe();
@@ -62,7 +79,20 @@ export default function PlayerPortalScreen({ initialCode, onExit }) {
       }
     };
     loadTournament();
-    const unsubscribe = window.storage.subscribeToKey(`${TOURNAMENT_PREFIX}${session.tournamentId}`, true, loadTournament);
+    // Phase 5a egress fix — same direct-apply pattern as loadSession above.
+    // A deleted/malformed event is treated the same as the original
+    // catch-all: leave the last-known tournament state alone (not an
+    // error — the tournament may simply not exist yet).
+    const unsubscribe = window.storage.subscribeToKey(
+      `${TOURNAMENT_PREFIX}${session.tournamentId}`,
+      true,
+      (payload) => {
+        const event = parseStorageChangePayload(payload);
+        if (!event || event.deleted) return;
+        if (!cancelled) setTournament(event.value);
+      },
+      loadTournament
+    );
     return () => {
       cancelled = true;
       unsubscribe();
