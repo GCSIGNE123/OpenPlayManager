@@ -6,6 +6,7 @@ import { getTournamentProgress } from "../lib/tournamentModel.js";
 import { getTournamentEngine } from "../lib/tournament.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { displayStyles as ds } from "../displayStyles.js";
+import { courtDisplayName } from "../lib/utils.js";
 
 const courtAssignmentService = new CourtAssignmentService();
 
@@ -297,7 +298,7 @@ export default function TournamentDisplayView({ sessionCode, onExit }) {
           {courts.map((court) => (
             <div key={court.id} style={ds.courtCard(court.derivedStatus)}>
               <div style={ds.courtCardHead}>
-                <span style={ds.courtName}>{court.name}</span>
+                <span style={ds.courtName}>{courtDisplayName(court)}</span>
                 <span style={ds.courtStatusBadge(court.derivedStatus)}>{court.derivedStatus}</span>
               </div>
               {court.currentMatch ? (

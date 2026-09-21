@@ -9,6 +9,7 @@
 import { STORAGE_PREFIX, SESSION_INDEX_PREFIX, SESSION_AUTO_END_AGE_MS, SESSION_INACTIVITY_AGE_MS } from "./constants.js";
 import { computeSessionAnalyticsReport } from "./sessionAnalytics.js";
 import { saveSessionReport } from "./sessionReportModel.js";
+import { recordPublicFinalSummary } from "./publicFinalSummary.js";
 import { expirationReason } from "./openPlaySessionLifecycle.js";
 
 // The one canonical "end a session" sequence — used identically whether the
@@ -29,6 +30,7 @@ export async function endSessionAndRecord(entry, liveState, reason) {
   } catch (e) {
     // report generation/save failing shouldn't block ending the session
   }
+  await recordPublicFinalSummary(entry.sessionCode, liveState); // best-effort, never throws; before the live row goes
   try {
     await window.storage.delete(`${STORAGE_PREFIX}${entry.sessionCode}`, true);
   } catch (e) {

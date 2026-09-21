@@ -5,6 +5,7 @@ import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { fetchVenue } from "../lib/venueModel.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
 import { APP_NAME } from "../lib/brand.js";
+import { courtDisplayName } from "../lib/utils.js";
 import { tvStyles as ts, tvKeyframes, courtGridDimensions, courtSizeTier, upNextSizeTier, TV_LAYOUT_PRESETS } from "../tvOpenPlayStyles.js";
 import Avatar from "./Avatar.jsx";
 
@@ -208,7 +209,7 @@ function CourtCard({ court, players, columns, rows }) {
         </div>
       )}
       <div style={ts.courtHead}>
-        <span style={ts.courtName(sizeColumns)}>Court {court.number}</span>
+        <span style={ts.courtName(sizeColumns)}>{courtDisplayName(court)}</span>
         <span style={ts.statusBadge(status, sizeColumns)}>{status.toUpperCase()}</span>
       </div>
       <div style={ts.matchupBlock}>
@@ -265,8 +266,11 @@ function LiveCourtsColumn({ courts, players }) {
 // pre-assigned court in this app today, so that line simply never
 // appears yet (no "Court TBD" clutter), but the code path is ready for
 // when Manual Court Assignment or a future scheduling feature attaches one.
-function UpNextColumn({ nextMatchups, players }) {
+function UpNextColumn({ nextMatchups, players, courts }) {
   const upcoming = (nextMatchups || []).slice(0, 4);
+  // match.court is the real (numeric) court identifier; only the DISPLAYED label
+  // resolves through the canonical courtDisplayName when the court object is known
+  const courtLabel = (n) => { const c = (courts || []).find((x) => x.number === n); return c ? courtDisplayName(c) : `Court ${n}`; };
   return (
     <div style={ts.column}>
       <h2 style={ts.columnTitle}>Up Next</h2>
@@ -282,7 +286,7 @@ function UpNextColumn({ nextMatchups, players }) {
                 <div style={ts.upNextHeadRow}>
                   <span style={ts.upNextPosition}>#{i + 1}</span>
                   {isNext && <span style={ts.nextBadge}>⭐ NEXT ON COURT</span>}
-                  {match.court && <span style={ts.upNextCourt}>Court {match.court}</span>}
+                  {match.court && <span style={ts.upNextCourt}>{courtLabel(match.court)}</span>}
                 </div>
                 <TeamInline ids={match.teamA} players={players} photoSize={tier.photo} fontSize={tier.team} />
                 <span style={ts.upNextVs}>vs</span>
@@ -491,7 +495,7 @@ export default function OpenPlayTVModePage({ sessionCode, onExit }) {
           nothing else changes. */}
       <div style={ts.body(TV_LAYOUT_PRESETS.standard)}>
         <LiveCourtsColumn courts={session.courts} players={session.players} />
-        <UpNextColumn nextMatchups={session.nextMatchups} players={session.players} />
+        <UpNextColumn nextMatchups={session.nextMatchups} players={session.players} courts={session.courts} />
         <StandingsColumn players={session.players} />
       </div>
       <div style={ts.footer} />

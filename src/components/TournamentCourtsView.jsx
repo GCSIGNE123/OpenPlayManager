@@ -4,6 +4,7 @@ import { styles } from "../styles.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { CourtQueueService } from "../engines/CourtQueueService.js";
 import SectionLabel from "./SectionLabel.jsx";
+import { courtDisplayName } from "../lib/utils.js";
 
 const courtAssignmentService = new CourtAssignmentService();
 const courtQueueService = new CourtQueueService();
@@ -39,7 +40,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
   return (
     <div style={styles.courtCard(court.derivedStatus)}>
       <div style={styles.courtCardHead}>
-        <span style={styles.courtCardName}>{court.name}</span>
+        <span style={styles.courtCardName}>{courtDisplayName(court)}</span>
         <span style={styles.courtStatusBadge(court.derivedStatus)}>{court.derivedStatus}</span>
       </div>
 
@@ -127,7 +128,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 <option value="">Reassign to…</option>
                 {otherAvailable.map((c) => (
                   <option key={c.id} value={c.number}>
-                    {c.name}
+                    {courtDisplayName(c)}
                   </option>
                 ))}
               </select>
@@ -151,7 +152,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 ?.filter((c) => c.number !== court.number)
                 .map((c) => (
                   <option key={c.id} value={c.number}>
-                    {c.name}
+                    {courtDisplayName(c)}
                   </option>
                 ))}
             </select>
@@ -219,7 +220,7 @@ function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin,
         <span style={styles.queueSourceTag}>{entry.matchType}</span>
         <span style={styles.queueSourceTag}>~{entry.estimatedWaitMinutes}m wait</span>
         {delayed && <span style={styles.queueSourceTag}>DELAYED</span>}
-        {pinnedCourt != null && <span style={styles.queueSourceTag}>PINNED: Court {pinnedCourt}</span>}
+        {pinnedCourt != null && <span style={styles.queueSourceTag}>PINNED: {(() => { const pc = availableCourts.find((c) => c.number === pinnedCourt); return pc ? courtDisplayName(pc) : `Court ${pinnedCourt}`; })()}</span>}
         {isNextMatch && (
           <span style={{ ...styles.courtBadge, background: "var(--ball)" }}>
             <Star size={11} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 3 }} />
@@ -238,7 +239,7 @@ function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin,
           <option value="">Assign to…</option>
           {availableCourts.map((c) => (
             <option key={c.id} value={c.number}>
-              {c.name}
+              {courtDisplayName(c)}
             </option>
           ))}
         </select>
@@ -271,7 +272,7 @@ function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin,
             <option value="">Pin to…</option>
             {availableCourts.map((c) => (
               <option key={c.id} value={c.number}>
-                {c.name}
+                {courtDisplayName(c)}
               </option>
             ))}
           </select>
