@@ -64,11 +64,11 @@ import { buildAndSaveRoundRobinTournament, buildAndSaveDoubleEliminationTourname
 import { applyWaitingTimeTracking, computeSessionAnalyticsReport } from "./lib/sessionAnalytics.js";
 import { saveSessionReport } from "./lib/sessionReportModel.js";
 import { recordSessionCreated, recordSessionEnded } from "./lib/sessionIndexModel.js";
+import { recordPublicFinalSummary } from "./lib/publicFinalSummary.js";
 import { RatingEngine } from "./engines/RatingEngine.js";
 import { fetchAllCourts as fetchAllClubCourts } from "./lib/courtDatabase.js";
 import { fetchAllBookings } from "./lib/bookingModel.js";
 import { getCourtsReservedNow } from "./engines/AvailabilityService.js";
-import { recordPublicFinalSummary } from "./lib/publicFinalSummary.js";
 import { AchievementService } from "./engines/AchievementService.js";
 import { useActiveVenue } from "./context/ActiveVenueContext.jsx";
 import LandingScreen from "./components/LandingScreen.jsx";
@@ -189,12 +189,12 @@ export default function PickleballOpenPlay() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [codeCopied, setCodeCopied] = useState(false);
+  // Share Live — opens the public live-viewer link + QR dialog (Open Play and Tournament alike)
+  const [shareLiveOpen, setShareLiveOpen] = useState(false);
 
   const [accessCodeInput, setAccessCodeInput] = useState("");
   const [accessError, setAccessError] = useState("");
   const [accessChecking, setAccessChecking] = useState(false);
-  // Share Live — opens the public live-viewer link + QR dialog (Open Play and Tournament alike)
-  const [shareLiveOpen, setShareLiveOpen] = useState(false);
   const [validatedAccessCode, setValidatedAccessCode] = useState(null);
 
   const [adminAuthed, setAdminAuthed] = useState(false);
@@ -2432,6 +2432,7 @@ export default function PickleballOpenPlay() {
     } catch (e) {
       // report save failure shouldn't block ending the session
     }
+    await recordPublicFinalSummary(sessionCode, state); // public /live final results; best-effort, never throws
     try {
       await window.storage.delete(`${STORAGE_PREFIX}${sessionCode}`, true);
     } catch (e) {
@@ -2524,7 +2525,6 @@ export default function PickleballOpenPlay() {
           accessChecking={accessChecking}
         />
       )}
-    await recordPublicFinalSummary(sessionCode, state); // public /live final results; best-effort, never throws
 
       {screen === "admin" && !adminAuthed && (
         <AdminLogin
@@ -2606,6 +2606,15 @@ export default function PickleballOpenPlay() {
                     <span style={styles.dot(openCourtsCount > 0)} />
                     <span>{openCourtsCount} court{openCourtsCount === 1 ? "" : "s"} open</span>
                   </div>
+                  {/* Share Live — public, read-only viewer link + QR (served by the Player app, /live/{code}); works for both Open Play and Tournament sessions */}
+                  <button
+                    style={styles.leaveBtn}
+                    onClick={() => setShareLiveOpen(true)}
+                    aria-label="Share Live"
+                    title="Share Live — public link and QR code"
+                  >
+                    <Share2 size={14} strokeWidth={2.5} />
+                  </button>
                   {state.sessionType === "tournament" && (
                     <button
                       style={styles.leaveBtn}
@@ -2667,6 +2676,8 @@ export default function PickleballOpenPlay() {
               </nav>
             </header>
 
+            {shareLiveOpen && <ShareLiveDialog sessionCode={sessionCode} onClose={() => setShareLiveOpen(false)} />}
+
             <div style={styles.kitchenLine} />
 
             <main style={styles.main}>
@@ -2698,15 +2709,6 @@ export default function PickleballOpenPlay() {
               )}
 
               {loaded && view === "standings" && (
-                  {/* Share Live — public, read-only viewer link + QR (served by the Player app, /live/{code}); works for both Open Play and Tournament sessions */}
-                  <button
-                    style={styles.leaveBtn}
-                    onClick={() => setShareLiveOpen(true)}
-                    aria-label="Share Live"
-                    title="Share Live — public link and QR code"
-                  >
-                    <Share2 size={14} strokeWidth={2.5} />
-                  </button>
                 <StandingsView players={state.players} state={state} />
               )}
 
@@ -2777,8 +2779,6 @@ export default function PickleballOpenPlay() {
                   substituteInMatchup={substituteInMatchup}
                   moveToQueue={moveToQueue}
                   setCourtAssignmentMode={setCourtAssignmentMode}
-            {shareLiveOpen && <ShareLiveDialog sessionCode={sessionCode} onClose={() => setShareLiveOpen(false)} />}
-
                   setManualCourtPlayer={setManualCourtPlayer}
                   clearManualCourtPlayer={clearManualCourtPlayer}
                   lockManualCourt={lockManualCourt}
