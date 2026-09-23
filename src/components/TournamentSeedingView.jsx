@@ -4,7 +4,6 @@ import { getTournamentEngine, buildSeedingContext } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
 import { getSeedingStrategy } from "../engines/BracketSeeding.js";
 import { SEEDING_METHODS } from "../engines/TournamentSettings.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const qualificationService = new PoolQualificationService();
 
@@ -44,12 +43,12 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
     };
   }, [tournament?.id, tournament?.updatedAt, method]);
 
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see seeding here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see seeding here.</div>;
   }
   if (tournament.format !== "roundRobin") {
-    return <div style={styles.placeholderCard}>Seeding isn't available for this tournament format yet.</div>;
+    return <div style={styles.tEmptyState}>Seeding isn't available for this tournament format yet.</div>;
   }
 
   const engine = getTournamentEngine(tournament.format);
@@ -58,8 +57,8 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
   if (tournament.bracket) {
     return (
       <div>
-        <SectionLabel>Seeding</SectionLabel>
-        <div style={styles.placeholderCard}>
+        <h2 style={styles.tSectionHeading}>Seeding</h2>
+        <div style={styles.tEmptyState}>
           The bracket has already been generated ({METHOD_LABELS[method]} seeding) — see the Bracket tab.
         </div>
       </div>
@@ -68,8 +67,8 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
   if (!qualification.ready) {
     return (
       <div>
-        <SectionLabel>Seeding</SectionLabel>
-        <p style={styles.editHint}>Seeding is available once every pool completes and qualification is finalized.</p>
+        <h2 style={styles.tSectionHeading}>Seeding</h2>
+        <p style={styles.tControlHint}>Seeding is available once every pool completes and qualification is finalized.</p>
       </div>
     );
   }
@@ -98,29 +97,29 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
 
   return (
     <div>
-      <SectionLabel>Seeding</SectionLabel>
-      <p style={styles.editHint}>Seeding method: {METHOD_LABELS[method]} — change it on the Settings tab before generating.</p>
+      <h2 style={styles.tSectionHeading}>Seeding</h2>
+      <p style={styles.tControlHint}>Seeding method: {METHOD_LABELS[method]} — change it on the Settings tab before generating.</p>
 
-      <div style={styles.tournamentStandingsScroll}>
-        <table style={styles.tournamentStandingsTable}>
+      <div style={styles.tTableScroll}>
+        <table style={styles.tTable}>
           <thead>
-            <tr style={styles.tournamentStandingsHeadRow}>
-              <th style={styles.tournamentStandingsHeadCell}>Seed</th>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>Participant</th>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>Pool</th>
-              <th style={styles.tournamentStandingsHeadCell}>Current Rank</th>
+            <tr style={styles.tTableHeadRow}>
+              <th style={styles.tTableHeadCell}>Seed</th>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>Participant</th>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>Pool</th>
+              <th style={styles.tTableHeadCell}>Current Rank</th>
             </tr>
           </thead>
           <tbody>
             {qualification.qualifiedTeams.map((team) => (
-              <tr key={team.participantId} style={styles.tournamentStandingsRow(99)}>
-                <td style={styles.tournamentStandingsCell}>
+              <tr key={team.participantId} style={styles.tTableRow(99)}>
+                <td style={styles.tTableCell}>
                   {isManual ? (
                     <input
                       type="number"
                       min={1}
                       max={qualification.qualifiedTeams.length}
-                      style={styles.expectedGamesInput}
+                      style={styles.tSmallInput}
                       value={draftSeeds[team.participantId] ?? ""}
                       onChange={(e) => handleSeedChange(team.participantId, e.target.value)}
                     />
@@ -128,9 +127,9 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
                     seedByParticipant.get(team.participantId) ?? "—"
                   )}
                 </td>
-                <td style={styles.tournamentStandingsNameCell}>{team.label}</td>
-                <td style={styles.tournamentStandingsCell}>{team.poolLabel}</td>
-                <td style={styles.tournamentStandingsCell}>{team.rank}</td>
+                <td style={styles.tTableNameCell}>{team.label}</td>
+                <td style={styles.tTableCell}>{team.poolLabel}</td>
+                <td style={styles.tTableCell}>{team.rank}</td>
               </tr>
             ))}
           </tbody>
@@ -138,21 +137,21 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
       </div>
 
       {isManual && (
-        <div style={styles.editActions}>
-          <button type="button" style={styles.secondaryBtn} onClick={handleSave}>
+        <div style={styles.tControlsRow}>
+          <button type="button" style={styles.tActionBtn} onClick={handleSave}>
             Save Seeds
           </button>
         </div>
       )}
 
-      {!validation.valid && <p style={styles.editWarning}>{validation.errors.join(" ")}</p>}
-      {seedError && <p style={styles.editWarning}>{seedError}</p>}
+      {!validation.valid && <p style={styles.tWarningText}>{validation.errors.join(" ")}</p>}
+      {seedError && <p style={styles.tWarningText}>{seedError}</p>}
 
-      <h3 style={styles.poolHeading}>Bracket Preview — Round 1</h3>
+      <h3 style={styles.tSubheading}>Bracket Preview — Round 1</h3>
       {validation.valid ? (
-        <ul style={styles.qualifiersList}>
+        <ul style={styles.tList}>
           {pairs.map((pair, i) => (
-            <li key={i} style={styles.qualifiersListItem}>
+            <li key={i} style={styles.tListRow}>
               <span>
                 #{pair.seedA.seed} {pair.seedA.label}
               </span>
@@ -164,11 +163,11 @@ export default function TournamentSeedingView({ tournament, loading, seedError, 
           ))}
         </ul>
       ) : (
-        <p style={styles.editHint}>Resolve the seeding issue above to see a bracket preview.</p>
+        <p style={styles.tControlHint}>Resolve the seeding issue above to see a bracket preview.</p>
       )}
 
-      <div style={styles.editActions}>
-        <button type="button" style={{ ...styles.primaryBtn, ...(!validation.valid || generating ? styles.btnDisabled : {}) }} disabled={!validation.valid || generating} onClick={handleGenerate}>
+      <div style={styles.tControlsRow}>
+        <button type="button" style={{ ...styles.tPrimaryBtn, ...(!validation.valid || generating ? styles.tBtnDisabled : {}) }} disabled={!validation.valid || generating} onClick={handleGenerate}>
           {generating ? "Generating…" : "Generate Bracket"}
         </button>
       </div>

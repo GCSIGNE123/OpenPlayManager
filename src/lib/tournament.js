@@ -497,6 +497,26 @@ export async function saveDeclareCourtWinner(tournament, matchId, side) {
   return saveTournament(updated);
 }
 
+// Tournament Scorer — 1st Serve / 2nd Serve (see PROJECT.md/FEATURES.md).
+// Same "call the CourtAssignmentService method, saveTournament what it
+// returns" shape as saveAdjustMatchScore/saveDeclareCourtWinner above — all
+// three are manual, scorer-controlled bookkeeping alongside score, never a
+// scoring rule.
+export async function saveSetServeNumber(tournament, matchId, number) {
+  const updated = courtAssignmentService.setServeNumber(tournament, matchId, number);
+  return saveTournament(updated);
+}
+
+export async function saveChangeServe(tournament, matchId) {
+  const updated = courtAssignmentService.changeServe(tournament, matchId);
+  return saveTournament(updated);
+}
+
+export async function saveSideOut(tournament, matchId) {
+  const updated = courtAssignmentService.sideOut(tournament, matchId);
+  return saveTournament(updated);
+}
+
 export async function saveAddCourt(tournament, name) {
   const nextNumber = Math.max(0, ...tournament.courts.map((c) => c.number)) + 1;
   const courts = [...tournament.courts, makeCourt(nextNumber, name)];

@@ -9,7 +9,6 @@ import { buildBracketViewModel } from "../engines/BracketViewModel.js";
 import { CourtAssignmentService } from "../engines/CourtAssignmentService.js";
 import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.js";
 import { SEEDING_METHODS } from "../engines/TournamentSettings.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const previewGenerator = new PlayoffBracketGenerator();
 const playoffEngine = new PlayoffEngine();
@@ -91,74 +90,74 @@ function BracketMatchCard({
   return (
     <div
       style={{
-        ...styles.historyMatchCard,
-        ...(isCompleted ? styles.matchCompletedCard : {}),
+        ...styles.tMatchCardSmall,
+        ...(isCompleted ? styles.tMatchCompletedAccent : {}),
         ...(selected ? { borderColor: "var(--court)", borderWidth: 2 } : {}),
         ...(onAdvancementPath && !selected ? { background: "rgba(22,53,94,0.05)" } : {}),
         cursor: "pointer",
       }}
       onClick={() => onSelect(match.id)}
     >
-      <div style={styles.historyMatchHead}>
-        <span style={styles.courtBadge}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
-        <span style={styles.matchStatusBadge(matchState)}>{STATUS_LABELS[matchState]}</span>
+      <div style={styles.tMatchCardHead}>
+        <span style={styles.tCourtBadgeDark}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
+        <span style={styles.tMatchStatusBadge(matchState)}>{STATUS_LABELS[matchState]}</span>
       </div>
 
       {!editing && (
         <>
-          <div style={styles.historyMatchTeams}>
+          <div style={styles.tMatchCardTeams}>
             {[match.teamA, match.teamB].map((team, i) => {
               const isLoser = isCompleted && team && match.winner !== team.participantId;
               return (
-                <div key={i} style={{ ...styles.historyTeamLine, ...(isLoser ? { opacity: 0.5 } : {}) }}>
+                <div key={i} style={{ ...styles.tMatchCardTeamLine, ...(isLoser ? { opacity: 0.5 } : {}) }}>
                   {team ? (
                     <>
                       <span>
-                        <span style={styles.bracketSeedTag}>#{team.seed}</span>
+                        <span style={styles.tSeedTag}>#{team.seed}</span>
                         {team.label}
                       </span>
                       {isCompleted && (
-                        <span style={{ ...styles.historyScore, ...(match.winner === team.participantId ? styles.historyScoreWin : {}) }}>
+                        <span style={{ ...styles.tMatchCardScore, ...(match.winner === team.participantId ? styles.tMatchCardScoreWin : {}) }}>
                           {match.walkover ? "WO" : i === 0 ? match.score.teamA : match.score.teamB}
                         </span>
                       )}
                     </>
                   ) : (
-                    <span style={styles.bracketTbdLabel}>TBD — waiting on a previous round</span>
+                    <span style={styles.tControlHint}>TBD — waiting on a previous round</span>
                   )}
                 </div>
               );
             })}
           </div>
           {!locked && (
-            <div style={styles.editActions} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.tControlsRow} onClick={(e) => e.stopPropagation()}>
               {isCompleted ? (
                 canEdit && (
-                  <button type="button" style={styles.secondaryBtn} onClick={openForm}>
+                  <button type="button" style={styles.tActionBtn} onClick={openForm}>
                     <Pencil size={13} strokeWidth={2.5} />
                     Edit result
                   </button>
                 )
               ) : matchState === "paused" ? (
-                <button type="button" style={styles.primaryBtn} onClick={() => onResumeMatch(match.id)}>
+                <button type="button" style={styles.tPrimaryBtn} onClick={() => onResumeMatch(match.id)}>
                   <PlayCircle size={14} strokeWidth={2.5} />
                   Resume
                 </button>
               ) : (
                 <>
-                  <button type="button" style={styles.primaryBtn} onClick={match.status === "pending" ? handleStart : openForm}>
+                  <button type="button" style={styles.tPrimaryBtn} onClick={match.status === "pending" ? handleStart : openForm}>
                     <Play size={14} strokeWidth={2.5} />
                     {match.status === "pending" ? "Start match" : "Enter scores"}
                   </button>
                   {matchState === "inProgress" && (
-                    <button type="button" style={styles.secondaryBtn} onClick={() => onPauseMatch(match.id)}>
+                    <button type="button" style={styles.tActionBtn} onClick={() => onPauseMatch(match.id)}>
                       <Pause size={13} strokeWidth={2.5} />
                       Pause
                     </button>
                   )}
                   <button
                     type="button"
-                    style={styles.secondaryBtn}
+                    style={styles.tActionBtn}
                     onClick={() => onWalkover(match.id, match.teamA.participantId)}
                     title={`Walkover — ${match.teamA.label} wins by forfeit`}
                   >
@@ -170,7 +169,7 @@ function BracketMatchCard({
             </div>
           )}
           {!locked && !isCompleted && availableCourts.length > 0 && (
-            <div style={styles.editActions} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.tControlsRow} onClick={(e) => e.stopPropagation()}>
               <select style={styles.courtSelect} value={courtChoice} onChange={(e) => setCourtChoice(e.target.value)}>
                 <option value="">{match.court ? "Move to…" : "Assign court…"}</option>
                 {availableCourts.map((c) => (
@@ -181,7 +180,7 @@ function BracketMatchCard({
               </select>
               <button
                 type="button"
-                style={styles.secondaryBtn}
+                style={styles.tActionBtn}
                 disabled={!courtChoice}
                 onClick={() => {
                   if (match.court) onReassignMatch(match.id, match.court, Number(courtChoice));
@@ -200,51 +199,51 @@ function BracketMatchCard({
       {editing && match.teamA && match.teamB && (
         <div onClick={(e) => e.stopPropagation()}>
           <div style={styles.scoreInputRow}>
-            <label style={styles.scoreInputField}>
+            <label style={styles.tScoreInputField}>
               {match.teamA.label}
               <input
                 type="number"
                 min={0}
-                style={styles.expectedGamesInput}
+                style={styles.tSmallInput}
                 value={scoreA}
                 onChange={(e) => setScoreA(e.target.value)}
               />
             </label>
-            <label style={styles.scoreInputField}>
+            <label style={styles.tScoreInputField}>
               {match.teamB.label}
               <input
                 type="number"
                 min={0}
-                style={styles.expectedGamesInput}
+                style={styles.tSmallInput}
                 value={scoreB}
                 onChange={(e) => setScoreB(e.target.value)}
               />
             </label>
           </div>
-          <p style={styles.dialogLabel}>Winner</p>
+          <p style={styles.tFieldLabel}>Winner</p>
           <div style={styles.winnerSelectRow}>
             <button
               type="button"
-              style={styles.winnerSelectBtn(winnerId === match.teamA.participantId)}
+              style={styles.tWinnerSelectBtn(winnerId === match.teamA.participantId)}
               onClick={() => setWinnerId(match.teamA.participantId)}
             >
               {match.teamA.label}
             </button>
             <button
               type="button"
-              style={styles.winnerSelectBtn(winnerId === match.teamB.participantId)}
+              style={styles.tWinnerSelectBtn(winnerId === match.teamB.participantId)}
               onClick={() => setWinnerId(match.teamB.participantId)}
             >
               {match.teamB.label}
             </button>
           </div>
-          {localError && <p style={styles.editWarning}>{localError}</p>}
-          <div style={styles.editActions}>
-            <button type="button" style={styles.secondaryBtn} onClick={() => setEditing(false)}>
+          {localError && <p style={styles.tWarningText}>{localError}</p>}
+          <div style={styles.tControlsRow}>
+            <button type="button" style={styles.tActionBtn} onClick={() => setEditing(false)}>
               <X size={13} strokeWidth={2.5} />
               Cancel
             </button>
-            <button type="button" style={styles.primaryBtn} onClick={handleSave}>
+            <button type="button" style={styles.tPrimaryBtn} onClick={handleSave}>
               <Check size={14} strokeWidth={2.5} />
               Save result
             </button>
@@ -254,12 +253,12 @@ function BracketMatchCard({
 
       {selected && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--line)" }}>
-          <p style={styles.editHint}>
+          <p style={styles.tControlHint}>
             Match #{match.matchNumber}
             {match.startedAt ? ` · Started ${new Date(match.startedAt).toLocaleTimeString()}` : ""}
             {match.completedAt ? ` · Completed ${new Date(match.completedAt).toLocaleTimeString()}` : ""}
           </p>
-          <p style={styles.editHint}>
+          <p style={styles.tControlHint}>
             Scheduled time: not scheduled (placeholder) · Last updated:{" "}
             {match.lastUpdatedAt ? new Date(match.lastUpdatedAt).toLocaleString() : "—"}
           </p>
@@ -281,30 +280,30 @@ function BracketProgressPanel({ bracket, viewModel }) {
   const remaining = allMatches.length - completed;
   const currentRound = playoffEngine.getCurrentRound(bracket);
   return (
-    <div style={styles.sessionInfoCard}>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Current Round</span>
-        <span style={styles.sessionInfoValue}>{currentRound.name}</span>
+    <div style={styles.tInfoGrid}>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Current Round</span>
+        <span style={styles.tInfoValue}>{currentRound.name}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Matches Remaining</span>
-        <span style={styles.sessionInfoValue}>{remaining}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Matches Remaining</span>
+        <span style={styles.tInfoValue}>{remaining}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Completed Matches</span>
-        <span style={styles.sessionInfoValue}>{completed}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Completed Matches</span>
+        <span style={styles.tInfoValue}>{completed}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Active Matches</span>
-        <span style={styles.sessionInfoValue}>{active}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Active Matches</span>
+        <span style={styles.tInfoValue}>{active}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Waiting Matches</span>
-        <span style={styles.sessionInfoValue}>{viewModel.waitingMatches.length}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Waiting Matches</span>
+        <span style={styles.tInfoValue}>{viewModel.waitingMatches.length}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Next Matches</span>
-        <span style={styles.sessionInfoValue}>{viewModel.nextMatches.length}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Next Matches</span>
+        <span style={styles.tInfoValue}>{viewModel.nextMatches.length}</span>
       </div>
     </div>
   );
@@ -321,22 +320,22 @@ function ChampionshipSeriesPanel({ finalRound }) {
   const complete = seriesService.isSeriesComplete(finalRound.matches);
   const nextGame = finalRound.matches.find((m) => m.status !== "completed");
   return (
-    <div style={styles.sessionInfoCard}>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Championship Series</span>
-        <span style={styles.sessionInfoValue}>Best of 3</span>
+    <div style={styles.tInfoGrid}>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Championship Series</span>
+        <span style={styles.tInfoValue}>Best of 3</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>{reference.teamA?.label}</span>
-        <span style={styles.sessionInfoValue}>{score[reference.teamA?.participantId] ?? 0}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>{reference.teamA?.label}</span>
+        <span style={styles.tInfoValue}>{score[reference.teamA?.participantId] ?? 0}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>{reference.teamB?.label}</span>
-        <span style={styles.sessionInfoValue}>{score[reference.teamB?.participantId] ?? 0}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>{reference.teamB?.label}</span>
+        <span style={styles.tInfoValue}>{score[reference.teamB?.participantId] ?? 0}</span>
       </div>
-      <div style={styles.sessionInfoItem}>
-        <span style={styles.sessionInfoLabel}>Series Status</span>
-        <span style={styles.sessionInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
+      <div style={styles.tInfoItem}>
+        <span style={styles.tInfoLabel}>Series Status</span>
+        <span style={styles.tInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
       </div>
     </div>
   );
@@ -348,7 +347,7 @@ function BracketRoundColumn({ round, bracketCompleted, collapsed, onToggleCollap
       <button
         type="button"
         onClick={onToggleCollapse}
-        style={{ ...styles.poolHeading, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        style={{ ...styles.tSubheading, display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0 }}
       >
         {collapsed ? <ChevronRight size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
         {round.name} {round.isCurrentRound && <span style={{ color: "var(--court)" }}>· current</span>}
@@ -405,15 +404,15 @@ function DoubleEliminationBracketSection({
   if (!deBracket) {
     return (
       <div>
-        <SectionLabel>Bracket</SectionLabel>
-        <div style={styles.placeholderCard}>
+        <h2 style={styles.tSectionHeading}>Bracket</h2>
+        <div style={styles.tEmptyState}>
           Double Elimination bracket format is selected — generate the Winners Bracket, Losers Bracket, and Grand
           Final once pool qualification is ready. Every team starts in the Winners Bracket; a first loss drops them
           to the Losers Bracket, a second loss eliminates them.
         </div>
-        {seedError && <p style={styles.editWarning}>{seedError}</p>}
-        <div style={styles.editActions}>
-          <button type="button" style={styles.primaryBtn} onClick={onGenerateDoubleEliminationBracket}>
+        {seedError && <p style={styles.tWarningText}>{seedError}</p>}
+        <div style={styles.tControlsRow}>
+          <button type="button" style={styles.tPrimaryBtn} onClick={onGenerateDoubleEliminationBracket}>
             Generate Double Elimination Bracket
           </button>
         </div>
@@ -468,21 +467,21 @@ function DoubleEliminationBracketSection({
 
   return (
     <div>
-      <SectionLabel>Bracket</SectionLabel>
-      <p style={styles.editHint}>
+      <h2 style={styles.tSectionHeading}>Bracket</h2>
+      <p style={styles.tControlHint}>
         Double Elimination — {deBracket.winnersBracket.size}-team bracket. Every team starts in the Winners Bracket;
         a first loss drops to the Losers Bracket, a second loss eliminates the team — an eliminated team never
         receives another match. The Losers Bracket champion (1 loss) meets the Winners Bracket champion (0 losses)
         in the Grand Final; if the Losers Bracket champion wins Game 1, a Grand Final Reset (Game 2, winner-takes-all)
         decides the tournament.
       </p>
-      {matchError && <p style={styles.editWarning}>{matchError}</p>}
+      {matchError && <p style={styles.tWarningText}>{matchError}</p>}
 
-      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Winners Bracket</p>
+      <p style={{ ...styles.tSubheading, marginTop: 20 }}>Winners Bracket</p>
       <div style={styles.bracketScroll}>
         {winnersViewModel.rounds.map((round) => (
           <div key={`winners-${round.roundNumber}`} style={styles.bracketRoundColumn}>
-            <p style={{ ...styles.poolHeading, margin: 0 }}>
+            <p style={{ ...styles.tSubheading, margin: 0 }}>
               {round.name} {round.isCurrentRound && <span style={{ color: "var(--court)" }}>· current</span>}
             </p>
             {round.matches.map((m) => (
@@ -500,19 +499,19 @@ function DoubleEliminationBracketSection({
         ))}
       </div>
       {deBracket.winnersBracket.champion && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🏆 Winners Bracket Champion (0 losses)</span>
-            <span style={styles.sessionInfoValue}>{deBracket.winnersBracket.champion.label}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🏆 Winners Bracket Champion (0 losses)</span>
+            <span style={styles.tInfoValue}>{deBracket.winnersBracket.champion.label}</span>
           </div>
         </div>
       )}
 
-      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Losers Bracket</p>
+      <p style={{ ...styles.tSubheading, marginTop: 20 }}>Losers Bracket</p>
       <div style={styles.bracketScroll}>
         {losersViewModel.rounds.map((round) => (
           <div key={`losers-${round.roundNumber}`} style={styles.bracketRoundColumn}>
-            <p style={{ ...styles.poolHeading, margin: 0 }}>
+            <p style={{ ...styles.tSubheading, margin: 0 }}>
               {round.name} {round.isCurrentRound && <span style={{ color: "var(--court)" }}>· current</span>}
             </p>
             {round.matches.map((m) => (
@@ -530,18 +529,18 @@ function DoubleEliminationBracketSection({
         ))}
       </div>
       {deBracket.losersBracket.champion && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🥈 Losers Bracket Champion (1 loss)</span>
-            <span style={styles.sessionInfoValue}>{deBracket.losersBracket.champion.label}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🥈 Losers Bracket Champion (1 loss)</span>
+            <span style={styles.tInfoValue}>{deBracket.losersBracket.champion.label}</span>
           </div>
         </div>
       )}
 
-      <p style={{ ...styles.poolHeading, marginTop: 20 }}>Grand Final</p>
+      <p style={{ ...styles.tSubheading, marginTop: 20 }}>Grand Final</p>
       <div style={styles.bracketScroll}>
         <div style={styles.bracketRoundColumn}>
-          <p style={{ ...styles.poolHeading, margin: 0 }}>Game 1</p>
+          <p style={{ ...styles.tSubheading, margin: 0 }}>Game 1</p>
           <BracketMatchCard
             match={game1}
             bracketCompleted={grandFinalCompleted}
@@ -553,7 +552,7 @@ function DoubleEliminationBracketSection({
         </div>
         {game2 && (
           <div style={styles.bracketRoundColumn}>
-            <p style={{ ...styles.poolHeading, margin: 0 }}>Grand Final Reset (Game 2)</p>
+            <p style={{ ...styles.tSubheading, margin: 0 }}>Grand Final Reset (Game 2)</p>
             <BracketMatchCard
               match={game2}
               bracketCompleted={grandFinalCompleted}
@@ -566,22 +565,22 @@ function DoubleEliminationBracketSection({
         )}
       </div>
       {deBracket.grandFinal.champion && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🥇 Tournament Champion</span>
-            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.champion.label}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🥇 Tournament Champion</span>
+            <span style={styles.tInfoValue}>{deBracket.grandFinal.champion.label}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
-            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.runnerUp?.label ?? "—"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🥈 Runner-up</span>
+            <span style={styles.tInfoValue}>{deBracket.grandFinal.runnerUp?.label ?? "—"}</span>
           </div>
         </div>
       )}
 
       {eliminated.size > 0 && (
         <div style={{ marginTop: 16 }}>
-          <p style={styles.poolHeading}>Eliminated ({eliminated.size})</p>
-          <p style={styles.editHint}>
+          <p style={styles.tSubheading}>Eliminated ({eliminated.size})</p>
+          <p style={styles.tControlHint}>
             {[...deBracket.winnersBracket.rounds, ...deBracket.losersBracket.rounds]
               .flatMap((r) => r.matches)
               .flatMap((m) => [m.teamA, m.teamB])
@@ -606,26 +605,26 @@ function ConsolationBracketSection({ consolationBracket, selectedMatchId, collap
   const viewModel = buildBracketViewModel(consolationBracket, selectedMatchId);
   return (
     <div style={{ marginTop: 24 }}>
-      <SectionLabel>Consolation Bracket (5th–8th Place)</SectionLabel>
+      <h2 style={styles.tSectionHeading}>Consolation Bracket (5th–8th Place)</h2>
       {bracketCompleted && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Fifth Place</span>
-            <span style={styles.sessionInfoValue}>{consolationBracket.champion?.label ?? "—"}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Fifth Place</span>
+            <span style={styles.tInfoValue}>{consolationBracket.champion?.label ?? "—"}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Sixth Place</span>
-            <span style={styles.sessionInfoValue}>{consolationBracket.runnerUp?.label ?? "—"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Sixth Place</span>
+            <span style={styles.tInfoValue}>{consolationBracket.runnerUp?.label ?? "—"}</span>
           </div>
           {consolationBracket.bronzeMatch && (
             <>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Seventh Place</span>
-                <span style={styles.sessionInfoValue}>{consolationBracket.thirdPlace?.label ?? "—"}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Seventh Place</span>
+                <span style={styles.tInfoValue}>{consolationBracket.thirdPlace?.label ?? "—"}</span>
               </div>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Eighth Place</span>
-                <span style={styles.sessionInfoValue}>{consolationBracket.fourthPlace?.label ?? "—"}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Eighth Place</span>
+                <span style={styles.tInfoValue}>{consolationBracket.fourthPlace?.label ?? "—"}</span>
               </div>
             </>
           )}
@@ -650,7 +649,7 @@ function ConsolationBracketSection({ consolationBracket, selectedMatchId, collap
             return [
               column,
               <div key="consolation-bronze-match" style={styles.bracketRoundColumn}>
-                <p style={{ ...styles.poolHeading, margin: 0 }}>7th Place Match</p>
+                <p style={{ ...styles.tSubheading, margin: 0 }}>7th Place Match</p>
                 <BracketMatchCard
                   match={viewModel.bronzeMatch}
                   bracketCompleted={bracketCompleted}
@@ -708,9 +707,9 @@ export default function TournamentBracketView({
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set());
   const roundRefs = useRef({});
 
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see the bracket here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see the bracket here.</div>;
   }
   // Double Elimination — a real bracket exists either as a STANDALONE
   // tournament (tournament.format === "doubleElimination", no pool stage —
@@ -722,7 +721,7 @@ export default function TournamentBracketView({
   // playable now, not a structure-only preview.
   const isDoubleElimination = tournament.format === "doubleElimination" || (tournament.bracketFormat ?? "singleElimination") === "doubleElimination";
   if (tournament.format !== "roundRobin" && !isDoubleElimination) {
-    return <div style={styles.placeholderCard}>Bracket generation isn't available for this tournament format yet.</div>;
+    return <div style={styles.tEmptyState}>Bracket generation isn't available for this tournament format yet.</div>;
   }
 
   if (isDoubleElimination) {
@@ -788,39 +787,39 @@ export default function TournamentBracketView({
 
     return (
       <div>
-        <SectionLabel>Bracket</SectionLabel>
+        <h2 style={styles.tSectionHeading}>Bracket</h2>
         {bracketCompleted ? (
           <>
-            <div style={styles.sessionInfoCard}>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>🥇 Champion</span>
-                <span style={styles.sessionInfoValue}>{bracket.champion?.label ?? "—"}</span>
+            <div style={styles.tInfoGrid}>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>🥇 Champion</span>
+                <span style={styles.tInfoValue}>{bracket.champion?.label ?? "—"}</span>
               </div>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
-                <span style={styles.sessionInfoValue}>{bracket.runnerUp?.label ?? "—"}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>🥈 Runner-up</span>
+                <span style={styles.tInfoValue}>{bracket.runnerUp?.label ?? "—"}</span>
               </div>
               {bracket.bronzeMatch && (
                 <>
-                  <div style={styles.sessionInfoItem}>
-                    <span style={styles.sessionInfoLabel}>🥉 Third Place</span>
-                    <span style={styles.sessionInfoValue}>{bracket.thirdPlace?.label ?? "—"}</span>
+                  <div style={styles.tInfoItem}>
+                    <span style={styles.tInfoLabel}>🥉 Third Place</span>
+                    <span style={styles.tInfoValue}>{bracket.thirdPlace?.label ?? "—"}</span>
                   </div>
-                  <div style={styles.sessionInfoItem}>
-                    <span style={styles.sessionInfoLabel}>🏅 Fourth Place</span>
-                    <span style={styles.sessionInfoValue}>{bracket.fourthPlace?.label ?? "—"}</span>
+                  <div style={styles.tInfoItem}>
+                    <span style={styles.tInfoLabel}>🏅 Fourth Place</span>
+                    <span style={styles.tInfoValue}>{bracket.fourthPlace?.label ?? "—"}</span>
                   </div>
                 </>
               )}
             </div>
             <ChampionshipSeriesPanel finalRound={bracket.rounds[bracket.rounds.length - 1]} />
-            <p style={styles.editHint}>
+            <p style={styles.tControlHint}>
               The tournament is locked — no further score editing until reopened by an administrator. Reopening
               makes every match's result editable again, but correcting an earlier round after later rounds have
               already been played won't automatically re-run those later results.
             </p>
-            <div style={styles.editActions}>
-              <button type="button" style={styles.secondaryBtn} onClick={onReopenBracket}>
+            <div style={styles.tControlsRow}>
+              <button type="button" style={styles.tActionBtn} onClick={onReopenBracket}>
                 <LockOpen size={13} strokeWidth={2.5} />
                 Reopen tournament
               </button>
@@ -828,11 +827,11 @@ export default function TournamentBracketView({
           </>
         ) : (
           <>
-            <p style={styles.editHint}>
+            <p style={styles.tControlHint}>
               {bracket.size}-team elimination bracket, seeded by {SEEDING_METHOD_LABELS[tournament.seedingMethod ?? "standardCrossPool"]}.
             </p>
-            <div style={styles.editActions}>
-              <button type="button" style={styles.secondaryBtn} onClick={jumpToCurrentRound}>
+            <div style={styles.tControlsRow}>
+              <button type="button" style={styles.tActionBtn} onClick={jumpToCurrentRound}>
                 <Crosshair size={13} strokeWidth={2.5} />
                 Jump to current round
               </button>
@@ -841,7 +840,7 @@ export default function TournamentBracketView({
             <ChampionshipSeriesPanel finalRound={bracket.rounds[bracket.rounds.length - 1]} />
           </>
         )}
-        {matchError && <p style={styles.editWarning}>{matchError}</p>}
+        {matchError && <p style={styles.tWarningText}>{matchError}</p>}
         <div style={styles.bracketScroll}>
           {viewModel.rounds.flatMap((round, i) => {
             const column = (
@@ -866,7 +865,7 @@ export default function TournamentBracketView({
               return [
                 column,
                 <div key="bronze-match" style={styles.bracketRoundColumn}>
-                  <p style={{ ...styles.poolHeading, margin: 0 }}>🥉 Bronze Medal Match</p>
+                  <p style={{ ...styles.tSubheading, margin: 0 }}>🥉 Bronze Medal Match</p>
                   <BracketMatchCard
                     match={viewModel.bronzeMatch}
                     bracketCompleted={bracketCompleted}
@@ -902,8 +901,8 @@ export default function TournamentBracketView({
   if (!preview.ready && preview.reason === "unsupported_size") {
     return (
       <div>
-        <SectionLabel>Bracket</SectionLabel>
-        <div style={styles.placeholderCard}>
+        <h2 style={styles.tSectionHeading}>Bracket</h2>
+        <div style={styles.tEmptyState}>
           Bracket generation needs a power-of-two number of qualified teams (2, 4, 8, 16, …) — currently {preview.size}.
           Adjust Teams Advancing Per Pool on the Schedule tab so the qualifier count lands on one of those sizes.
         </div>
@@ -919,8 +918,8 @@ export default function TournamentBracketView({
   if (preview.ready && (tournament.seedingMethod ?? "standardCrossPool") !== "standardCrossPool") {
     return (
       <div>
-        <SectionLabel>Bracket</SectionLabel>
-        <div style={styles.placeholderCard}>
+        <h2 style={styles.tSectionHeading}>Bracket</h2>
+        <div style={styles.tEmptyState}>
           Qualification is finalized and ready — this tournament uses {tournament.seedingMethod} seeding, which
           doesn't generate automatically. Visit the Seeding tab to review seeds and click Generate Bracket.
         </div>
@@ -930,8 +929,8 @@ export default function TournamentBracketView({
 
   return (
     <div>
-      <SectionLabel>Bracket</SectionLabel>
-      <div style={styles.placeholderCard}>
+      <h2 style={styles.tSectionHeading}>Bracket</h2>
+      <div style={styles.tEmptyState}>
         The bracket is generated once every pool has finished and qualified teams are determined. Check the
         Qualification tab once the Schedule tab's remaining matches are complete.
       </div>

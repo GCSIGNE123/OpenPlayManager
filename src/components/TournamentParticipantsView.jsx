@@ -1,5 +1,5 @@
 import { styles } from "../styles.js";
-import SectionLabel from "./SectionLabel.jsx";
+import TeamSetupPanel from "./TeamSetupPanel.jsx";
 
 // Participants tab — see PROJECT.md/FEATURES.md. Read-only roster of every
 // entrant currently in the tournament, one row per Participant (a single
@@ -10,17 +10,17 @@ import SectionLabel from "./SectionLabel.jsx";
 // happens via Check In, same as before this tab existed.
 function EntrantRow({ entrant, index, mode, players }) {
   return (
-    <tr style={styles.tournamentStandingsRow(99)}>
-      <td style={styles.tournamentStandingsCell}>{index + 1}</td>
-      <td style={styles.tournamentStandingsNameCell}>{entrant.label}</td>
-      <td style={styles.tournamentStandingsCell}>
+    <tr style={styles.tTableRow(99)}>
+      <td style={styles.tTableCell}>{index + 1}</td>
+      <td style={styles.tTableNameCell}>{entrant.label}</td>
+      <td style={styles.tTableCell}>
         {entrant.playerIds.map((id) => (
           <span key={id} style={{ marginRight: 4 }}>
-            <span style={styles.skillTag(players[id]?.skill)}>{players[id]?.skill === "intermediate" ? "INT" : "BEG"}</span>
+            <span style={styles.tSkillTag(players[id]?.skill)}>{players[id]?.skill === "intermediate" ? "INT" : "BEG"}</span>
           </span>
         ))}
       </td>
-      <td style={styles.tournamentStandingsCell}>{entrant.seed ?? "—"}</td>
+      <td style={styles.tTableCell}>{entrant.seed ?? "—"}</td>
     </tr>
   );
 }
@@ -28,21 +28,21 @@ function EntrantRow({ entrant, index, mode, players }) {
 function EntrantTable({ entrants, mode, players, showHeading, heading }) {
   return (
     <div style={styles.poolScheduleBlock}>
-      {showHeading && <h3 style={styles.poolHeading}>{heading}</h3>}
-      <p style={styles.editHint}>
+      {showHeading && <h3 style={styles.tSubheading}>{heading}</h3>}
+      <p style={styles.tControlHint}>
         {entrants.length} {mode === "doubles" ? "team" : "player"}
         {entrants.length === 1 ? "" : "s"}.
       </p>
-      <div style={styles.tournamentStandingsScroll}>
-        <table style={styles.tournamentStandingsTable}>
+      <div style={styles.tTableScroll}>
+        <table style={styles.tTable}>
           <thead>
-            <tr style={styles.tournamentStandingsHeadRow}>
-              <th style={styles.tournamentStandingsHeadCell}>#</th>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>
+            <tr style={styles.tTableHeadRow}>
+              <th style={styles.tTableHeadCell}>#</th>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>
                 {mode === "doubles" ? "Team" : "Player"}
               </th>
-              <th style={styles.tournamentStandingsHeadCell}>Skill</th>
-              <th style={styles.tournamentStandingsHeadCell}>Seed</th>
+              <th style={styles.tTableHeadCell}>Skill</th>
+              <th style={styles.tTableHeadCell}>Seed</th>
             </tr>
           </thead>
           <tbody>
@@ -61,10 +61,19 @@ function EntrantTable({ entrants, mode, players, showHeading, heading }) {
 // tournament with pools) shows one table per pool; standalone Double
 // Elimination (no pools — see tournamentModel.js's makeTournament `entrants`
 // field) shows its single flat entrant list instead.
-export default function TournamentParticipantsView({ state, tournament, loading }) {
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+// Custom Doubles Team Assignment — see PROJECT.md/FEATURES.md and
+// TeamSetupPanel.jsx's own header comment. `mode` here is the ORGANIZER'S
+// currently-selected Schedule-tab mode (Singles/Doubles, before Generate has
+// run) — TournamentScheduleView already owns that toggle; it's threaded
+// through so this tab's empty-state can show team pairing UI only when
+// Doubles is selected, without duplicating the toggle itself.
+export default function TournamentParticipantsView({ state, tournament, loading, mode, onSetPartner, onClearPartner }) {
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see participants here.</div>;
+    if (mode === "doubles") {
+      return <TeamSetupPanel players={state.players} state={state} onSetPartner={onSetPartner} onClearPartner={onClearPartner} />;
+    }
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see participants here.</div>;
   }
 
   const players = state.players || {};
@@ -73,7 +82,7 @@ export default function TournamentParticipantsView({ state, tournament, loading 
     const entrants = tournament.entrants || [];
     return (
       <div>
-        <SectionLabel>Participants</SectionLabel>
+        <h2 style={styles.tSectionHeading}>Participants</h2>
         <EntrantTable entrants={entrants} mode={tournament.mode} players={players} showHeading={false} />
       </div>
     );
@@ -82,7 +91,7 @@ export default function TournamentParticipantsView({ state, tournament, loading 
   const pools = tournament.pools || [];
   return (
     <div>
-      <SectionLabel>Participants</SectionLabel>
+      <h2 style={styles.tSectionHeading}>Participants</h2>
       {pools.map((pool) => (
         <EntrantTable
           key={pool.id}

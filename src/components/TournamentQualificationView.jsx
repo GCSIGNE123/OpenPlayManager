@@ -2,7 +2,6 @@ import { Fragment, useEffect, useState } from "react";
 import { styles } from "../styles.js";
 import { getTournamentEngine, fetchQualificationAuditHistory } from "../lib/tournament.js";
 import { PoolQualificationService } from "../engines/PoolQualificationService.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const qualificationService = new PoolQualificationService();
 
@@ -21,15 +20,15 @@ function OverrideForm({ pendingAction, eliminatedCandidates, director, setDirect
   const needsReplacement = pendingAction.action === "replace";
 
   return (
-    <div style={{ ...styles.historyMatchCard, marginTop: 6, marginBottom: 6 }}>
-      <p style={styles.dialogLabel}>
+    <div style={{ ...styles.tMatchCardSmall, marginTop: 6, marginBottom: 6 }}>
+      <p style={styles.tFieldLabel}>
         {pendingAction.action === "promote" && `Promote ${pendingAction.label} to Qualified`}
         {pendingAction.action === "eliminate" && `Eliminate ${pendingAction.label}`}
         {pendingAction.action === "replace" && `Replace ${pendingAction.label} with…`}
         {pendingAction.action === "reset" && `Reset ${pendingAction.label} to automatic qualification`}
       </p>
       {needsReplacement && (
-        <select style={{ ...styles.rotationSelect, marginBottom: 6 }} value={replacementId} onChange={(e) => setReplacementId(e.target.value)}>
+        <select style={{ ...styles.tSelect, marginBottom: 6 }} value={replacementId} onChange={(e) => setReplacementId(e.target.value)}>
           <option value="">Select a replacement…</option>
           {eliminatedCandidates.map((c) => (
             <option key={c.participantId} value={c.participantId}>
@@ -38,18 +37,18 @@ function OverrideForm({ pendingAction, eliminatedCandidates, director, setDirect
           ))}
         </select>
       )}
-      <input style={{ ...styles.input, marginBottom: 6 }} placeholder="Director name" value={director} onChange={(e) => setDirector(e.target.value)} />
+      <input style={{ ...styles.tInput, marginBottom: 6 }} placeholder="Director name" value={director} onChange={(e) => setDirector(e.target.value)} />
       {needsReason && (
-        <input style={{ ...styles.input, marginBottom: 6 }} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <input style={{ ...styles.tInput, marginBottom: 6 }} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
       )}
-      {error && <p style={styles.editWarning}>{error}</p>}
-      <div style={styles.editActions}>
-        <button type="button" style={styles.secondaryBtn} onClick={onCancel}>
+      {error && <p style={styles.tWarningText}>{error}</p>}
+      <div style={styles.tControlsRow}>
+        <button type="button" style={styles.tActionBtn} onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
-          style={styles.primaryBtn}
+          style={styles.tPrimaryBtn}
           onClick={() => onConfirm({ director, reason, replacementId })}
           disabled={(needsReason && !reason.trim()) || !director.trim() || (needsReplacement && !replacementId)}
         >
@@ -104,12 +103,12 @@ export default function TournamentQualificationView({
     // a manual refresh.
   }, [tournament?.id, tournament?.updatedAt]);
 
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see qualification here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see qualification here.</div>;
   }
   if (tournament.format !== "roundRobin") {
-    return <div style={styles.placeholderCard}>Qualification isn't available for this tournament format yet.</div>;
+    return <div style={styles.tEmptyState}>Qualification isn't available for this tournament format yet.</div>;
   }
 
   const engine = getTournamentEngine(tournament.format);
@@ -133,81 +132,81 @@ export default function TournamentQualificationView({
 
   return (
     <div>
-      <SectionLabel>Qualification</SectionLabel>
+      <h2 style={styles.tSectionHeading}>Qualification</h2>
 
       {result.ready ? (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Teams Advancing Per Pool</span>
-            <span style={styles.sessionInfoValue}>{tournament.advancesPerPool ?? 1}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Teams Advancing Per Pool</span>
+            <span style={styles.tInfoValue}>{tournament.advancesPerPool ?? 1}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Qualified Teams</span>
-            <span style={styles.sessionInfoValue}>{result.playoffSize.count}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Qualified Teams</span>
+            <span style={styles.tInfoValue}>{result.playoffSize.count}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Playoff Stage</span>
-            <span style={styles.sessionInfoValue}>{result.playoffSize.stage}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Playoff Stage</span>
+            <span style={styles.tInfoValue}>{result.playoffSize.stage}</span>
           </div>
           {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Qualification Method</span>
-              <span style={styles.sessionInfoValue}>{tournament.qualificationMethod === "wildCard" ? "Standard + Wild Cards" : "Standard + Best Third Place"}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Qualification Method</span>
+              <span style={styles.tInfoValue}>{tournament.qualificationMethod === "wildCard" ? "Standard + Wild Cards" : "Standard + Best Third Place"}</span>
             </div>
           )}
           {tournament.allowManualQualificationOverride && (
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Manual Override</span>
-              <span style={styles.sessionInfoValue}>{tournament.bracket ? "Bracket generated" : tournament.qualificationLocked ? "Locked" : "Editable"}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Manual Override</span>
+              <span style={styles.tInfoValue}>{tournament.bracket ? "Bracket generated" : tournament.qualificationLocked ? "Locked" : "Editable"}</span>
             </div>
           )}
         </div>
       ) : (
-        <p style={styles.editHint}>
+        <p style={styles.tControlHint}>
           Qualifiers finalize pool by pool as each one finishes — a pool still in progress shows ⏳ Pending until then.
         </p>
       )}
 
-      {qualificationError && <p style={styles.editWarning}>{qualificationError}</p>}
+      {qualificationError && <p style={styles.tWarningText}>{qualificationError}</p>}
       {result.ready && tournament.allowManualQualificationOverride && !result.qualificationListValidation.valid && (
-        <p style={styles.editWarning}>{result.qualificationListValidation.errors.join(" ")}</p>
+        <p style={styles.tWarningText}>{result.qualificationListValidation.errors.join(" ")}</p>
       )}
 
       {result.pools.map((pool) => (
         <div key={pool.poolId} style={styles.poolScheduleBlock}>
-          <h3 style={styles.poolHeading}>
+          <h3 style={styles.tSubheading}>
             {pool.poolLabel} {pool.complete ? "" : "— in progress"}
           </h3>
-          <div style={styles.tournamentStandingsScroll}>
-            <table style={styles.tournamentStandingsTable}>
+          <div style={styles.tTableScroll}>
+            <table style={styles.tTable}>
               <thead>
-                <tr style={styles.tournamentStandingsHeadRow}>
-                  <th style={styles.tournamentStandingsHeadCell}>Rank</th>
-                  <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>
+                <tr style={styles.tTableHeadRow}>
+                  <th style={styles.tTableHeadCell}>Rank</th>
+                  <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>
                     {tournament.mode === "doubles" ? "Team" : "Player"}
                   </th>
-                  <th style={styles.tournamentStandingsHeadCell}>Qualification Status</th>
-                  {overrideEnabled && <th style={styles.tournamentStandingsHeadCell}>Actions</th>}
+                  <th style={styles.tTableHeadCell}>Qualification Status</th>
+                  {overrideEnabled && <th style={styles.tTableHeadCell}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {pool.rows.map((row) => (
                   <Fragment key={row.participantId}>
-                    <tr style={styles.tournamentStandingsRow(row.qualified ? row.rank : 99)}>
-                      <td style={styles.tournamentStandingsCell}>{row.rank}</td>
-                      <td style={styles.tournamentStandingsNameCell}>{row.label}</td>
-                      <td style={styles.tournamentStandingsCell}>
-                        <span style={styles.qualificationTag(row.qualificationStatus)}>
+                    <tr style={styles.tTableRow(row.qualified ? row.rank : 99)}>
+                      <td style={styles.tTableCell}>{row.rank}</td>
+                      <td style={styles.tTableNameCell}>{row.label}</td>
+                      <td style={styles.tTableCell}>
+                        <span style={styles.tQualTag(row.qualificationStatus)}>
                           {STATUS_ICONS[row.qualificationStatus]} {STATUS_LABELS[row.qualificationStatus]}
                         </span>
                       </td>
                       {overrideEnabled && (
-                        <td style={styles.tournamentStandingsCell}>
+                        <td style={styles.tTableCell}>
                           <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
                             {!row.qualified && (
                               <button
                                 type="button"
-                                style={styles.subBtn}
+                                style={styles.tSubBtn}
                                 onClick={() => setPendingAction({ action: "promote", participantId: row.participantId, label: row.label })}
                               >
                                 Promote
@@ -217,14 +216,14 @@ export default function TournamentQualificationView({
                               <>
                                 <button
                                   type="button"
-                                  style={styles.subBtn}
+                                  style={styles.tSubBtn}
                                   onClick={() => setPendingAction({ action: "eliminate", participantId: row.participantId, label: row.label })}
                                 >
                                   Eliminate
                                 </button>
                                 <button
                                   type="button"
-                                  style={styles.subBtn}
+                                  style={styles.tSubBtn}
                                   onClick={() => setPendingAction({ action: "replace", participantId: row.participantId, label: row.label })}
                                 >
                                   Replace
@@ -234,7 +233,7 @@ export default function TournamentQualificationView({
                             {row.qualificationStatus === "manualOverride" && (
                               <button
                                 type="button"
-                                style={styles.subBtn}
+                                style={styles.tSubBtn}
                                 onClick={() => setPendingAction({ action: "reset", participantId: row.participantId, label: row.label })}
                               >
                                 Reset
@@ -269,40 +268,40 @@ export default function TournamentQualificationView({
 
       {result.ready && (
         <>
-          <h3 style={styles.poolHeading}>Qualification Summary</h3>
-          <div style={styles.sessionInfoCard}>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>✓ Automatic</span>
-              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
+          <h3 style={styles.tSubheading}>Qualification Summary</h3>
+          <div style={styles.tInfoGrid}>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>✓ Automatic</span>
+              <span style={styles.tInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>⭐ Wild Card</span>
-              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>⭐ Wild Card</span>
+              <span style={styles.tInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>⭐ Best Third Place</span>
-              <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>⭐ Best Third Place</span>
+              <span style={styles.tInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
             </div>
             {tournament.allowManualQualificationOverride && (
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>⭐ Manual Override</span>
-                <span style={styles.sessionInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "manualOverride").length}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>⭐ Manual Override</span>
+                <span style={styles.tInfoValue}>{result.qualifiedTeams.filter((q) => q.qualificationType === "manualOverride").length}</span>
               </div>
             )}
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>❌ Eliminated</span>
-              <span style={styles.sessionInfoValue}>{result.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>❌ Eliminated</span>
+              <span style={styles.tInfoValue}>{result.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
             </div>
           </div>
-          <h3 style={styles.poolHeading}>Overall Qualifiers</h3>
-          <ul style={styles.qualifiersList}>
+          <h3 style={styles.tSubheading}>Overall Qualifiers</h3>
+          <ul style={styles.tList}>
             {result.qualifiedTeams.map((q) => (
-              <li key={q.participantId} style={styles.qualifiersListItem}>
+              <li key={q.participantId} style={styles.tListRow}>
                 <span>
                   {q.qualificationType !== "qualified" && `${STATUS_ICONS[q.qualificationType]} `}
                   {q.label}
                 </span>
-                <span style={styles.qualifiersListPool}>
+                <span style={styles.tListMeta}>
                   {q.poolLabel} · Rank {q.rank}
                   {q.qualificationType !== "qualified" && ` · ${STATUS_LABELS[q.qualificationType]}`}
                 </span>
@@ -311,8 +310,8 @@ export default function TournamentQualificationView({
           </ul>
 
           {overrideEnabled && (
-            <div style={styles.editActions}>
-              <button type="button" style={styles.secondaryBtn} onClick={onLock} disabled={!result.qualificationListValidation.valid}>
+            <div style={styles.tControlsRow}>
+              <button type="button" style={styles.tActionBtn} onClick={onLock} disabled={!result.qualificationListValidation.valid}>
                 Lock Qualification List
               </button>
             </div>
@@ -320,17 +319,17 @@ export default function TournamentQualificationView({
 
           {tournament.allowManualQualificationOverride && auditHistory.length > 0 && (
             <>
-              <h3 style={styles.poolHeading}>Audit Trail</h3>
-              <ul style={styles.qualifiersList}>
+              <h3 style={styles.tSubheading}>Audit Trail</h3>
+              <ul style={styles.tList}>
                 {[...auditHistory].reverse().map((entry) => (
-                  <li key={entry.id} style={{ ...styles.qualifiersListItem, flexDirection: "column", alignItems: "flex-start" }}>
+                  <li key={entry.id} style={{ ...styles.tListRow, flexDirection: "column", alignItems: "flex-start" }}>
                     <strong>
                       {new Date(entry.timestamp).toLocaleString()} — {entry.director}
                     </strong>
                     <span>
                       {{ promote: "Promoted", eliminate: "Eliminated", replace: "Replaced", reset: "Reset" }[entry.action]}: {entry.participantLabel}
                     </span>
-                    <span style={styles.qualifiersListPool}>Reason: {entry.reason}</span>
+                    <span style={styles.tListMeta}>Reason: {entry.reason}</span>
                   </li>
                 ))}
               </ul>

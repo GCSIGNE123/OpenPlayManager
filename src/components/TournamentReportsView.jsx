@@ -3,7 +3,6 @@ import { Download, Printer } from "lucide-react";
 import { styles } from "../styles.js";
 import { TournamentReportService } from "../engines/TournamentReportService.js";
 import { ExportService } from "../engines/ExportService.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const reportService = new TournamentReportService();
 const exportService = new ExportService();
@@ -46,13 +45,13 @@ function flattenForExport(tables) {
 
 function ReportTable({ table }) {
   return (
-    <div style={styles.tournamentStandingsScroll}>
-      {table.poolLabel && <h3 style={styles.poolHeading}>{table.title}</h3>}
-      <table style={styles.tournamentStandingsTable}>
+    <div style={styles.tTableScroll}>
+      {table.poolLabel && <h3 style={styles.tSubheading}>{table.title}</h3>}
+      <table style={styles.tTable}>
         <thead>
-          <tr style={styles.tournamentStandingsHeadRow}>
+          <tr style={styles.tTableHeadRow}>
             {table.columns.map((c) => (
-              <th key={c} style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>
+              <th key={c} style={{ ...styles.tTableHeadCell, textAlign: "left" }}>
                 {c}
               </th>
             ))}
@@ -61,15 +60,15 @@ function ReportTable({ table }) {
         <tbody>
           {table.rows.length === 0 ? (
             <tr>
-              <td style={styles.tournamentStandingsCell} colSpan={table.columns.length}>
+              <td style={styles.tTableCell} colSpan={table.columns.length}>
                 No data yet.
               </td>
             </tr>
           ) : (
             table.rows.map((row, i) => (
-              <tr key={i} style={styles.tournamentStandingsRow(99)}>
+              <tr key={i} style={styles.tTableRow(99)}>
                 {row.map((cell, j) => (
-                  <td key={j} style={j === 0 ? styles.tournamentStandingsNameCell : styles.tournamentStandingsCell}>
+                  <td key={j} style={j === 0 ? styles.tTableNameCell : styles.tTableCell}>
                     {cell}
                   </td>
                 ))}
@@ -102,9 +101,9 @@ export default function TournamentReportsView({ tournament, loading }) {
     return buildTables(reportType, tournament);
   }, [reportType, tournament]);
 
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see reports here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see reports here.</div>;
   }
 
   const activeLabel = REPORT_TYPES.find((r) => r.id === reportType).label;
@@ -125,7 +124,7 @@ export default function TournamentReportsView({ tournament, loading }) {
 
   return (
     <div>
-      <SectionLabel>Reports</SectionLabel>
+      <h2 style={styles.tSectionHeading}>Reports</h2>
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -134,12 +133,12 @@ export default function TournamentReportsView({ tournament, loading }) {
         }
       `}</style>
 
-      <div style={styles.dashboardTabRow}>
+      <div style={styles.tNav}>
         {REPORT_TYPES.map((r) => (
           <button
             key={r.id}
             type="button"
-            style={styles.dashboardTabBtn(reportType === r.id)}
+            style={styles.tNavBtn(reportType === r.id)}
             onClick={() => setReportType(r.id)}
           >
             {r.label}
@@ -147,28 +146,28 @@ export default function TournamentReportsView({ tournament, loading }) {
         ))}
       </div>
 
-      <div style={styles.editActions}>
-        <button type="button" style={styles.secondaryBtn} onClick={() => runExport(() => exportService.exportPDF())}>
+      <div style={styles.tControlsRow}>
+        <button type="button" style={styles.tActionBtn} onClick={() => runExport(() => exportService.exportPDF())}>
           <Printer size={13} strokeWidth={2.5} />
           Print
         </button>
-        <button type="button" style={styles.secondaryBtn} onClick={() => runExport(() => exportService.exportPDF())}>
+        <button type="button" style={styles.tActionBtn} onClick={() => runExport(() => exportService.exportPDF())}>
           <Download size={13} strokeWidth={2.5} />
           Export PDF
         </button>
         <button
           type="button"
-          style={styles.secondaryBtn}
+          style={styles.tActionBtn}
           onClick={() => runExport(() => exportService.exportCSV(flattenForExport(tables)))}
         >
           <Download size={13} strokeWidth={2.5} />
           Export CSV
         </button>
       </div>
-      {exportError && <p style={styles.editWarning}>{exportError}</p>}
+      {exportError && <p style={styles.tWarningText}>{exportError}</p>}
 
       <div id="tournament-report-print-area">
-        <h2 style={{ ...styles.poolHeading, fontSize: 18 }}>{activeLabel}</h2>
+        <h2 style={{ ...styles.tSubheading, fontSize: 18 }}>{activeLabel}</h2>
         {tables.map((table, i) => (
           <ReportTable key={i} table={table} />
         ))}

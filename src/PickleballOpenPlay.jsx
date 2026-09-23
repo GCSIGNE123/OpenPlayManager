@@ -2584,40 +2584,34 @@ export default function PickleballOpenPlay() {
           .sort((a, b) => (b.checkedOutAt || 0) - (a.checkedOutAt || 0));
         const registeredNotHere = getRegisteredNotHere(state.players);
         const openCourtsCount = state.courts.filter((c) => c.status === "open").length;
+        // Tournament Manager visual redesign, Stage 1 — see PROJECT.md/
+        // FEATURES.md and styles.js's `.tournament-dark`/t*-prefixed styles.
+        // Visual only: every handler/prop below this point is unchanged —
+        // only which style object gets applied differs. Open Play sessions
+        // (isTournamentTheme false) render byte-identical to before.
+        const isTournamentTheme = state.sessionType === "tournament";
 
         return (
-          <>
-            <header style={styles.header}>
-              <div style={styles.headerInner}>
-                <div>
-                  <div style={styles.kickerOnDark}>{APP_NAME.toUpperCase()} · {FOOTER_TEXT.toUpperCase()}</div>
-                  <h1 style={styles.title}>{state.venue}</h1>
-                </div>
-                <div style={styles.headerStats}>
-                  <button style={styles.codePill} onClick={copyCode} title="Copy session code">
-                    <span>{codeCopied ? "Copied!" : `CODE ${sessionCode}`}</span>
-                    <Copy size={12} strokeWidth={2.5} />
-                  </button>
-                  <div style={styles.statPill}>
-                    <Users size={14} strokeWidth={2.5} />
-                    <span>{waitingPlayers.length} waiting</span>
+          <div className={isTournamentTheme ? "tournament-dark" : undefined} style={isTournamentTheme ? styles.tShell : undefined}>
+            <header style={isTournamentTheme ? styles.tHeader : styles.header}>
+              {isTournamentTheme ? (
+                <div style={styles.tHeaderTop}>
+                  <div>
+                    <div style={styles.tBrandRow}>{APP_NAME.toUpperCase()} · PRO ORGANIZER</div>
+                    <h1 style={styles.tTitle}>{state.venue}</h1>
+                    <div style={styles.tSubtitle}>
+                      Code {sessionCode}
+                      {state.sessionStartedAt ? ` · ${new Date(state.sessionStartedAt).toLocaleDateString()}` : ""}
+                    </div>
                   </div>
-                  <div style={styles.statPill}>
-                    <span style={styles.dot(openCourtsCount > 0)} />
-                    <span>{openCourtsCount} court{openCourtsCount === 1 ? "" : "s"} open</span>
-                  </div>
-                  {/* Share Live — public, read-only viewer link + QR (served by the Player app, /live/{code}); works for both Open Play and Tournament sessions */}
-                  <button
-                    style={styles.leaveBtn}
-                    onClick={() => setShareLiveOpen(true)}
-                    aria-label="Share Live"
-                    title="Share Live — public link and QR code"
-                  >
-                    <Share2 size={14} strokeWidth={2.5} />
-                  </button>
-                  {state.sessionType === "tournament" && (
+                  <div style={styles.tHeaderActions}>
+                    <span style={styles.tLivePill(true)}>● LIVE</span>
+                    <button style={styles.tHeaderBtn} onClick={() => setShareLiveOpen(true)} aria-label="Share Live" title="Share Live — public link and QR code">
+                      <Share2 size={14} strokeWidth={2.5} />
+                      Share Live
+                    </button>
                     <button
-                      style={styles.leaveBtn}
+                      style={styles.tHeaderBtn}
                       onClick={() => {
                         setDisplayCode(sessionCode);
                         setScreen("display");
@@ -2626,14 +2620,47 @@ export default function PickleballOpenPlay() {
                       title="Open TV Display Mode"
                     >
                       <Tv size={14} strokeWidth={2.5} />
+                      TV Mode
                     </button>
-                  )}
-                  {/* Open Play TV Mode — see PROJECT.md. Mirror-image gating
-                      of the tournament button above (openPlay vs.
-                      tournament are mutually exclusive sessionType values),
-                      so a session only ever shows the one TV button that
-                      actually applies to it. */}
-                  {state.sessionType !== "tournament" && (
+                    <button style={styles.tHeaderBtn} onClick={leaveSession} aria-label="switch session" title="Switch session">
+                      <LogOut size={14} strokeWidth={2.5} />
+                      More
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={styles.headerInner}>
+                  <div>
+                    <div style={styles.kickerOnDark}>{APP_NAME.toUpperCase()} · {FOOTER_TEXT.toUpperCase()}</div>
+                    <h1 style={styles.title}>{state.venue}</h1>
+                  </div>
+                  <div style={styles.headerStats}>
+                    <button style={styles.codePill} onClick={copyCode} title="Copy session code">
+                      <span>{codeCopied ? "Copied!" : `CODE ${sessionCode}`}</span>
+                      <Copy size={12} strokeWidth={2.5} />
+                    </button>
+                    <div style={styles.statPill}>
+                      <Users size={14} strokeWidth={2.5} />
+                      <span>{waitingPlayers.length} waiting</span>
+                    </div>
+                    <div style={styles.statPill}>
+                      <span style={styles.dot(openCourtsCount > 0)} />
+                      <span>{openCourtsCount} court{openCourtsCount === 1 ? "" : "s"} open</span>
+                    </div>
+                    {/* Share Live — public, read-only viewer link + QR (served by the Player app, /live/{code}); works for both Open Play and Tournament sessions */}
+                    <button
+                      style={styles.leaveBtn}
+                      onClick={() => setShareLiveOpen(true)}
+                      aria-label="Share Live"
+                      title="Share Live — public link and QR code"
+                    >
+                      <Share2 size={14} strokeWidth={2.5} />
+                    </button>
+                    {/* Open Play TV Mode — see PROJECT.md. The tournament TV
+                        button now lives in the dark header branch above;
+                        this branch only ever renders for Open Play sessions
+                        (isTournamentTheme is false here), so only the Open
+                        Play button is needed in this branch. */}
                     <button
                       style={styles.leaveBtn}
                       onClick={() => {
@@ -2645,13 +2672,13 @@ export default function PickleballOpenPlay() {
                     >
                       <Tv size={14} strokeWidth={2.5} />
                     </button>
-                  )}
-                  <button style={styles.leaveBtn} onClick={leaveSession} aria-label="switch session" title="Switch session">
-                    <LogOut size={14} strokeWidth={2.5} />
-                  </button>
+                    <button style={styles.leaveBtn} onClick={leaveSession} aria-label="switch session" title="Switch session">
+                      <LogOut size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <nav style={styles.nav}>
+              )}
+              <nav style={isTournamentTheme ? styles.tNav : styles.nav}>
                 {[
                   { id: "board", label: "Live Board" },
                   { id: "checkin", label: "Check In" },
@@ -2665,7 +2692,11 @@ export default function PickleballOpenPlay() {
                   <button
                     key={t.id}
                     onClick={() => setView(t.id)}
-                    style={{ ...styles.navBtn, ...(view === t.id ? styles.navBtnActive : {}) }}
+                    style={
+                      isTournamentTheme
+                        ? styles.tNavBtn(view === t.id)
+                        : { ...styles.navBtn, ...(view === t.id ? styles.navBtnActive : {}) }
+                    }
                   >
                     {t.label}
                     {t.id === "messages" && messagesUnreadCount > 0 && (
@@ -2678,9 +2709,9 @@ export default function PickleballOpenPlay() {
 
             {shareLiveOpen && <ShareLiveDialog sessionCode={sessionCode} onClose={() => setShareLiveOpen(false)} />}
 
-            <div style={styles.kitchenLine} />
+            {!isTournamentTheme && <div style={styles.kitchenLine} />}
 
-            <main style={styles.main}>
+            <main style={isTournamentTheme ? styles.tMain : styles.main}>
               {!loaded && <div style={styles.loading}>Loading session…</div>}
 
               {loaded && view === "board" && <BoardView state={state} />}
@@ -2757,6 +2788,8 @@ export default function PickleballOpenPlay() {
                   onGenerate={generateTournamentSchedule}
                   generating={generatingSchedule}
                   generateError={scheduleError}
+                  onSetPartner={setFixedPartner}
+                  onClearPartner={clearFixedPartner}
                 />
               )}
 
@@ -2855,13 +2888,13 @@ export default function PickleballOpenPlay() {
               {saveError && <div style={styles.syncError}>{saveError}</div>}
             </main>
 
-            <footer style={styles.footer}>
+            <footer style={isTournamentTheme ? styles.tFooter : styles.footer}>
               Scores sync live across everyone viewing this session. Share code{" "}
               <strong>{sessionCode}</strong> so others can join this session.
               <br />
               {FOOTER_TEXT}
             </footer>
-          </>
+          </div>
         );
       })()}
     </div>

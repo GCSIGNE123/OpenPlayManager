@@ -75,18 +75,55 @@ export function generateRoundRobinSchedule({ entrants, courtsCount }) {
   return rounds;
 }
 
-// Doubles-only: pairs a roster into 2-player teams by simple sequential
-// order (not seeded — "Seeding" is its own later feature, see FEATURES.md).
-// Throws if the roster can't be evenly split into teams, since silently
-// dropping a leftover player would mean deciding who doesn't get to play,
-// which isn't this function's call to make.
+// Doubles-only: pairs a roster into 2-player teams. Throws if the roster
+// can't be evenly split into teams, since silently dropping a leftover
+// player would mean deciding who doesn't get to play, which isn't this
+// function's call to make.
+//
+// Fixed Partner Mode (Tournament Safety Audit, Saturday prep) — REAL
+// pickleball doubles tournaments almost always have pre-registered
+// partnerships, but this function used to pair players by pure
+// check-in-order regardless (players[i]+players[i+1]), with no way for an
+// organizer to specify "Alice + Bob are a team" at all — getting the
+// check-in order wrong for even one pair would silently produce a wrong
+// team with no warning anywhere. Fixed by reusing the EXISTING Fixed
+// Partner Mode feature (queueManagement.js's setFixedPartner/
+// clearFixedPartner — already used for Open Play matchmaking, a mutual
+// `partnerId` pointer, always either genuinely reciprocal or null) rather
+// than inventing a new pairing mechanism: any player with a fixed partner
+// who is ALSO in this roster is paired with them first, in roster order;
+// everyone else (no fixed partner, or their partner isn't checked into
+// this specific session) falls through to the exact same sequential
+// pairing this function always did — so a session with no fixed partners
+// set at all (every existing caller/test before this fix) behaves
+// identically to before.
 export function pairIntoTeams(players) {
   if (players.length % 2 !== 0) {
     throw new Error("Doubles needs an even number of players to form complete teams.");
   }
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const used = new Set();
   const teams = [];
-  for (let i = 0; i < players.length; i += 2) {
-    teams.push([players[i], players[i + 1]]);
+
+  for (const p of players) {
+    if (used.has(p.id)) continue;
+    const partner = p.partnerId ? byId.get(p.partnerId) : null;
+    // partner.partnerId === p.id re-checks the mutual link rather than
+    // trusting p.partnerId alone — setFixedPartner's own invariant says
+    // this is always already true, but a fixed-partner link pointing at
+    // someone who turns out not to reciprocate (shouldn't happen) falls
+    // through to sequential pairing below instead of silently trusting a
+    // one-sided pointer.
+    if (partner && !used.has(partner.id) && partner.partnerId === p.id) {
+      teams.push([p, partner]);
+      used.add(p.id);
+      used.add(partner.id);
+    }
+  }
+
+  const remaining = players.filter((p) => !used.has(p.id));
+  for (let i = 0; i < remaining.length; i += 2) {
+    teams.push([remaining[i], remaining[i + 1]]);
   }
   return teams;
 }

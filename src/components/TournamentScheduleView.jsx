@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Megaphone, Pencil, Play, RefreshCw, Star, Users, X } from "lucide-react";
 import { styles } from "../styles.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 // Real now (Tournament Match Management) — the status a match/round is
 // actually in, driven by lib/tournamentModel.js's startMatch/
@@ -73,11 +72,11 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMat
 
   if (match.isBye) {
     return (
-      <div style={styles.historyMatchCard}>
-        <div style={styles.historyMatchHead}>
-          <span style={styles.courtBadge}>BYE</span>
+      <div style={styles.tMatchCardSmall}>
+        <div style={styles.tMatchCardHead}>
+          <span style={styles.tCourtBadgeDark}>BYE</span>
         </div>
-        <p style={styles.byeTag}>{match.teamA.label} has a bye this round.</p>
+        <p style={styles.tByeTag}>{match.teamA.label} has a bye this round.</p>
       </div>
     );
   }
@@ -86,12 +85,12 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMat
   const canEdit = isCompleted && !poolCompleted;
 
   return (
-    <div style={{ ...styles.historyMatchCard, ...(isCompleted ? styles.matchCompletedCard : {}) }}>
-      <div style={styles.historyMatchHead}>
-        <span style={styles.courtBadge}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
-        <span style={styles.matchStatusBadge(match.status)}>{STATUS_LABELS[match.status]}</span>
+    <div style={{ ...styles.tMatchCardSmall, ...(isCompleted ? styles.tMatchCompletedAccent : {}) }}>
+      <div style={styles.tMatchCardHead}>
+        <span style={styles.tCourtBadgeDark}>{match.court ? `COURT ${match.court}` : "COURT TBD"}</span>
+        <span style={styles.tMatchStatusBadge(match.status)}>{STATUS_LABELS[match.status]}</span>
         {isNextMatch && (
-          <span style={{ ...styles.courtBadge, background: "var(--ball)" }}>
+          <span style={{ ...styles.tCourtBadgeDark, background: "var(--ball)" }}>
             <Star size={11} strokeWidth={2.5} style={{ verticalAlign: "-1px", marginRight: 3 }} />
             NEXT MATCH
           </span>
@@ -100,43 +99,43 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMat
 
       {!editing && (
         <>
-          <div style={styles.historyMatchTeams}>
-            <div style={styles.historyTeamLine}>
+          <div style={styles.tMatchCardTeams}>
+            <div style={styles.tMatchCardTeamLine}>
               <span>{match.teamA.label}</span>
               {isCompleted && (
-                <span style={{ ...styles.historyScore, ...(match.winner === match.teamA.id ? styles.historyScoreWin : {}) }}>
+                <span style={{ ...styles.tMatchCardScore, ...(match.winner === match.teamA.id ? styles.tMatchCardScoreWin : {}) }}>
                   {match.score.teamA}
                 </span>
               )}
             </div>
-            <div style={styles.vsLine} />
-            <div style={styles.historyTeamLine}>
+            <div style={styles.tVsLine} />
+            <div style={styles.tMatchCardTeamLine}>
               <span>{match.teamB.label}</span>
               {isCompleted && (
-                <span style={{ ...styles.historyScore, ...(match.winner === match.teamB.id ? styles.historyScoreWin : {}) }}>
+                <span style={{ ...styles.tMatchCardScore, ...(match.winner === match.teamB.id ? styles.tMatchCardScoreWin : {}) }}>
                   {match.score.teamB}
                 </span>
               )}
             </div>
           </div>
           {isCompleted ? (
-            <div style={styles.editActions}>
+            <div style={styles.tControlsRow}>
               {canEdit && (
-                <button type="button" style={styles.secondaryBtn} onClick={openForm}>
+                <button type="button" style={styles.tActionBtn} onClick={openForm}>
                   <Pencil size={13} strokeWidth={2.5} />
                   Edit result
                 </button>
               )}
             </div>
           ) : (
-            <div style={styles.editActions}>
+            <div style={styles.tControlsRow}>
               {match.status === "pending" && !isNextMatch && (
-                <button type="button" style={styles.secondaryBtn} onClick={() => onSetNextMatch(match.id)}>
+                <button type="button" style={styles.tActionBtn} onClick={() => onSetNextMatch(match.id)}>
                   <Star size={13} strokeWidth={2.5} />
                   Set as Next Match
                 </button>
               )}
-              <button type="button" style={styles.primaryBtn} onClick={match.status === "pending" ? handleStart : openForm}>
+              <button type="button" style={styles.tPrimaryBtn} onClick={match.status === "pending" ? handleStart : openForm}>
                 <Play size={14} strokeWidth={2.5} />
                 {match.status === "pending" ? "Start match" : "Enter scores"}
               </button>
@@ -148,51 +147,51 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMat
       {editing && (
         <div>
           <div style={styles.scoreInputRow}>
-            <label style={styles.scoreInputField}>
+            <label style={styles.tScoreInputField}>
               {match.teamA.label}
               <input
                 type="number"
                 min={0}
-                style={styles.expectedGamesInput}
+                style={styles.tSmallInput}
                 value={scoreA}
                 onChange={(e) => setScoreA(e.target.value)}
               />
             </label>
-            <label style={styles.scoreInputField}>
+            <label style={styles.tScoreInputField}>
               {match.teamB.label}
               <input
                 type="number"
                 min={0}
-                style={styles.expectedGamesInput}
+                style={styles.tSmallInput}
                 value={scoreB}
                 onChange={(e) => setScoreB(e.target.value)}
               />
             </label>
           </div>
-          <p style={styles.dialogLabel}>Winner</p>
+          <p style={styles.tFieldLabel}>Winner</p>
           <div style={styles.winnerSelectRow}>
             <button
               type="button"
-              style={styles.winnerSelectBtn(winnerId === match.teamA.id)}
+              style={styles.tWinnerSelectBtn(winnerId === match.teamA.id)}
               onClick={() => setWinnerId(match.teamA.id)}
             >
               {match.teamA.label}
             </button>
             <button
               type="button"
-              style={styles.winnerSelectBtn(winnerId === match.teamB.id)}
+              style={styles.tWinnerSelectBtn(winnerId === match.teamB.id)}
               onClick={() => setWinnerId(match.teamB.id)}
             >
               {match.teamB.label}
             </button>
           </div>
-          {localError && <p style={styles.editWarning}>{localError}</p>}
-          <div style={styles.editActions}>
-            <button type="button" style={styles.secondaryBtn} onClick={() => setEditing(false)}>
+          {localError && <p style={styles.tWarningText}>{localError}</p>}
+          <div style={styles.tControlsRow}>
+            <button type="button" style={styles.tActionBtn} onClick={() => setEditing(false)}>
               <X size={13} strokeWidth={2.5} />
               Cancel
             </button>
-            <button type="button" style={styles.primaryBtn} onClick={handleSave}>
+            <button type="button" style={styles.tPrimaryBtn} onClick={handleSave}>
               <Check size={14} strokeWidth={2.5} />
               Save result
             </button>
@@ -205,12 +204,12 @@ function MatchCard({ match, poolCompleted, onStartMatch, onSaveResult, isNextMat
 
 function RoundCard({ round, expanded, onToggle, poolCompleted, onStartMatch, onSaveResult, nextMatchId, onSetNextMatch }) {
   return (
-    <div style={styles.historyRoundCard}>
-      <button style={styles.historyRoundHead} onClick={onToggle}>
+    <div style={styles.tRoundCard}>
+      <button style={styles.tRoundHead} onClick={onToggle}>
         {expanded ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
         <span>Round {round.roundNumber}</span>
-        <span style={styles.matchStatusBadge(round.status)}>{STATUS_LABELS[round.status]}</span>
-        <span style={styles.historyRoundCount}>
+        <span style={styles.tMatchStatusBadge(round.status)}>{STATUS_LABELS[round.status]}</span>
+        <span style={styles.tRoundCount}>
           {round.matches.length} match{round.matches.length === 1 ? "" : "es"}
         </span>
       </button>
@@ -243,8 +242,8 @@ function PoolSchedule({ pool, showHeading, expandedRounds, onToggleRound, onStar
   const poolCompleted = pool.status === "completed";
   return (
     <div style={styles.poolScheduleBlock}>
-      {showHeading && <h3 style={styles.poolHeading}>{pool.label}</h3>}
-      <p style={styles.editHint}>
+      {showHeading && <h3 style={styles.tSubheading}>{pool.label}</h3>}
+      <p style={styles.tControlHint}>
         {pool.entrants.length} {pool.entrants.length === 1 ? "entrant" : "entrants"}, {pool.rounds.length} round
         {pool.rounds.length === 1 ? "" : "s"}.
         {poolCompleted && " This pool is complete — results can no longer be edited."}
@@ -288,6 +287,8 @@ export default function TournamentScheduleView({
   onSetNextMatch,
   onAnnounceNextMatch,
   announcingNextMatch,
+  mode,
+  setMode,
 }) {
   // Tournament Templates — if the organizer picked "Use Template" at
   // Create Session, its config rides along as state.pendingTournamentTemplate
@@ -298,7 +299,6 @@ export default function TournamentScheduleView({
   // — this only changes what the form starts pre-filled with.
   const template = state.pendingTournamentTemplate;
 
-  const [mode, setMode] = useState(() => tournament?.mode ?? template?.mode ?? "singles");
   const [poolCount, setPoolCount] = useState(() => tournament?.poolCount ?? template?.poolCount ?? 1);
   const [customPoolCount, setCustomPoolCount] = useState(() =>
     template && !POOL_COUNT_OPTIONS.includes(template.poolCount) ? String(template.poolCount) : ""
@@ -342,40 +342,40 @@ export default function TournamentScheduleView({
     const deCanGenerate = isPowerOfTwo && !generating && !deTournamentGenerated;
     return (
       <div>
-        <SectionLabel>Tournament Schedule</SectionLabel>
-        <div style={styles.tournamentSetupCard}>
-          <p style={styles.editHint}>
+        <h2 style={styles.tSectionHeading}>Tournament Schedule</h2>
+        <div style={styles.tSetupCard}>
+          <p style={styles.tControlHint}>
             {deTournamentGenerated
               ? "Bracket already generated — manage matches from the Bracket tab."
               : `Generates a standalone Double Elimination bracket directly from this session's ${Object.keys(state.players || {}).length} registered player${Object.keys(state.players || {}).length === 1 ? "" : "s"} — no Round Robin pool stage. Needs a power-of-two count of at least 4 (4, 8, 16, ...).`}
           </p>
           {!deTournamentGenerated && (
             <>
-              <div style={styles.skillToggle}>
-                <button type="button" style={styles.skillToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
+              <div style={styles.tToggleRow}>
+                <button type="button" style={styles.tToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
                   Singles
                 </button>
-                <button type="button" style={styles.skillToggleBtn(mode === "doubles")} onClick={() => setMode("doubles")}>
+                <button type="button" style={styles.tToggleBtn(mode === "doubles")} onClick={() => setMode("doubles")}>
                   Doubles
                 </button>
               </div>
-              <p style={styles.dialogLabel}>Seeding method</p>
-              <div style={styles.skillToggle}>
+              <p style={styles.tFieldLabel}>Seeding method</p>
+              <div style={styles.tToggleRow}>
                 {STANDALONE_SEEDING_METHODS.map((m) => (
-                  <button key={m.value} type="button" style={styles.skillToggleBtn(seedingMethod === m.value)} onClick={() => setSeedingMethod(m.value)}>
+                  <button key={m.value} type="button" style={styles.tToggleBtn(seedingMethod === m.value)} onClick={() => setSeedingMethod(m.value)}>
                     {m.label}
                   </button>
                 ))}
               </div>
               {!isPowerOfTwo && (
-                <p style={styles.editWarning}>
+                <p style={styles.tWarningText}>
                   Double Elimination requires a power-of-two team count of at least 4 (4, 8, 16, ...) — currently{" "}
                   {Object.keys(state.players || {}).length}.
                 </p>
               )}
-              {generateError && <p style={styles.editWarning}>{generateError}</p>}
+              {generateError && <p style={styles.tWarningText}>{generateError}</p>}
               <button
-                style={{ ...styles.primaryBtn, ...(!deCanGenerate ? styles.btnDisabled : {}) }}
+                style={{ ...styles.tPrimaryBtn, ...(!deCanGenerate ? styles.tBtnDisabled : {}) }}
                 disabled={!deCanGenerate}
                 onClick={() => onGenerate(mode, null, null, seedingMethod)}
               >
@@ -432,27 +432,27 @@ export default function TournamentScheduleView({
 
   return (
     <div>
-      <SectionLabel>Tournament Schedule</SectionLabel>
+      <h2 style={styles.tSectionHeading}>Tournament Schedule</h2>
 
       {nextMatch && (
-        <div style={{ ...styles.tournamentSetupCard, borderColor: "var(--ball)" }}>
-          <p style={styles.dialogLabel}>
+        <div style={{ ...styles.tSetupCard, borderColor: "var(--ball)" }}>
+          <p style={styles.tFieldLabel}>
             <Star size={13} strokeWidth={2.5} style={{ verticalAlign: "-2px", marginRight: 4 }} />
             NEXT MATCH
           </p>
-          <div style={styles.historyMatchTeams}>
-            <div style={styles.historyTeamLine}>
+          <div style={styles.tMatchCardTeams}>
+            <div style={styles.tMatchCardTeamLine}>
               <span>{nextMatch.teamA.label}</span>
             </div>
-            <div style={styles.vsLine} />
-            <div style={styles.historyTeamLine}>
+            <div style={styles.tVsLine} />
+            <div style={styles.tMatchCardTeamLine}>
               <span>{nextMatch.teamB.label}</span>
             </div>
           </div>
-          <div style={styles.editActions}>
+          <div style={styles.tControlsRow}>
             <button
               type="button"
-              style={{ ...styles.primaryBtn, ...(announcingNextMatch ? styles.btnDisabled : {}) }}
+              style={{ ...styles.tPrimaryBtn, ...(announcingNextMatch ? styles.tBtnDisabled : {}) }}
               disabled={announcingNextMatch}
               onClick={onAnnounceNextMatch}
             >
@@ -463,32 +463,32 @@ export default function TournamentScheduleView({
         </div>
       )}
 
-      <div style={styles.tournamentSetupCard}>
-        <p style={styles.editHint}>
+      <div style={styles.tSetupCard}>
+        <p style={styles.tControlHint}>
           {tournamentCompleted
             ? "This tournament is complete — the schedule can no longer be regenerated."
             : tournament
               ? `Regenerating rebuilds every pool's schedule from this session's ${playerCount} currently registered player${playerCount === 1 ? "" : "s"} — any results already saved will be lost.`
               : `Generates a Round Robin schedule from this session's ${playerCount} registered player${playerCount === 1 ? "" : "s"} across ${state.courts.length} court${state.courts.length === 1 ? "" : "s"}.`}
         </p>
-        <div style={styles.skillToggle}>
-          <button type="button" style={styles.skillToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
+        <div style={styles.tToggleRow}>
+          <button type="button" style={styles.tToggleBtn(mode === "singles")} onClick={() => setMode("singles")}>
             Singles
           </button>
-          <button type="button" style={styles.skillToggleBtn(mode === "doubles")} onClick={() => setMode("doubles")}>
+          <button type="button" style={styles.tToggleBtn(mode === "doubles")} onClick={() => setMode("doubles")}>
             Doubles
           </button>
         </div>
         {!tournamentCompleted && (
           <>
-            <p style={styles.dialogLabel}>Number of pools</p>
-            <div style={styles.skillToggle}>
+            <p style={styles.tFieldLabel}>Number of pools</p>
+            <div style={styles.tToggleRow}>
               {POOL_COUNT_OPTIONS.map((n) => (
-                <button key={n} type="button" style={styles.skillToggleBtn(poolCount === n)} onClick={() => setPoolCount(n)}>
+                <button key={n} type="button" style={styles.tToggleBtn(poolCount === n)} onClick={() => setPoolCount(n)}>
                   {n}
                 </button>
               ))}
-              <button type="button" style={styles.skillToggleBtn(isCustomPoolCount)} onClick={() => setPoolCount(-1)}>
+              <button type="button" style={styles.tToggleBtn(isCustomPoolCount)} onClick={() => setPoolCount(-1)}>
                 Custom
               </button>
             </div>
@@ -497,24 +497,24 @@ export default function TournamentScheduleView({
                 type="number"
                 min={1}
                 placeholder="Number of pools"
-                style={{ ...styles.expectedGamesInput, width: "100%", marginBottom: 12 }}
+                style={{ ...styles.tSmallInput, width: "100%", marginBottom: 12 }}
                 value={customPoolCount}
                 onChange={(e) => setCustomPoolCount(e.target.value)}
               />
             )}
-            <p style={styles.dialogLabel}>Teams advancing per pool</p>
-            <div style={styles.skillToggle}>
+            <p style={styles.tFieldLabel}>Teams advancing per pool</p>
+            <div style={styles.tToggleRow}>
               {ADVANCES_OPTIONS.map((n) => (
                 <button
                   key={n}
                   type="button"
-                  style={styles.skillToggleBtn(advancesPerPool === n)}
+                  style={styles.tToggleBtn(advancesPerPool === n)}
                   onClick={() => setAdvancesPerPool(n)}
                 >
                   Top {n}
                 </button>
               ))}
-              <button type="button" style={styles.skillToggleBtn(isCustomAdvances)} onClick={() => setAdvancesPerPool(-1)}>
+              <button type="button" style={styles.tToggleBtn(isCustomAdvances)} onClick={() => setAdvancesPerPool(-1)}>
                 Custom
               </button>
             </div>
@@ -523,26 +523,26 @@ export default function TournamentScheduleView({
                 type="number"
                 min={1}
                 placeholder="Teams advancing per pool"
-                style={{ ...styles.expectedGamesInput, width: "100%", marginBottom: 12 }}
+                style={{ ...styles.tSmallInput, width: "100%", marginBottom: 12 }}
                 value={customAdvances}
                 onChange={(e) => setCustomAdvances(e.target.value)}
               />
             )}
           </>
         )}
-        {generateError && <p style={styles.editWarning}>{generateError}</p>}
-        {playerCount < 2 && <p style={styles.editWarning}>Register at least 2 players before generating a schedule.</p>}
+        {generateError && <p style={styles.tWarningText}>{generateError}</p>}
+        {playerCount < 2 && <p style={styles.tWarningText}>Register at least 2 players before generating a schedule.</p>}
         {playerCount >= 2 && effectivePoolCount >= 1 && playerCount < effectivePoolCount * 2 && (
-          <p style={styles.editWarning}>Need at least 2 players per pool — register more players or choose fewer pools.</p>
+          <p style={styles.tWarningText}>Need at least 2 players per pool — register more players or choose fewer pools.</p>
         )}
         {playerCount >= 2 && effectivePoolCount >= 1 && playerCount >= effectivePoolCount * 2 && !advancesFitsPools && (
-          <p style={styles.editWarning}>
+          <p style={styles.tWarningText}>
             Teams advancing per pool can't exceed the smallest pool's size ({smallestPoolSize}).
           </p>
         )}
         {!tournamentCompleted && (
           <button
-            style={{ ...styles.primaryBtn, ...(!canGenerate ? styles.btnDisabled : {}) }}
+            style={{ ...styles.tPrimaryBtn, ...(!canGenerate ? styles.tBtnDisabled : {}) }}
             disabled={!canGenerate}
             onClick={() => onGenerate(mode, effectivePoolCount, effectiveAdvances)}
           >
@@ -552,9 +552,9 @@ export default function TournamentScheduleView({
         )}
       </div>
 
-      {loading && <p style={styles.editHint}>Loading schedule…</p>}
+      {loading && <p style={styles.tControlHint}>Loading schedule…</p>}
 
-      {matchError && <p style={styles.editWarning}>{matchError}</p>}
+      {matchError && <p style={styles.tWarningText}>{matchError}</p>}
 
       {tournament && !loading && (
         <div>

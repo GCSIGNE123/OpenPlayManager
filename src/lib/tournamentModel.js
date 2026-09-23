@@ -54,6 +54,14 @@ export const makeEntrant = makeParticipant;
 //   engines/CourtAssignmentEngine.js. Absent/undefined on every match by
 //   default (read as { pinnedCourt: null, delayed: false } wherever it
 //   matters) — nothing here until an organizer explicitly pins or delays.
+//   serve ({ team: 'teamA'|'teamB', number: 1|2 } | undefined) and pointLog
+//   (Array<{ scoreA, scoreB, servingTeam, serveNumber, timestamp }> |
+//   undefined) — Tournament Scorer 1st/2nd Serve, see makeMatch and
+//   engines/CourtAssignmentService.js's setServeNumber/changeServe/sideOut/
+//   adjustScore. Manual, scorer-controlled; never gates or is inferred from
+//   scoring. Absent/undefined on any match built before this feature or by
+//   a bracket/Double-Elimination generator that doesn't set it — every
+//   reader defaults the same way (`m.serve?.team ?? "teamA"`, etc.).
 //   -- Playoff-bracket-match-only additions (Live Playoff Bracket & Match
 //   Operations, see engines/PlayoffEngine.js — never set on a pool match):
 //   status can also be 'paused'; lastUpdatedAt (ms epoch | undefined) is
@@ -75,6 +83,21 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
     matchType: "roundRobin",
     winner: null,
     score: { teamA: null, teamB: null },
+    // Tournament Scorer — 1st Serve / 2nd Serve (see PROJECT.md/FEATURES.md
+    // and engines/CourtAssignmentService.js). Manual, scorer-controlled
+    // bookkeeping alongside score — never gates or infers from it. `team`
+    // defaults to "teamA" (someone has to serve first; Side Out corrects it
+    // immediately if wrong). Additive fields: a match built before this
+    // feature simply lacks them, and every reader defaults the same way
+    // (CourtAssignmentService's own `m.serve?.team ?? "teamA"`), so no
+    // migration is needed for already-stored tournaments.
+    serve: { team: "teamA", number: 1 },
+    // Bounded (MAX_POINT_LOG, see CourtAssignmentService.js) append-only log
+    // of completed points — same "bounded activity log" precedent as
+    // queueActivityLog/skillChangeLog. Only a "+" adjustment appends; "-"
+    // pops the matching most recent entry (see adjustScore). Never read by
+    // scoring/standings/advancement — display-only.
+    pointLog: [],
     startedAt: null,
     completedAt: null,
     status: "pending",

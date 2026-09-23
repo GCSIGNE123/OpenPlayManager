@@ -184,14 +184,26 @@ export class TournamentReportService {
   generateMatchReport(tournament) {
     const rows = collectAllMatches(tournament)
       .filter((entry) => entry.match.status === "completed")
-      .map(({ match, sourceLabel }) => [
-        sourceLabel,
-        match.court != null ? String(match.court) : "—",
-        `${match.teamA?.label ?? "—"} vs ${match.teamB?.label ?? "—"}`,
-        `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}`,
-        match.winner === match.teamA?.id ? match.teamA.label : match.winner === match.teamB?.id ? match.teamB.label : "—",
-        match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
-      ]);
+      .map(({ match, sourceLabel }) => {
+        // A pool match's teams are Participant objects (`.id`); a playoff/
+        // bracket match's teams are SeededTeam objects (`.participantId`,
+        // no `.id` at all — see BracketSeeding.js/PlayoffBracketGenerator.js)
+        // — same "resolve whichever id field this team shape actually has"
+        // precedent already used by lib/tournament.js's rateMatch and
+        // TournamentDashboardView's handleEndMatch. Comparing match.winner
+        // against only `.id` left every playoff-sourced row's Winner column
+        // blank, since `.id` is always undefined there.
+        const teamAId = match.teamA?.id ?? match.teamA?.participantId;
+        const teamBId = match.teamB?.id ?? match.teamB?.participantId;
+        return [
+          sourceLabel,
+          match.court != null ? String(match.court) : "—",
+          `${match.teamA?.label ?? "—"} vs ${match.teamB?.label ?? "—"}`,
+          `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}`,
+          match.winner === teamAId ? match.teamA.label : match.winner === teamBId ? match.teamB.label : "—",
+          match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
+        ];
+      });
     return {
       title: "Match Results Report",
       columns: ["Round", "Court", "Teams", "Score", "Winner", "Completion Time"],

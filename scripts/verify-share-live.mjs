@@ -75,8 +75,16 @@ console.log("\n3. Dialog + button are read-only and available for BOTH session t
   assert("a missing session code shows 'nothing to share' instead of a broken link", /No session code yet/.test(dlg));
 
   const app = read("src/PickleballOpenPlay.jsx");
-  const btnIdx = app.indexOf('aria-label="Share Live"');
-  assert("the organizer header has exactly one Share Live button", btnIdx > -1 && app.indexOf('aria-label="Share Live"', btnIdx + 1) === -1);
+  // Tournament Manager visual redesign, Stage 1 — the organizer header now
+  // branches on isTournamentTheme (dark Tournament header vs. the original
+  // light Open Play header, see PickleballOpenPlay.jsx), so the button's
+  // markup legitimately appears twice in source — same existing precedent
+  // as the TV Mode buttons just below (tvTournamentIdx/tvOpenPlayIdx), one
+  // per branch, never both mounted at once. Both must still open the exact
+  // same dialog.
+  const shareLiveIdxs = [...app.matchAll(/aria-label="Share Live"/g)].map((m) => m.index);
+  assert("the Share Live button appears once per header theme branch (dark Tournament + light Open Play), never duplicated within a branch", shareLiveIdxs.length === 2);
+  const btnIdx = shareLiveIdxs[0];
   const before = app.slice(Math.max(0, btnIdx - 420), btnIdx);
   assert("the Share Live button is NOT wrapped in a sessionType condition (Open Play AND Tournament)", !/sessionType/.test(before.split("Share Live")[before.split("Share Live").length - 1]) && app.indexOf("<Share2") > 0);
   const tvTournamentIdx = app.indexOf('aria-label="TV display mode"');

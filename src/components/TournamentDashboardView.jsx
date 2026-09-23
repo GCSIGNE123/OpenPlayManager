@@ -18,6 +18,9 @@ import {
   saveCourtAssignment,
   saveAdjustMatchScore,
   saveDeclareCourtWinner,
+  saveSetServeNumber,
+  saveChangeServe,
+  saveSideOut,
   saveCourtRelease,
   saveCourtReassignment,
   saveAddCourt,
@@ -58,7 +61,6 @@ import { PoolQualificationService } from "../engines/PoolQualificationService.js
 import { ChampionshipSeriesService } from "../engines/ChampionshipSeriesService.js";
 import { PlayoffEngine } from "../engines/PlayoffEngine.js";
 import { MATCH_FORMATS } from "../engines/TournamentSettings.js";
-import SectionLabel from "./SectionLabel.jsx";
 import TournamentParticipantsView from "./TournamentParticipantsView.jsx";
 import TournamentScheduleView from "./TournamentScheduleView.jsx";
 import TournamentStandingsView from "./TournamentStandingsView.jsx";
@@ -92,14 +94,14 @@ function formatCompletionTime(ms) {
 function PoolPodium({ pool, showHeading }) {
   return (
     <div style={styles.poolScheduleBlock}>
-      {showHeading && <h3 style={styles.poolHeading}>{pool.label}</h3>}
-      <div style={styles.sessionInfoCard}>
+      {showHeading && <h3 style={styles.tSubheading}>{pool.label}</h3>}
+      <div style={styles.tInfoGrid}>
         {["champion", "runnerUp", "thirdPlace"].map((slot) => (
-          <div key={slot} style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>
+          <div key={slot} style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>
               {MEDALS[slot]} {PODIUM_LABELS[slot]}
             </span>
-            <span style={styles.sessionInfoValue}>{pool[slot]?.label ?? "—"}</span>
+            <span style={styles.tInfoValue}>{pool[slot]?.label ?? "—"}</span>
           </div>
         ))}
       </div>
@@ -119,90 +121,90 @@ function CompletedOverviewPanel({ tournament }) {
   const qualification = qualificationService.determineQualifiers(tournament, engine);
   return (
     <div>
-      <div style={styles.sessionInfoCard}>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Tournament Status</span>
-          <span style={styles.sessionInfoValue}>Completed</span>
+      <div style={styles.tInfoGrid}>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Tournament Status</span>
+          <span style={styles.tInfoValue}>Completed</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Matches</span>
-          <span style={styles.sessionInfoValue}>{progress.total}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Matches</span>
+          <span style={styles.tInfoValue}>{progress.total}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Matches Completed</span>
-          <span style={styles.sessionInfoValue}>{progress.completed}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Matches Completed</span>
+          <span style={styles.tInfoValue}>{progress.completed}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Completion Time</span>
-          <span style={styles.sessionInfoValue}>{formatCompletionTime(latestCompletion)}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Completion Time</span>
+          <span style={styles.tInfoValue}>{formatCompletionTime(latestCompletion)}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Playoff Stage</span>
-          <span style={styles.sessionInfoValue}>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Playoff Stage</span>
+          <span style={styles.tInfoValue}>
             {qualification.playoffSize.stage} ({qualification.playoffSize.count})
           </span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Qualified Participants</span>
-          <span style={styles.sessionInfoValue}>{qualification.playoffSize.count}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Qualified Participants</span>
+          <span style={styles.tInfoValue}>{qualification.playoffSize.count}</span>
         </div>
         {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
           <>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Automatic Qualifiers</span>
-              <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Automatic Qualifiers</span>
+              <span style={styles.tInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "qualified").length}</span>
             </div>
             {tournament.qualificationMethod === "wildCard" && (
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Wild Cards</span>
-                <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Wild Cards</span>
+                <span style={styles.tInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "wildCard").length}</span>
               </div>
             )}
             {tournament.qualificationMethod === "bestThirdPlace" && (
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Best Third Place</span>
-                <span style={styles.sessionInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Best Third Place</span>
+                <span style={styles.tInfoValue}>{qualification.qualifiedTeams.filter((q) => q.qualificationType === "bestThirdPlace").length}</span>
               </div>
             )}
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Remaining Eliminated</span>
-              <span style={styles.sessionInfoValue}>{qualification.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Remaining Eliminated</span>
+              <span style={styles.tInfoValue}>{qualification.pools.flatMap((p) => p.rows).filter((r) => r.qualificationStatus === "eliminated").length}</span>
             </div>
           </>
         )}
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Playoff Matches</span>
-          <span style={styles.sessionInfoValue}>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Playoff Matches</span>
+          <span style={styles.tInfoValue}>
             {tournament.bracket
               ? tournament.bracket.rounds.reduce((sum, r) => sum + r.matches.length, 0) + (tournament.bracket.bronzeMatch ? 1 : 0)
               : qualification.playoffSize.count - 1}
           </span>
         </div>
         {(tournament.bracketFormat ?? "singleElimination") !== "doubleElimination" && (
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Bracket Status</span>
-            <span style={styles.sessionInfoValue}>{tournament.bracket ? tournament.bracket.status : "Not generated"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Bracket Status</span>
+            <span style={styles.tInfoValue}>{tournament.bracket ? tournament.bracket.status : "Not generated"}</span>
           </div>
         )}
         {tournament.bracket?.status === "completed" && (
           <>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>🥇 Bracket Champion</span>
-              <span style={styles.sessionInfoValue}>{tournament.bracket.champion?.label ?? "—"}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>🥇 Bracket Champion</span>
+              <span style={styles.tInfoValue}>{tournament.bracket.champion?.label ?? "—"}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>🥈 Bracket Runner-up</span>
-              <span style={styles.sessionInfoValue}>{tournament.bracket.runnerUp?.label ?? "—"}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>🥈 Bracket Runner-up</span>
+              <span style={styles.tInfoValue}>{tournament.bracket.runnerUp?.label ?? "—"}</span>
             </div>
             {tournament.bracket.bronzeMatch && (
               <>
-                <div style={styles.sessionInfoItem}>
-                  <span style={styles.sessionInfoLabel}>🥉 Third Place</span>
-                  <span style={styles.sessionInfoValue}>{tournament.bracket.thirdPlace?.label ?? "—"}</span>
+                <div style={styles.tInfoItem}>
+                  <span style={styles.tInfoLabel}>🥉 Third Place</span>
+                  <span style={styles.tInfoValue}>{tournament.bracket.thirdPlace?.label ?? "—"}</span>
                 </div>
-                <div style={styles.sessionInfoItem}>
-                  <span style={styles.sessionInfoLabel}>🏅 Fourth Place</span>
-                  <span style={styles.sessionInfoValue}>{tournament.bracket.fourthPlace?.label ?? "—"}</span>
+                <div style={styles.tInfoItem}>
+                  <span style={styles.tInfoLabel}>🏅 Fourth Place</span>
+                  <span style={styles.tInfoValue}>{tournament.bracket.fourthPlace?.label ?? "—"}</span>
                 </div>
               </>
             )}
@@ -210,22 +212,22 @@ function CompletedOverviewPanel({ tournament }) {
         )}
       </div>
       {(tournament.format === "doubleElimination" || (tournament.bracketFormat ?? "singleElimination") === "doubleElimination") && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Tournament Format</span>
-            <span style={styles.sessionInfoValue}>Double Elimination</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Tournament Format</span>
+            <span style={styles.tInfoValue}>Double Elimination</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Winners Bracket</span>
-            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.winnersBracket.status : "Not generated"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Winners Bracket</span>
+            <span style={styles.tInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.winnersBracket.status : "Not generated"}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Losers Bracket</span>
-            <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.losersBracket.status : "Not generated"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Losers Bracket</span>
+            <span style={styles.tInfoValue}>{tournament.doubleEliminationBracket ? tournament.doubleEliminationBracket.losersBracket.status : "Not generated"}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>Grand Final</span>
-            <span style={styles.sessionInfoValue}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>Grand Final</span>
+            <span style={styles.tInfoValue}>
               {tournament.doubleEliminationBracket
                 ? tournament.doubleEliminationBracket.grandFinal.resetTriggered
                   ? `${tournament.doubleEliminationBracket.grandFinal.status} (Reset triggered)`
@@ -234,9 +236,9 @@ function CompletedOverviewPanel({ tournament }) {
             </span>
           </div>
           {tournament.doubleEliminationBracket?.grandFinal.champion && (
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>🥇 Tournament Champion</span>
-              <span style={styles.sessionInfoValue}>{tournament.doubleEliminationBracket.grandFinal.champion.label}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>🥇 Tournament Champion</span>
+              <span style={styles.tInfoValue}>{tournament.doubleEliminationBracket.grandFinal.champion.label}</span>
             </div>
           )}
         </div>
@@ -254,23 +256,23 @@ function CompletedOverviewPanel({ tournament }) {
           const completed = allMatches.filter((m) => m.status === "completed").length;
           const currentRound = playoffEngine.getCurrentRound(winnersBracket);
           return (
-            <div style={styles.sessionInfoCard}>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Active Winners Bracket Round</span>
-                <span style={styles.sessionInfoValue}>{currentRound.name}</span>
+            <div style={styles.tInfoGrid}>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Active Winners Bracket Round</span>
+                <span style={styles.tInfoValue}>{currentRound.name}</span>
               </div>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Winners Bracket Matches Remaining</span>
-                <span style={styles.sessionInfoValue}>{allMatches.length - completed}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Winners Bracket Matches Remaining</span>
+                <span style={styles.tInfoValue}>{allMatches.length - completed}</span>
               </div>
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Winners Bracket Completed Matches</span>
-                <span style={styles.sessionInfoValue}>{completed}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Winners Bracket Completed Matches</span>
+                <span style={styles.tInfoValue}>{completed}</span>
               </div>
               {winnersBracket.champion && (
-                <div style={styles.sessionInfoItem}>
-                  <span style={styles.sessionInfoLabel}>Winners Bracket Champion</span>
-                  <span style={styles.sessionInfoValue}>{winnersBracket.champion.label}</span>
+                <div style={styles.tInfoItem}>
+                  <span style={styles.tInfoLabel}>Winners Bracket Champion</span>
+                  <span style={styles.tInfoValue}>{winnersBracket.champion.label}</span>
                 </div>
               )}
             </div>
@@ -289,20 +291,20 @@ function CompletedOverviewPanel({ tournament }) {
         const nextGame = finalRound.matches.find((m) => m.status !== "completed");
         const gamesRemaining = complete ? 0 : 3 - finalRound.matches.filter((m) => m.status === "completed").length;
         return (
-          <div style={styles.sessionInfoCard}>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Championship Series</span>
-              <span style={styles.sessionInfoValue}>
+          <div style={styles.tInfoGrid}>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Championship Series</span>
+              <span style={styles.tInfoValue}>
                 {reference.teamA?.label} {score[reference.teamA?.participantId] ?? 0} – {score[reference.teamB?.participantId] ?? 0} {reference.teamB?.label}
               </span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Games Remaining</span>
-              <span style={styles.sessionInfoValue}>{gamesRemaining}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Games Remaining</span>
+              <span style={styles.tInfoValue}>{gamesRemaining}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Series Status</span>
-              <span style={styles.sessionInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Series Status</span>
+              <span style={styles.tInfoValue}>{complete ? "Decided" : nextGame ? `Next: Game ${nextGame.matchNumber}` : "—"}</span>
             </div>
           </div>
         );
@@ -310,7 +312,7 @@ function CompletedOverviewPanel({ tournament }) {
       {tournament.pools.map((pool) => (
         <PoolPodium key={pool.id} pool={pool} showHeading={tournament.pools.length > 1} />
       ))}
-      <p style={{ ...styles.editHint, marginTop: 10 }}>{tournament.name} — tournament complete.</p>
+      <p style={{ ...styles.tControlHint, marginTop: 10 }}>{tournament.name} — tournament complete.</p>
     </div>
   );
 }
@@ -331,7 +333,7 @@ const TABS = [
 // Static placeholder panel — no data, no logic. Participants/Bracket are
 // still this for now; Overview, Schedule, and Standings are all real.
 function Placeholder({ children }) {
-  return <div style={styles.placeholderCard}>{children}</div>;
+  return <div style={styles.tEmptyState}>{children}</div>;
 }
 
 // Live, pool-aware Overview for an in-progress tournament — Number of
@@ -354,55 +356,55 @@ function DoubleEliminationOverviewPanel({ tournament }) {
   const deBracket = tournament.doubleEliminationBracket;
   return (
     <div>
-      <div style={styles.sessionInfoCard}>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Format</span>
-          <span style={styles.sessionInfoValue}>Double Elimination (standalone)</span>
+      <div style={styles.tInfoGrid}>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Format</span>
+          <span style={styles.tInfoValue}>Double Elimination (standalone)</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Teams</span>
-          <span style={styles.sessionInfoValue}>{tournament.entrants?.length ?? 0}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Teams</span>
+          <span style={styles.tInfoValue}>{tournament.entrants?.length ?? 0}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Matches Completed</span>
-          <span style={styles.sessionInfoValue}>{progress.completed}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Matches Completed</span>
+          <span style={styles.tInfoValue}>{progress.completed}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Matches Remaining</span>
-          <span style={styles.sessionInfoValue}>{progress.remaining}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Matches Remaining</span>
+          <span style={styles.tInfoValue}>{progress.remaining}</span>
         </div>
         {deBracket && (
           <>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Winners Bracket</span>
-              <span style={styles.sessionInfoValue}>{deBracket.winnersBracket.status}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Winners Bracket</span>
+              <span style={styles.tInfoValue}>{deBracket.winnersBracket.status}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Losers Bracket</span>
-              <span style={styles.sessionInfoValue}>{deBracket.losersBracket.status}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Losers Bracket</span>
+              <span style={styles.tInfoValue}>{deBracket.losersBracket.status}</span>
             </div>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Grand Final</span>
-              <span style={styles.sessionInfoValue}>{deBracket.grandFinal.resetTriggered ? `${deBracket.grandFinal.status} (Reset triggered)` : deBracket.grandFinal.status}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Grand Final</span>
+              <span style={styles.tInfoValue}>{deBracket.grandFinal.resetTriggered ? `${deBracket.grandFinal.status} (Reset triggered)` : deBracket.grandFinal.status}</span>
             </div>
           </>
         )}
       </div>
-      <div style={styles.tournamentProgressTrack}>
-        <div style={styles.tournamentProgressFill(progress.percent)} />
+      <div style={styles.tProgressTrack}>
+        <div style={styles.tProgressFill(progress.percent)} />
       </div>
-      <p style={{ ...styles.editHint, marginTop: 10 }}>
+      <p style={{ ...styles.tControlHint, marginTop: 10 }}>
         {tournament.name} — {progress.percent}% complete, status: <strong>{tournament.status}</strong>.
       </p>
       {deBracket?.grandFinal.champion && (
-        <div style={styles.sessionInfoCard}>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🥇 Tournament Champion</span>
-            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.champion.label}</span>
+        <div style={styles.tInfoGrid}>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🥇 Tournament Champion</span>
+            <span style={styles.tInfoValue}>{deBracket.grandFinal.champion.label}</span>
           </div>
-          <div style={styles.sessionInfoItem}>
-            <span style={styles.sessionInfoLabel}>🥈 Runner-up</span>
-            <span style={styles.sessionInfoValue}>{deBracket.grandFinal.runnerUp?.label ?? "—"}</span>
+          <div style={styles.tInfoItem}>
+            <span style={styles.tInfoLabel}>🥈 Runner-up</span>
+            <span style={styles.tInfoValue}>{deBracket.grandFinal.runnerUp?.label ?? "—"}</span>
           </div>
         </div>
       )}
@@ -411,7 +413,7 @@ function DoubleEliminationOverviewPanel({ tournament }) {
 }
 
 function OverviewPanel({ tournament, loading }) {
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
     return <Placeholder>Generate a schedule from the Schedule tab to see tournament progress here.</Placeholder>;
   }
@@ -453,94 +455,94 @@ function OverviewPanel({ tournament, loading }) {
 
   return (
     <div>
-      <div style={styles.sessionInfoCard}>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Teams</span>
-          <span style={styles.sessionInfoValue}>{tournament.pools.reduce((sum, p) => sum + p.entrants.length, 0)}</span>
+      <div style={styles.tInfoGrid}>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Teams</span>
+          <span style={styles.tInfoValue}>{tournament.pools.reduce((sum, p) => sum + p.entrants.length, 0)}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Matches Completed</span>
-          <span style={styles.sessionInfoValue}>{progress.completed}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Matches Completed</span>
+          <span style={styles.tInfoValue}>{progress.completed}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Matches Remaining</span>
-          <span style={styles.sessionInfoValue}>{progress.remaining}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Matches Remaining</span>
+          <span style={styles.tInfoValue}>{progress.remaining}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Number of Pools</span>
-          <span style={styles.sessionInfoValue}>{tournament.pools.length}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Number of Pools</span>
+          <span style={styles.tInfoValue}>{tournament.pools.length}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Pools Completed</span>
-          <span style={styles.sessionInfoValue}>{poolsCompleted}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Pools Completed</span>
+          <span style={styles.tInfoValue}>{poolsCompleted}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Pools Remaining</span>
-          <span style={styles.sessionInfoValue}>{tournament.pools.length - poolsCompleted}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Pools Remaining</span>
+          <span style={styles.tInfoValue}>{tournament.pools.length - poolsCompleted}</span>
         </div>
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Total Qualified</span>
-          <span style={styles.sessionInfoValue}>{qualifiedCount}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Total Qualified</span>
+          <span style={styles.tInfoValue}>{qualifiedCount}</span>
         </div>
         {tournament.qualificationMethod && tournament.qualificationMethod !== "standard" && (
           <>
-            <div style={styles.sessionInfoItem}>
-              <span style={styles.sessionInfoLabel}>Automatic Qualifiers</span>
-              <span style={styles.sessionInfoValue}>{automaticQualifierCount}</span>
+            <div style={styles.tInfoItem}>
+              <span style={styles.tInfoLabel}>Automatic Qualifiers</span>
+              <span style={styles.tInfoValue}>{automaticQualifierCount}</span>
             </div>
             {tournament.qualificationMethod === "wildCard" && (
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Wild Cards</span>
-                <span style={styles.sessionInfoValue}>{wildCardCount}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Wild Cards</span>
+                <span style={styles.tInfoValue}>{wildCardCount}</span>
               </div>
             )}
             {tournament.qualificationMethod === "bestThirdPlace" && (
-              <div style={styles.sessionInfoItem}>
-                <span style={styles.sessionInfoLabel}>Best Third Place</span>
-                <span style={styles.sessionInfoValue}>{bestThirdPlaceCount}</span>
+              <div style={styles.tInfoItem}>
+                <span style={styles.tInfoLabel}>Best Third Place</span>
+                <span style={styles.tInfoValue}>{bestThirdPlaceCount}</span>
               </div>
             )}
           </>
         )}
-        <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Remaining Eliminated</span>
-          <span style={styles.sessionInfoValue}>{eliminatedCount}</span>
+        <div style={styles.tInfoItem}>
+          <span style={styles.tInfoLabel}>Remaining Eliminated</span>
+          <span style={styles.tInfoValue}>{eliminatedCount}</span>
         </div>
       </div>
-      <div style={styles.tournamentProgressTrack}>
-        <div style={styles.tournamentProgressFill(progress.percent)} />
+      <div style={styles.tProgressTrack}>
+        <div style={styles.tProgressFill(progress.percent)} />
       </div>
-      <p style={{ ...styles.editHint, marginTop: 10 }}>
+      <p style={{ ...styles.tControlHint, marginTop: 10 }}>
         {tournament.name} — {progress.percent}% complete, status: <strong>{tournament.status}</strong>.
       </p>
       {tournament.matchScoringRules && (
-        <p style={styles.editHint}>
+        <p style={styles.tControlHint}>
           Match rules (see Settings, reference only — not enforced): {MATCH_FORMAT_LABELS[tournament.matchScoringRules.matchFormat] ?? tournament.matchScoringRules.matchFormat}
           , first to {tournament.matchScoringRules.winningScore}
           {tournament.matchScoringRules.winByTwo ? ", win by 2" : ""}.
         </p>
       )}
 
-      <h3 style={{ ...styles.poolHeading, marginTop: 18 }}>Pools</h3>
-      <div style={styles.tournamentStandingsScroll}>
-        <table style={styles.tournamentStandingsTable}>
+      <h3 style={{ ...styles.tSubheading, marginTop: 18 }}>Pools</h3>
+      <div style={styles.tTableScroll}>
+        <table style={styles.tTable}>
           <thead>
-            <tr style={styles.tournamentStandingsHeadRow}>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>Pool</th>
-              <th style={styles.tournamentStandingsHeadCell}>Teams</th>
-              <th style={styles.tournamentStandingsHeadCell}>Matches</th>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>Leader</th>
+            <tr style={styles.tTableHeadRow}>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>Pool</th>
+              <th style={styles.tTableHeadCell}>Teams</th>
+              <th style={styles.tTableHeadCell}>Matches</th>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>Leader</th>
             </tr>
           </thead>
           <tbody>
             {poolStats.map(({ pool, poolProgress, leader }) => (
-              <tr key={pool.id} style={styles.tournamentStandingsRow(99)}>
-                <td style={styles.tournamentStandingsNameCell}>{pool.label}</td>
-                <td style={styles.tournamentStandingsCell}>{pool.entrants.length}</td>
-                <td style={styles.tournamentStandingsCell}>
+              <tr key={pool.id} style={styles.tTableRow(99)}>
+                <td style={styles.tTableNameCell}>{pool.label}</td>
+                <td style={styles.tTableCell}>{pool.entrants.length}</td>
+                <td style={styles.tTableCell}>
                   {poolProgress.completed}/{poolProgress.total}
                 </td>
-                <td style={styles.tournamentStandingsNameCell}>{leader || "—"}</td>
+                <td style={styles.tTableNameCell}>{leader || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -564,9 +566,18 @@ function OverviewPanel({ tournament, loading }) {
 // looking at. The pool tab row only renders once there's more than one pool
 // — with the default poolCount of 1, the Dashboard looks and behaves
 // exactly like it did before Pool Support.
-export default function TournamentDashboardView({ state, tournamentId, onGenerate, generating, generateError }) {
+export default function TournamentDashboardView({ state, tournamentId, onGenerate, generating, generateError, onSetPartner, onClearPartner }) {
   const [tab, setTab] = useState("overview");
   const [tournament, setTournament] = useState(null);
+  // Custom Doubles Team Assignment — see PROJECT.md/FEATURES.md and
+  // TeamSetupPanel.jsx's own header comment. Lifted up from
+  // TournamentScheduleView (which used to own this as purely-local state) so
+  // the Participants tab's pre-generation Team Setup view can know which
+  // mode the organizer has picked without a second, independently-drifting
+  // toggle — same initial-value rule TournamentScheduleView always used.
+  const [scheduleMode, setScheduleMode] = useState(
+    () => tournament?.mode ?? state.pendingTournamentTemplate?.mode ?? "singles"
+  );
   const [loading, setLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
   const [courtError, setCourtError] = useState("");
@@ -588,6 +599,9 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
         if (!cancelled) {
           setTournament(t);
           setSelectedPool("all");
+          // See scheduleMode's own comment above — mirrors the sync a remount
+          // of TournamentScheduleView used to give this for free.
+          if (t?.mode) setScheduleMode(t.mode);
         }
       })
       .finally(() => {
@@ -942,6 +956,38 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     }
   };
 
+  // Tournament Scorer — 1st Serve / 2nd Serve. Same shape as
+  // handleAdjustScore/handleDeclareWinner above.
+  const handleSetServeNumber = async (matchId, number) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveSetServeNumber(tournament, matchId, number));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleChangeServe = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveChangeServe(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleSideOut = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveSideOut(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
   // End Match — finalizes whatever match currently occupies a court, using
   // its live score (adjusted via +/- or Won above) and the higher-scoring
   // side as winner. A single dispatcher over every save*MatchResult this
@@ -1245,43 +1291,55 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
 
   return (
     <div>
-      <SectionLabel>Tournament Dashboard</SectionLabel>
-      <div style={styles.dashboardTabRow}>
+      {/* Tournament Manager visual redesign, Stage 1 — see PROJECT.md/
+          FEATURES.md. This component only ever renders for a tournament
+          session (PickleballOpenPlay.jsx gates it on
+          state.sessionType === "tournament"), so its own tab strip always
+          uses the dark `t*` styles unconditionally — no Open Play branch
+          needed here. Same TABS array/order/routing as before; this is a
+          restyle only, and only of this outer strip. Each tab's own content
+          (Overview/Participants/Schedule/Standings/Qualification/Seeding/
+          Bracket/Reports/Settings) is UNCHANGED and still renders with its
+          existing light-card styles for now — Stage 2 will restyle those;
+          only the Courts tab's content (TournamentCourtsView) is redesigned
+          in this pass. */}
+      <h2 style={styles.tSectionHeading}>Tournament Dashboard</h2>
+      <nav style={styles.tNav}>
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            style={styles.dashboardTabBtn(tab === t.id)}
+            style={styles.tNavBtn(tab === t.id)}
             onClick={() => setTab(t.id)}
           >
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {pools.length > 1 && (tab === "schedule" || tab === "standings") && (
-        <div style={styles.dashboardTabRow}>
-          <button type="button" style={styles.dashboardTabBtn(selectedPool === "all")} onClick={() => setSelectedPool("all")}>
+        <nav style={styles.tNav}>
+          <button type="button" style={styles.tNavBtn(selectedPool === "all")} onClick={() => setSelectedPool("all")}>
             All Pools
           </button>
           {pools.map((p) => (
             <button
               key={p.id}
               type="button"
-              style={styles.dashboardTabBtn(selectedPool === p.id)}
+              style={styles.tNavBtn(selectedPool === p.id)}
               onClick={() => setSelectedPool(p.id)}
             >
               {p.label}
             </button>
           ))}
-        </div>
+        </nav>
       )}
 
       {tab === "overview" && tournament && (
-        <div style={styles.settingsField}>
+        <div style={styles.tFieldColumn}>
           <span>PKR Ranking Tier</span>
           <select
-            style={styles.rotationSelect}
+            style={styles.tSelect}
             value={tournament.rankingTier ?? ""}
             onChange={(e) => handleSetRankingTier(e.target.value ? Number(e.target.value) : null)}
           >
@@ -1291,12 +1349,21 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
             <option value="3">Tier 3 — Major</option>
             <option value="4">Tier 4 — Championship</option>
           </select>
-          {rankingTierError && <span style={styles.editWarning}>{rankingTierError}</span>}
+          {rankingTierError && <span style={styles.tWarningText}>{rankingTierError}</span>}
         </div>
       )}
       {tab === "overview" && <OverviewPanel tournament={tournament} loading={loading} />}
 
-      {tab === "participants" && <TournamentParticipantsView state={state} tournament={tournament} loading={loading} />}
+      {tab === "participants" && (
+        <TournamentParticipantsView
+          state={state}
+          tournament={tournament}
+          loading={loading}
+          mode={scheduleMode}
+          onSetPartner={onSetPartner}
+          onClearPartner={onClearPartner}
+        />
+      )}
 
       {tab === "schedule" && (
         <TournamentScheduleView
@@ -1313,6 +1380,8 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onSetNextMatch={handleSetNextMatch}
           onAnnounceNextMatch={handleAnnounceNextMatch}
           announcingNextMatch={announcingNextMatch}
+          mode={scheduleMode}
+          setMode={setScheduleMode}
         />
       )}
 
@@ -1395,6 +1464,9 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           onReannounce={handleReannounceCourt}
           onAdjustScore={handleAdjustScore}
           onDeclareWinner={handleDeclareWinner}
+          onSetServeNumber={handleSetServeNumber}
+          onChangeServe={handleChangeServe}
+          onSideOut={handleSideOut}
           onEndMatch={handleEndMatch}
           nextMatchId={tournament?.nextMatchId}
           onSetNextMatch={handleSetNextMatch}

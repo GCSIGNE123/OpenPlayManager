@@ -4,7 +4,6 @@ import { styles } from "../styles.js";
 import { TournamentRulesService } from "../engines/TournamentRulesService.js";
 import { deriveSettingsView, MATCH_FORMATS, PLAYOFF_STAGES, SEEDING_METHODS, QUALIFICATION_METHODS, WILD_CARD_COUNTS, PLACEMENT_MATCHES_METHODS, BRACKET_FORMATS } from "../engines/TournamentSettings.js";
 import { BUILT_IN_MEMBERSHIP_PLANS } from "../lib/membershipPlans.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const rulesService = new TournamentRulesService();
 
@@ -23,13 +22,13 @@ const PHASE_LABELS = {
 // pool/bracket status every render (see TournamentRulesService.getPhase).
 function SettingRow({ label, fieldKey, locked, hint, children }) {
   return (
-    <label style={styles.settingsField}>
+    <label style={styles.tFieldColumn}>
       <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
         {label}
         {locked.has(fieldKey) && <Lock size={11} strokeWidth={2.5} color="var(--color-text-faint)" />}
       </span>
       {children}
-      {hint && <span style={styles.editHint}>{hint}</span>}
+      {hint && <span style={styles.tControlHint}>{hint}</span>}
     </label>
   );
 }
@@ -39,7 +38,7 @@ function CourtNameRow({ court, locked, onRename }) {
   const [name, setName] = useState(court.name);
   if (locked) {
     return (
-      <div style={styles.queueListItem}>
+      <div style={styles.tListRow}>
         <span>
           <Lock size={11} strokeWidth={2.5} style={{ marginRight: 5, verticalAlign: "text-bottom" }} />
           {court.name}
@@ -48,17 +47,17 @@ function CourtNameRow({ court, locked, onRename }) {
     );
   }
   return (
-    <div style={styles.queueListItem}>
+    <div style={styles.tListRow}>
       {editing ? (
         <>
-          <input style={{ ...styles.input, flex: 1 }} value={name} onChange={(e) => setName(e.target.value)} />
+          <input style={{ ...styles.tInput, flex: 1 }} value={name} onChange={(e) => setName(e.target.value)} />
           <span style={{ display: "flex", gap: 6 }}>
-            <button type="button" style={styles.secondaryBtn} onClick={() => setEditing(false)}>
+            <button type="button" style={styles.tActionBtn} onClick={() => setEditing(false)}>
               <X size={13} strokeWidth={2.5} />
             </button>
             <button
               type="button"
-              style={styles.secondaryBtn}
+              style={styles.tActionBtn}
               onClick={() => {
                 onRename(court.id, name.trim() || court.name);
                 setEditing(false);
@@ -71,7 +70,7 @@ function CourtNameRow({ court, locked, onRename }) {
       ) : (
         <>
           <span>{court.name}</span>
-          <button type="button" style={styles.secondaryBtn} onClick={() => setEditing(true)}>
+          <button type="button" style={styles.tActionBtn} onClick={() => setEditing(true)}>
             <Pencil size={13} strokeWidth={2.5} />
           </button>
         </>
@@ -94,12 +93,12 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
     if (tournament) setDraft(deriveSettingsView(tournament));
   }, [tournament?.id, tournament?.updatedAt]);
 
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament || !draft) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to manage settings here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to manage settings here.</div>;
   }
   if (tournament.format !== "roundRobin") {
-    return <div style={styles.placeholderCard}>Settings aren't available for this tournament format yet.</div>;
+    return <div style={styles.tEmptyState}>Settings aren't available for this tournament format yet.</div>;
   }
 
   const locked = rulesService.getLockedFields(tournament);
@@ -148,27 +147,27 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
 
   return (
     <div>
-      <SectionLabel>Tournament Settings</SectionLabel>
-      <p style={styles.editHint}>{PHASE_LABELS[phase]}</p>
-      {settingsError && <p style={styles.editWarning}>{settingsError}</p>}
+      <h2 style={styles.tSectionHeading}>Tournament Settings</h2>
+      <p style={styles.tControlHint}>{PHASE_LABELS[phase]}</p>
+      {settingsError && <p style={styles.tWarningText}>{settingsError}</p>}
 
-      <h3 style={styles.poolHeading}>General Settings</h3>
-      <div style={styles.settingsPanel}>
+      <h3 style={styles.tSubheading}>General Settings</h3>
+      <div style={styles.tSettingsPanel}>
         <SettingRow label="Tournament name" fieldKey="name" locked={locked}>
-          <input style={styles.input} value={draft.name} onChange={(e) => set("name", e.target.value)} />
+          <input style={styles.tInput} value={draft.name} onChange={(e) => set("name", e.target.value)} />
         </SettingRow>
         <SettingRow label="Event type" fieldKey="mode" locked={locked}>
-          <div style={styles.skillToggle}>
-            <button type="button" disabled={locked.has("mode")} style={styles.skillToggleBtn(draft.mode === "singles")} onClick={() => set("mode", "singles")}>
+          <div style={styles.tToggleRow}>
+            <button type="button" disabled={locked.has("mode")} style={styles.tToggleBtn(draft.mode === "singles")} onClick={() => set("mode", "singles")}>
               Singles
             </button>
-            <button type="button" disabled={locked.has("mode")} style={styles.skillToggleBtn(draft.mode === "doubles")} onClick={() => set("mode", "doubles")}>
+            <button type="button" disabled={locked.has("mode")} style={styles.tToggleBtn(draft.mode === "doubles")} onClick={() => set("mode", "doubles")}>
               Doubles
             </button>
           </div>
         </SettingRow>
         <SettingRow label="Tournament format" fieldKey="format" locked={locked}>
-          <select style={styles.rotationSelect} disabled={locked.has("format")} value={draft.format} onChange={(e) => set("format", e.target.value)}>
+          <select style={styles.tSelect} disabled={locked.has("format")} value={draft.format} onChange={(e) => set("format", e.target.value)}>
             <option value="roundRobin">Round Robin</option>
             <option value="singleElimination">Single Elimination</option>
             <option value="doubleElimination">Double Elimination</option>
@@ -180,24 +179,24 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           locked={locked}
           hint={locked.has("courtsCount") ? "Use the Courts tab to add or remove courts once the tournament has started." : undefined}
         >
-          <span style={styles.sessionInfoValue}>{draft.courtsCount}</span>
+          <span style={styles.tInfoValue}>{draft.courtsCount}</span>
         </SettingRow>
       </div>
 
-      <h3 style={styles.poolHeading}>Court Names</h3>
+      <h3 style={styles.tSubheading}>Court Names</h3>
       <div>
         {draft.courts.map((court) => (
           <CourtNameRow key={court.id} court={court} locked={false} onRename={onRenameCourt} />
         ))}
       </div>
 
-      <h3 style={styles.poolHeading}>Pool Settings</h3>
-      <div style={styles.settingsPanel}>
+      <h3 style={styles.tSubheading}>Pool Settings</h3>
+      <div style={styles.tSettingsPanel}>
         <SettingRow label="Number of pools" fieldKey="poolCount" locked={locked}>
-          <input type="number" min={1} disabled={locked.has("poolCount")} style={styles.expectedGamesInput} value={draft.poolCount} onChange={(e) => set("poolCount", Number(e.target.value) || 1)} />
+          <input type="number" min={1} disabled={locked.has("poolCount")} style={styles.tSmallInput} value={draft.poolCount} onChange={(e) => set("poolCount", Number(e.target.value) || 1)} />
         </SettingRow>
         <SettingRow label="Pool assignment method" fieldKey="assignmentMethod" locked={locked}>
-          <select style={styles.rotationSelect} disabled={locked.has("assignmentMethod")} value={draft.assignmentMethod} onChange={(e) => set("assignmentMethod", e.target.value)}>
+          <select style={styles.tSelect} disabled={locked.has("assignmentMethod")} value={draft.assignmentMethod} onChange={(e) => set("assignmentMethod", e.target.value)}>
             {ASSIGNMENT_METHODS.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
@@ -216,7 +215,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             type="number"
             min={1}
             disabled={locked.has("advancesPerPool")}
-            style={styles.expectedGamesInput}
+            style={styles.tSmallInput}
             value={draft.advancesPerPool}
             onChange={(e) => set("advancesPerPool", Number(e.target.value) || 1)}
           />
@@ -228,7 +227,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           hint="Wild Cards/Best Third Place add extra qualifiers beyond Teams Advancing Per Pool, ranked using the same standings and tie-breakers."
         >
           <select
-            style={styles.rotationSelect}
+            style={styles.tSelect}
             disabled={locked.has("qualificationMethod")}
             value={draft.qualificationMethod}
             onChange={(e) => set("qualificationMethod", e.target.value)}
@@ -243,7 +242,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         {draft.qualificationMethod === "wildCard" && (
           <SettingRow label="Wild card count" fieldKey="wildCardCount" locked={locked}>
             <select
-              style={styles.rotationSelect}
+              style={styles.tSelect}
               disabled={locked.has("wildCardCount")}
               value={draft.wildCardCount}
               onChange={(e) => set("wildCardCount", Number(e.target.value))}
@@ -268,7 +267,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
               min={1}
               max={draft.poolCount}
               disabled={locked.has("bestThirdPlaceCount")}
-              style={styles.expectedGamesInput}
+              style={styles.tSmallInput}
               value={draft.bestThirdPlaceCount}
               onChange={(e) => set("bestThirdPlaceCount", Number(e.target.value) || 1)}
             />
@@ -280,11 +279,11 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           locked={locked}
           hint="When enabled, directors can promote/eliminate/replace qualifiers on the Qualification tab before generating the bracket — every change is logged with a required reason."
         >
-          <div style={styles.skillToggle}>
+          <div style={styles.tToggleRow}>
             <button
               type="button"
               disabled={locked.has("allowManualQualificationOverride")}
-              style={styles.skillToggleBtn(draft.allowManualQualificationOverride)}
+              style={styles.tToggleBtn(draft.allowManualQualificationOverride)}
               onClick={() => set("allowManualQualificationOverride", true)}
             >
               Enabled
@@ -292,7 +291,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             <button
               type="button"
               disabled={locked.has("allowManualQualificationOverride")}
-              style={styles.skillToggleBtn(!draft.allowManualQualificationOverride)}
+              style={styles.tToggleBtn(!draft.allowManualQualificationOverride)}
               onClick={() => set("allowManualQualificationOverride", false)}
             >
               Disabled
@@ -301,15 +300,15 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         </SettingRow>
       </div>
 
-      <h3 style={styles.poolHeading}>Playoff Settings</h3>
-      <p style={styles.editHint}>Playoff Enabled controls whether a bracket is generated. Everything else here is reference only — not yet enforced.</p>
-      <div style={styles.settingsPanel}>
+      <h3 style={styles.tSubheading}>Playoff Settings</h3>
+      <p style={styles.tControlHint}>Playoff Enabled controls whether a bracket is generated. Everything else here is reference only — not yet enforced.</p>
+      <div style={styles.tSettingsPanel}>
         <SettingRow label="Playoff enabled" fieldKey="playoffEnabled" locked={locked}>
-          <div style={styles.skillToggle}>
-            <button type="button" disabled={locked.has("playoffEnabled")} style={styles.skillToggleBtn(draft.playoffEnabled)} onClick={() => set("playoffEnabled", true)}>
+          <div style={styles.tToggleRow}>
+            <button type="button" disabled={locked.has("playoffEnabled")} style={styles.tToggleBtn(draft.playoffEnabled)} onClick={() => set("playoffEnabled", true)}>
               Yes
             </button>
-            <button type="button" disabled={locked.has("playoffEnabled")} style={styles.skillToggleBtn(!draft.playoffEnabled)} onClick={() => set("playoffEnabled", false)}>
+            <button type="button" disabled={locked.has("playoffEnabled")} style={styles.tToggleBtn(!draft.playoffEnabled)} onClick={() => set("playoffEnabled", false)}>
               No
             </button>
           </div>
@@ -320,7 +319,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           locked={locked}
           hint={draft.bracketFormat === "doubleElimination" ? "Every team starts in the Winners Bracket; a first loss drops to the Losers Bracket, a second loss eliminates the team. The Losers Bracket champion meets the Winners Bracket champion in the Grand Final — if the Losers Bracket champion wins Game 1, a Grand Final Reset (Game 2) decides the tournament." : undefined}
         >
-          <select style={styles.rotationSelect} disabled={locked.has("bracketFormat")} value={draft.bracketFormat} onChange={(e) => set("bracketFormat", e.target.value)}>
+          <select style={styles.tSelect} disabled={locked.has("bracketFormat")} value={draft.bracketFormat} onChange={(e) => set("bracketFormat", e.target.value)}>
             {BRACKET_FORMATS.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
@@ -334,7 +333,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           locked={locked}
           hint={draft.seedingMethod !== "standardCrossPool" ? "Non-default methods don't auto-generate the bracket — use the Seeding tab once qualification is ready." : undefined}
         >
-          <select style={styles.rotationSelect} disabled={locked.has("seedingMethod")} value={draft.seedingMethod} onChange={(e) => set("seedingMethod", e.target.value)}>
+          <select style={styles.tSelect} disabled={locked.has("seedingMethod")} value={draft.seedingMethod} onChange={(e) => set("seedingMethod", e.target.value)}>
             {SEEDING_METHODS.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
@@ -343,11 +342,11 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           </select>
         </SettingRow>
         <SettingRow label="Bronze Medal Match" fieldKey="bronzeMatchEnabled" locked={locked} hint="When enabled, semifinal losers play for 3rd/4th place, generated alongside the bracket.">
-          <div style={styles.skillToggle}>
+          <div style={styles.tToggleRow}>
             <button
               type="button"
               disabled={locked.has("bronzeMatchEnabled")}
-              style={styles.skillToggleBtn(draft.bronzeMatchEnabled)}
+              style={styles.tToggleBtn(draft.bronzeMatchEnabled)}
               onClick={() => set("bronzeMatchEnabled", true)}
             >
               Enabled
@@ -355,7 +354,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             <button
               type="button"
               disabled={locked.has("bronzeMatchEnabled")}
-              style={styles.skillToggleBtn(!draft.bronzeMatchEnabled)}
+              style={styles.tToggleBtn(!draft.bronzeMatchEnabled)}
               onClick={() => set("bronzeMatchEnabled", false)}
             >
               Disabled
@@ -368,7 +367,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           locked={locked}
           hint="When set to Consolation Bracket or Full Placement Bracket, first-round playoff losers play on for 5th-8th place, generated alongside the championship bracket."
         >
-          <select style={styles.rotationSelect} disabled={locked.has("placementMatches")} value={draft.placementMatches} onChange={(e) => set("placementMatches", e.target.value)}>
+          <select style={styles.tSelect} disabled={locked.has("placementMatches")} value={draft.placementMatches} onChange={(e) => set("placementMatches", e.target.value)}>
             {PLACEMENT_MATCHES_METHODS.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
@@ -377,11 +376,11 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
           </select>
         </SettingRow>
         <SettingRow label="Auto-detect playoff stage" fieldKey="autoDetectPlayoffStage" locked={locked}>
-          <div style={styles.skillToggle}>
+          <div style={styles.tToggleRow}>
             <button
               type="button"
               disabled={locked.has("autoDetectPlayoffStage")}
-              style={styles.skillToggleBtn(draft.autoDetectPlayoffStage)}
+              style={styles.tToggleBtn(draft.autoDetectPlayoffStage)}
               onClick={() => set("autoDetectPlayoffStage", true)}
             >
               On
@@ -389,7 +388,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             <button
               type="button"
               disabled={locked.has("autoDetectPlayoffStage")}
-              style={styles.skillToggleBtn(!draft.autoDetectPlayoffStage)}
+              style={styles.tToggleBtn(!draft.autoDetectPlayoffStage)}
               onClick={() => set("autoDetectPlayoffStage", false)}
             >
               Off
@@ -399,7 +398,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         {!draft.autoDetectPlayoffStage && (
           <SettingRow label="Manual playoff stage" fieldKey="manualPlayoffStage" locked={locked}>
             <select
-              style={styles.rotationSelect}
+              style={styles.tSelect}
               disabled={locked.has("manualPlayoffStage")}
               value={draft.manualPlayoffStage || ""}
               onChange={(e) => set("manualPlayoffStage", e.target.value)}
@@ -417,16 +416,16 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         )}
       </div>
 
-      <h3 style={styles.poolHeading}>Match Rules</h3>
-      <p style={styles.editHint}>
+      <h3 style={styles.tSubheading}>Match Rules</h3>
+      <p style={styles.tControlHint}>
         Winning score/win-by-two are reference only, not enforced. Match Format is real for the Championship
         Match specifically: Best of 3 makes the Final a series (won by whoever wins 2 games first); every other
         match still ignores this setting.
       </p>
-      <div style={styles.settingsPanel}>
+      <div style={styles.tSettingsPanel}>
         <SettingRow label="Match format" fieldKey="matchScoringRules" locked={locked}>
           <select
-            style={styles.rotationSelect}
+            style={styles.tSelect}
             disabled={locked.has("matchScoringRules")}
             value={draft.matchScoringRules.matchFormat}
             onChange={(e) => setScoring("matchFormat", e.target.value)}
@@ -443,17 +442,17 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             type="number"
             min={1}
             disabled={locked.has("matchScoringRules")}
-            style={styles.expectedGamesInput}
+            style={styles.tSmallInput}
             value={draft.matchScoringRules.winningScore}
             onChange={(e) => setScoring("winningScore", Number(e.target.value) || 1)}
           />
         </SettingRow>
         <SettingRow label="Win by two" fieldKey="matchScoringRules" locked={locked}>
-          <div style={styles.skillToggle}>
+          <div style={styles.tToggleRow}>
             <button
               type="button"
               disabled={locked.has("matchScoringRules")}
-              style={styles.skillToggleBtn(draft.matchScoringRules.winByTwo)}
+              style={styles.tToggleBtn(draft.matchScoringRules.winByTwo)}
               onClick={() => setScoring("winByTwo", true)}
             >
               On
@@ -461,7 +460,7 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
             <button
               type="button"
               disabled={locked.has("matchScoringRules")}
-              style={styles.skillToggleBtn(!draft.matchScoringRules.winByTwo)}
+              style={styles.tToggleBtn(!draft.matchScoringRules.winByTwo)}
               onClick={() => setScoring("winByTwo", false)}
             >
               Off
@@ -470,34 +469,34 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         </SettingRow>
       </div>
 
-      <h3 style={styles.poolHeading}>Membership Eligibility</h3>
-      <p style={styles.editHint}>Captured for reference — not enforced against the roster here yet (see Membership Management).</p>
-      <div style={styles.settingsPanel}>
-        <label style={styles.settingsField}>
+      <h3 style={styles.tSubheading}>Membership Eligibility</h3>
+      <p style={styles.tControlHint}>Captured for reference — not enforced against the roster here yet (see Membership Management).</p>
+      <div style={styles.tSettingsPanel}>
+        <label style={styles.tFieldColumn}>
           Guest access allowed
-          <div style={styles.skillToggle}>
-            <button type="button" style={styles.skillToggleBtn(draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", true)}>
+          <div style={styles.tToggleRow}>
+            <button type="button" style={styles.tToggleBtn(draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", true)}>
               On
             </button>
-            <button type="button" style={styles.skillToggleBtn(!draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", false)}>
+            <button type="button" style={styles.tToggleBtn(!draft.eligibilityRequirements.allowGuests)} onClick={() => setEligibility("allowGuests", false)}>
               Off
             </button>
           </div>
         </label>
-        <label style={styles.settingsField}>
+        <label style={styles.tFieldColumn}>
           Require active membership
-          <div style={styles.skillToggle}>
-            <button type="button" style={styles.skillToggleBtn(draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", true)}>
+          <div style={styles.tToggleRow}>
+            <button type="button" style={styles.tToggleBtn(draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", true)}>
               Yes
             </button>
-            <button type="button" style={styles.skillToggleBtn(!draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", false)}>
+            <button type="button" style={styles.tToggleBtn(!draft.eligibilityRequirements.requireActiveMembership)} onClick={() => setEligibility("requireActiveMembership", false)}>
               No
             </button>
           </div>
         </label>
-        <label style={styles.settingsField}>
+        <label style={styles.tFieldColumn}>
           Required plan
-          <select style={styles.rotationSelect} value={draft.eligibilityRequirements.requiredPlanId || ""} onChange={(e) => setEligibility("requiredPlanId", e.target.value || null)}>
+          <select style={styles.tSelect} value={draft.eligibilityRequirements.requiredPlanId || ""} onChange={(e) => setEligibility("requiredPlanId", e.target.value || null)}>
             <option value="">Any plan</option>
             {BUILT_IN_MEMBERSHIP_PLANS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -508,8 +507,8 @@ export default function TournamentSettingsView({ tournament, loading, settingsEr
         </label>
       </div>
 
-      <div style={styles.editActions}>
-        <button type="button" style={styles.primaryBtn} onClick={save}>
+      <div style={styles.tControlsRow}>
+        <button type="button" style={styles.tPrimaryBtn} onClick={save}>
           <Save size={14} strokeWidth={2.5} />
           Save changes
         </button>

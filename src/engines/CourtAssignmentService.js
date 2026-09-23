@@ -171,6 +171,13 @@ function updateMatchIn(tournament, matchId, updater) {
   return { ...tournament, pools, bracket, consolationBracket, doubleEliminationBracket };
 }
 
+// Tournament Scorer — 1st Serve / 2nd Serve. Bounded length for a match's
+// pointLog, same "bounded activity log" precedent as MAX_RECENT_MATCHUPS/
+// the 50-entry caps on queueActivityLog/skillChangeLog — keeps the
+// tournament record (and what the Public Live Viewer's one exact-key fetch
+// downloads) from growing unbounded over a long match.
+const MAX_POINT_LOG = 40;
+
 export class CourtAssignmentService {
   // returns: Court[] — not in maintenance/disabled, and not currently occupied
   getAvailableCourts(tournament) {
@@ -236,6 +243,17 @@ export class CourtAssignmentService {
   // at different times. Uses the same updateMatchIn find-and-replace as
   // every other method here, so it works across pool/bracket/consolation/
   // Double Elimination matches uniformly.
+  //
+  // Tournament Scorer — 1st Serve / 2nd Serve (see PROJECT.md/FEATURES.md).
+  // A "+" (delta > 0) also appends a bounded pointLog entry tagging the
+  // point with whatever serve state was showing at the moment it was
+  // scored — manual bookkeeping only, never a rule: this method still never
+  // gates which side can score, and never changes `serve` itself. A "-"
+  // (delta < 0) is the existing, only "undo" this app has ever had for a
+  // point; it now also pops the most recent pointLog entry, but ONLY when
+  // that entry's recorded score exactly matches the score about to be
+  // decremented — a defensive check, not a guess, so an unrelated log entry
+  // (e.g. after "Won", which doesn't log) is never removed by mistake.
   adjustScore(tournament, matchId, side, delta) {
     const entry = findMatchEntry(tournament, matchId);
     if (!entry) throw new Error("Match not found.");
@@ -243,8 +261,73 @@ export class CourtAssignmentService {
     if (side !== "teamA" && side !== "teamB") throw new Error("Invalid side.");
     return updateMatchIn(tournament, matchId, (m) => {
       const current = m.score?.[side] ?? 0;
-      return { ...m, score: { ...m.score, [side]: Math.max(0, current + delta) } };
+      const nextScore = { ...m.score, [side]: Math.max(0, current + delta) };
+      if (delta > 0) {
+        const point = {
+          scoreA: nextScore.teamA ?? 0,
+          scoreB: nextScore.teamB ?? 0,
+          servingTeam: m.serve?.team ?? "teamA",
+          serveNumber: m.serve?.number ?? 1,
+          timestamp: Date.now(),
+        };
+        const pointLog = [...(m.pointLog || []), point].slice(-MAX_POINT_LOG);
+        return { ...m, score: nextScore, pointLog };
+      }
+      if (delta < 0) {
+        const log = m.pointLog || [];
+        const last = log[log.length - 1];
+        const currentScoreA = m.score?.teamA ?? 0;
+        const currentScoreB = m.score?.teamB ?? 0;
+        const lastMatchesCurrent = last && last.scoreA === currentScoreA && last.scoreB === currentScoreB;
+        return { ...m, score: nextScore, pointLog: lastMatchesCurrent ? log.slice(0, -1) : log };
+      }
+      return { ...m, score: nextScore };
     });
+  }
+
+  // 1st Serve / 2nd Serve toggle — sets serve.number directly (1 or 2) for
+  // whichever team is currently serving. Manual, scorer-controlled: never
+  // touches score, and never changes serve.team. See makeMatch's own
+  // comment (lib/tournamentModel.js) for why `m.serve` can be safely
+  // defaulted when absent (a match built before this feature, or by a
+  // bracket/Double-Elimination generator that doesn't set it).
+  setServeNumber(tournament, matchId, number) {
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can have its serve set.");
+    if (number !== 1 && number !== 2) throw new Error("Serve number must be 1 or 2.");
+    return updateMatchIn(tournament, matchId, (m) => ({
+      ...m,
+      serve: { team: m.serve?.team ?? "teamA", number },
+    }));
+  }
+
+  // Change Serve — flips serve.number between 1st and 2nd for the SAME
+  // serving team (the same-team second-server handoff), without changing
+  // who is serving. Score is never touched.
+  changeServe(tournament, matchId) {
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can change serve.");
+    return updateMatchIn(tournament, matchId, (m) => {
+      const team = m.serve?.team ?? "teamA";
+      const number = (m.serve?.number ?? 1) === 1 ? 2 : 1;
+      return { ...m, serve: { team, number } };
+    });
+  }
+
+  // Side Out — service passes to the other team, resetting to 1st Serve for
+  // them. Score is never touched. Manual, scorer-controlled: this is the
+  // ONLY thing that changes serve.team; a "+"/"-" click never does, on
+  // either side (see adjustScore's own comment).
+  sideOut(tournament, matchId) {
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can side out.");
+    return updateMatchIn(tournament, matchId, (m) => ({
+      ...m,
+      serve: { team: (m.serve?.team ?? "teamA") === "teamA" ? "teamB" : "teamA", number: 1 },
+    }));
   }
 
   // Court Board "Won" — quick path for a casual/skipped-scoring match, same

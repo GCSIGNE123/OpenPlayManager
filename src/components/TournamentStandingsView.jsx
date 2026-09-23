@@ -1,6 +1,5 @@
 import { styles } from "../styles.js";
 import { getTournamentEngine } from "../lib/tournament.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
@@ -34,39 +33,39 @@ function PoolStandingsTable({ tournament, pool, showHeading }) {
   return (
     <div style={styles.poolScheduleBlock}>
       <div style={styles.standingsHeaderRow}>
-        {showHeading && <h3 style={styles.poolHeading}>{pool.label}</h3>}
-        {isComplete && <span style={styles.tournamentCompleteBadge}>{showHeading ? "Pool Complete" : "Tournament Complete"}</span>}
+        {showHeading && <h3 style={styles.tSubheading}>{pool.label}</h3>}
+        {isComplete && <span style={styles.tCompleteBadge}>{showHeading ? "Pool Complete" : "Tournament Complete"}</span>}
       </div>
-      <div style={styles.tournamentStandingsScroll}>
-        <table style={styles.tournamentStandingsTable}>
+      <div style={styles.tTableScroll}>
+        <table style={styles.tTable}>
           <thead>
-            <tr style={styles.tournamentStandingsHeadRow}>
-              <th style={styles.tournamentStandingsHeadCell}>#</th>
-              <th style={{ ...styles.tournamentStandingsHeadCell, textAlign: "left" }}>
+            <tr style={styles.tTableHeadRow}>
+              <th style={styles.tTableHeadCell}>#</th>
+              <th style={{ ...styles.tTableHeadCell, textAlign: "left" }}>
                 {tournament.mode === "doubles" ? "Team" : "Player"}
               </th>
               {COLUMNS.map((c) => (
-                <th key={c.key} style={styles.tournamentStandingsHeadCell}>
+                <th key={c.key} style={styles.tTableHeadCell}>
                   {c.label}
                 </th>
               ))}
-              <th style={styles.tournamentStandingsHeadCell}>+/-</th>
+              <th style={styles.tTableHeadCell}>+/-</th>
             </tr>
           </thead>
           <tbody>
             {standings.map((row) => (
-              <tr key={row.participantId} style={styles.tournamentStandingsRow(anyMatchesPlayed ? row.rank : 99)}>
-                <td style={styles.tournamentStandingsCell}>{row.rank}</td>
-                <td style={styles.tournamentStandingsNameCell}>
+              <tr key={row.participantId} style={styles.tTableRow(anyMatchesPlayed ? row.rank : 99)}>
+                <td style={styles.tTableCell}>{row.rank}</td>
+                <td style={styles.tTableNameCell}>
                   {anyMatchesPlayed && MEDALS[row.rank] && <span aria-hidden="true">{MEDALS[row.rank]}</span>}
                   {row.label}
                 </td>
                 {COLUMNS.map((c) => (
-                  <td key={c.key} style={styles.tournamentStandingsCell}>
+                  <td key={c.key} style={styles.tTableCell}>
                     {c.format ? c.format(row[c.key]) : row[c.key]}
                   </td>
                 ))}
-                <td style={styles.tournamentStandingsDiffCell(row.pointDiff)}>
+                <td style={styles.tTableDiffCell(row.pointDiff)}>
                   {row.pointDiff > 0 ? `+${row.pointDiff}` : row.pointDiff}
                 </td>
               </tr>
@@ -86,12 +85,12 @@ function PoolStandingsTable({ tournament, pool, showHeading }) {
 // Round Robin Standings' original scope — other formats don't have ranking
 // logic yet.
 export default function TournamentStandingsView({ tournament, loading, selectedPool }) {
-  if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
+  if (loading) return <p style={styles.tControlHint}>Loading tournament…</p>;
   if (!tournament) {
-    return <div style={styles.placeholderCard}>Generate a schedule from the Schedule tab to see standings here.</div>;
+    return <div style={styles.tEmptyState}>Generate a schedule from the Schedule tab to see standings here.</div>;
   }
   if (tournament.format !== "roundRobin") {
-    return <div style={styles.placeholderCard}>Standings aren't available for this tournament format yet.</div>;
+    return <div style={styles.tEmptyState}>Standings aren't available for this tournament format yet.</div>;
   }
 
   const pools = tournament.pools;
@@ -100,15 +99,15 @@ export default function TournamentStandingsView({ tournament, loading, selectedP
   return (
     <div>
       <div style={styles.standingsHeaderRow}>
-        <SectionLabel>Standings</SectionLabel>
+        <h2 style={styles.tSectionHeading}>Standings</h2>
         {pools.length > 1 && tournament.status === "completed" && (
-          <span style={styles.tournamentCompleteBadge}>Tournament Complete</span>
+          <span style={styles.tCompleteBadge}>Tournament Complete</span>
         )}
       </div>
       {visiblePools.map((pool) => (
         <PoolStandingsTable key={pool.id} tournament={tournament} pool={pool} showHeading={pools.length > 1} />
       ))}
-      <p style={styles.standingsNote}>
+      <p style={styles.tControlHint}>
         Ranked by Wins, then Win %, then Point Differential, then Points For. Matches still pending or in progress
         don't count toward a record yet.
       </p>
