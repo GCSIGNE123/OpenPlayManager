@@ -10,7 +10,7 @@
 // V1 scope: compute + display only. No persistence, no export, no
 // Session History integration — those are explicitly out of scope for
 // this sprint (see FEATURES.md).
-import { ROTATION_MODES } from "./constants.js";
+import { rotationModeLabelFor } from "./constants.js";
 import { derivePaymentStats } from "./queueManagement.js";
 import { buildStandingsRows } from "./performanceRating.js";
 
@@ -328,7 +328,7 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
   });
 
   const durationMs = state.sessionStartedAt ? generatedAt - state.sessionStartedAt : null;
-  const rotationModeLabel = ROTATION_MODES.find((m) => m.value === state.rotationMode)?.label || state.rotationMode;
+  const rotationModeLabel = rotationModeLabelFor(state.rotationMode);
 
   return {
     generatedAt,

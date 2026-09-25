@@ -83,6 +83,11 @@ export default function PlayerPicker({ candidates, outgoingPlayer, selectedId, o
                             </span>
                           )}
                           <span style={styles.pickerCandidateStat}>{p.games || 0} games</span>
+                          {p.lastResult && (
+                            <span style={styles.resultTag(p.lastResult)} title={p.lastResult === "win" ? "Won their previous match" : "Lost their previous match"}>
+                              {p.lastResult === "win" ? "W" : "L"}
+                            </span>
+                          )}
                           <span style={styles.pickerCandidateStat}>
                             <WaitingTimer player={p} />
                           </span>
@@ -112,6 +117,11 @@ export default function PlayerPicker({ candidates, outgoingPlayer, selectedId, o
                   >
                     <span style={styles.editChipName}>
                       {p.name}
+                      {p.lastResult && (
+                        <span style={styles.resultTag(p.lastResult)} title={p.lastResult === "win" ? "Won their previous match" : "Lost their previous match"}>
+                          {p.lastResult === "win" ? "W" : "L"}
+                        </span>
+                      )}
                       <span style={styles.pickerScheduledTag}>{p.scheduledLabel}</span>
                     </span>
                   </button>

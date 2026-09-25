@@ -98,6 +98,42 @@ export const ROTATION_MODES = [
   { value: "adaptiveSkill", label: "Adaptive Skill Rotation" },
 ];
 
+// Adaptive Ranking Rotation (engines/AdaptiveRankingRotationEngine.js) —
+// registered in lib/utils.js's getRotationEngine under this value, but
+// DELIBERATELY not in ROTATION_MODES above: the Create Session selector maps
+// over ROTATION_MODES, so this keeps the new mode unreachable from the UI
+// (not the default, not selectable) until it has passed a real-session
+// shadow test. Moving this entry into ROTATION_MODES is the one-line switch
+// that would expose it.
+export const EXPERIMENTAL_ROTATION_MODES = [
+  { value: "adaptiveRanking", label: "Adaptive Ranking Rotation (experimental)" },
+  { value: "pointsAdaptive", label: "Adaptive Matchmaking (Points-based, organizer calibration)" },
+];
+
+// Modes whose engine reads the session PickleKing Points snapshot
+// (players[id].rankingPoints, see lib/rankingSnapshot.js).
+export const RANKING_POINTS_MODES = ["adaptiveRanking", "pointsAdaptive"];
+
+// What Create Session's Rotation selector offers: the original modes plus
+// the organizer opt-in Adaptive Ranking Rotation. ROTATION_MODES itself is
+// deliberately left as the 4 original modes (and `continuous` stays the
+// default) — Adaptive Ranking is never the default, only an explicit
+// per-session choice, stored as state.rotationMode for the whole session.
+export const SELECTABLE_ROTATION_MODES = [...ROTATION_MODES, ...EXPERIMENTAL_ROTATION_MODES];
+
+// Label lookup that knows every mode (ROTATION_MODES alone would miss the
+// experimental one and fall back to the raw value).
+export function rotationModeLabelFor(value) {
+  return SELECTABLE_ROTATION_MODES.find((m) => m.value === value)?.label || value;
+}
+
+// One-line organizer explanations shown under the Rotation selector.
+export const ROTATION_MODE_DESCRIPTIONS = {
+  adaptiveSkill: "Balances players by skill division, games played, and wait time.",
+  adaptiveRanking: "Matches players within nearby Open Play Points while balancing recent play and wait time.",
+  pointsAdaptive: "Organizer builds Rounds 1 and 2 by hand; from Round 3 the system matches players from ONE waiting pool by Open Play Points, fairness (rest, wait, games) and variety — no Beginner/Intermediate split.",
+};
+
 // Session Matchmaking Priority — see PROJECT.md/FEATURES.md. NOT a rotation
 // mode: a reusable, optional candidate-ORDERING policy that works alongside
 // any of the ROTATION_MODES above. `null` (the default) means "no explicit
@@ -201,6 +237,7 @@ export const defaultState = {
   // resurrect a stale substitution. null until Apply Priority is used.
   latecomerPriority: null, // { matchupId, insertedPlayerIds: [id,id], displacedPlayerIds: [id,id], appliedAt }
   matchHistory: [], // [{ round, court, teamA, teamB, winner, scoreA, scoreB, endedAt }] — one entry per completed match
+  recentMatchups: [], // Rotation Redesign R1 — bounded (MAX_RECENT_MATCHUPS) team-vs-team fingerprint list, see recordMatchupMemory in lib/utils.js. Instrumentation only; no scheduling path reads this yet.
   sessionType: "openPlay", // see SESSION_TYPES
   tournamentFormat: null, // see TOURNAMENT_FORMATS — only set when sessionType is "tournament"; architecture-only, no tournament logic reads this yet
   // Tournament Templates — set at Create Session if the organizer picked

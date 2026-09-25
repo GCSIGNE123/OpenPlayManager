@@ -2,6 +2,8 @@ import { ACCESS_PREFIX, CODE_CHARS, QUEUE_STATUSES, STORAGE_PREFIX } from "./con
 import { BalancedRotationEngine } from "../engines/BalancedRotationEngine.js";
 import { ProgressiveSkillRotationStrategy } from "../engines/ProgressiveSkillRotationStrategy.js";
 import { AdaptiveSkillRotationEngine } from "../engines/AdaptiveSkillRotationEngine.js";
+import { AdaptiveRankingRotationEngine } from "../engines/AdaptiveRankingRotationEngine.js";
+import { PointsAdaptiveMatchmakingEngine } from "../engines/PointsAdaptiveMatchmakingEngine.js";
 import { uid } from "./random.js";
 
 export { uid, shuffle } from "./random.js";
@@ -530,10 +532,17 @@ export function countInCourtPlayers(state) {
 const balancedEngine = new BalancedRotationEngine();
 const progressiveSkillEngine = new ProgressiveSkillRotationStrategy();
 const adaptiveSkillEngine = new AdaptiveSkillRotationEngine();
+const adaptiveRankingEngine = new AdaptiveRankingRotationEngine();
+const pointsAdaptiveEngine = new PointsAdaptiveMatchmakingEngine();
 
 export function getRotationEngine(rotationMode) {
   if (rotationMode === "progressiveSkill") return progressiveSkillEngine;
   if (rotationMode === "adaptiveSkill") return adaptiveSkillEngine;
+  // Adaptive Ranking Rotation — separate, experimental mode (see
+  // engines/AdaptiveRankingRotationEngine.js). Not listed in ROTATION_MODES,
+  // so it is never offered in the Create Session UI yet.
+  if (rotationMode === "adaptiveRanking") return adaptiveRankingEngine;
+  if (rotationMode === "pointsAdaptive") return pointsAdaptiveEngine;
   return balancedEngine;
 }
 
@@ -568,7 +577,7 @@ function isPausedByPlayerStatus(player) {
   return player.playStatus === "on_break" || player.playStatus === "left";
 }
 
-function isEligibleForMatchmaking(player) {
+export function isEligibleForMatchmaking(player) {
   return Boolean(player) && !player.held && player.status !== "CHECKED_OUT" && !isPausedByPlayerStatus(player);
 }
 
@@ -660,7 +669,7 @@ export function maxUpcomingMatchups(courts) {
 // scored by the same waiting-time/games-played/repeat-partner-avoidance
 // rules (see BalancedRotationEngine's pairLeftovers/scorePartner) — this
 // only removes skill as a hard requirement, it doesn't make pairing random.
-export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null) {
+export function refreshNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null, recentMatchups = null, extraContext = null) {
   const room = Math.max(0, maxUpcoming - existingMatchups.length);
   if (room === 0) return existingMatchups;
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
@@ -668,8 +677,11 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
   // fairness SELECTION can order its waiting stack by the organizer's chosen
   // key (longest wait by default) — see that engine's header comment.
   // sortMatchupsByPriority below still runs as the post-hoc matchup re-sort
-  // for every engine, exactly as before.
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, priority: matchmakingPriority }, true);
+  // for every engine, exactly as before. `recentMatchups` (Rotation
+  // Redesign R1/R2) is read only by AdaptiveSkillRotationEngine, as a soft
+  // team-formation scoring signal — every other engine ignores the extra
+  // context field entirely, same as an engine that doesn't read `phase`.
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, priority: matchmakingPriority, recentMatchups, ...(extraContext || {}) }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...existingMatchups, ...ordered.slice(0, room)];
 }
@@ -688,13 +700,13 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
 // scorer manually dissolves a matchup), it just no longer differs from
 // refreshNextMatchups in fallback behavior, only in dissolving
 // unlocked/not-held matchups first.
-export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null) {
+export function regenerateNextMatchups(queueIds, players, existingMatchups, engine = balancedEngine, phase = null, maxUpcoming = Infinity, matchmakingPriority = null, recentMatchups = null, extraContext = null) {
   const protectedMatchups = existingMatchups.filter((m) => m.locked || m.held);
   const room = Math.max(0, maxUpcoming - protectedMatchups.length);
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
-    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, priority: matchmakingPriority }, true);
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, priority: matchmakingPriority, recentMatchups, ...(extraContext || {}) }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...protectedMatchups, ...ordered.slice(0, room)];
 }
@@ -820,6 +832,13 @@ export function recordRotationHistory(players, teamA, teamB, courtNumber) {
 
   return next;
 }
+
+// Rotation Redesign R1's bounded matchup-memory helpers now live in their
+// own zero-dependency module (lib/matchupMemory.js) so
+// AdaptiveSkillRotationEngine.js (R2) can import them directly without a
+// circular import — this file imports that engine at module scope above.
+// Re-exported here unchanged so every existing import site keeps working.
+export { MAX_RECENT_MATCHUPS, matchupKeyFor, recordMatchupMemory, isRecentMatchup } from "./matchupMemory.js";
 
 // Create Session's "Expected Playing Opportunities" estimate — a pure
 // projection from session duration + court/match-duration assumptions,

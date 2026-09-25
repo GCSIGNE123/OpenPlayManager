@@ -79,6 +79,28 @@ async function listWithValues(prefix = "", shared = false) {
   return { rows: (data ?? []).map((row) => ({ key: row.key, value: row.value })), prefix, shared };
 }
 
+// Adaptive Ranking Rotation — bulk keyed lookup: ONE query returning the
+// rows for an explicit list of keys (`key IN (...)`), instead of one get()
+// per key (an N+1 pattern). Missing keys are simply absent from the result
+// (unlike get(), which throws for a missing key). Chunked at 100 keys per
+// query purely to keep the request URL bounded — a session's registered
+// players (typically < 100) is exactly one query.
+async function getMany(keys = [], shared = false) {
+  const unique = [...new Set(keys)];
+  const rows = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("key, value")
+      .eq("shared", shared)
+      .in("key", chunk);
+    if (error) throw error;
+    (data ?? []).forEach((row) => rows.push({ key: row.key, value: row.value }));
+  }
+  return { rows, shared };
+}
+
 // Subscribes to Postgres changes (insert/update/delete) for a single key so
 // callers can react the moment another device writes to it, instead of
 // polling. Returns an unsubscribe function.
@@ -105,7 +127,7 @@ function subscribeToKey(key, shared, onChange, onResync) {
   };
 }
 
-const storage = { get, set, delete: del, list, listWithValues, subscribeToKey };
+const storage = { get, set, delete: del, list, listWithValues, getMany, subscribeToKey };
 
 if (typeof window !== "undefined") {
   window.storage = storage;

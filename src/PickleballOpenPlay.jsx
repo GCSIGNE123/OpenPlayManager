@@ -2,17 +2,23 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Copy, LogOut, Users, Tv, Share2 } from "lucide-react";
 import { styles, fontImport } from "./styles.js";
 import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
-import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
+import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, RANKING_POINTS_MODES, SELECTABLE_ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
 import { resolveDatabaseCheckIn, emptyPlayerRecord, savePlayerRecord, fetchPlayer } from "./lib/playerDatabase.js";
 import { supabase } from "./lib/supabaseClient.js";
 import { uploadPlayerPhoto } from "./lib/photoStorage.js";
 import { resolveRealtimeUpdate } from "./lib/realtimeStorageEvents.js";
+import { applyRankingDelta, applyProvisionalRankingDelta, playersNeedingRankingSnapshot, snapshotSessionRankings } from "./lib/rankingSnapshot.js";
+import { applyCalibrationProfile, calibrationEngineContext, recordCalibrationEvidence, setStrengthOrder } from "./lib/calibrationProfile.js";
+import { createPhaseFields, applyPhaseGate, isCalibrationPhase, noteCalibrationMatchStarted, noteCalibrationMatchUnlocked, noteMatchEnded, validateManualAssignment, forceAdvanceCalibration } from "./lib/openPlayPhases.js";
+import { createShadowRuntime } from "./lib/rankingShadowRuntime.js";
 import ShareLiveDialog from "./components/ShareLiveDialog.jsx";
+import { installShadowDevTools } from "./lib/rankingShadowLog.js";
 import {
   findUniqueAccessCode,
   findUniqueSessionCode,
   getRotationEngine,
   recordRotationHistory,
+  recordMatchupMemory,
   refreshNextMatchups,
   regenerateNextMatchups,
   dissolveMatchupIfReserved,
@@ -445,6 +451,10 @@ export default function PickleballOpenPlay() {
       // gets removed the instant it's idle, rather than automatic dispatch
       // below immediately re-filling it with a fresh matchup first.
       next = applyPendingCourtRemovals(next);
+      // Points-Based Adaptive Matchmaking — keeps every open court an
+      // organizer (manual) court while Rounds 1-2 are being calibrated; a
+      // no-op for every other rotation mode.
+      next = applyPhaseGate(next);
       // On Break / Left (PickleKing Player's Open Play Availability
       // feature) — see lib/utils.js's dissolveMatchupsForPausedPlayers for
       // why this needs its own step here, right alongside
@@ -495,7 +505,7 @@ export default function PickleballOpenPlay() {
       const queueingNotYetStarted = next.queueingStarted === false;
       const withMatchups = {
         ...next,
-        nextMatchups: queueingNotYetStarted || next.queueingStopped
+        nextMatchups: queueingNotYetStarted || next.queueingStopped || isCalibrationPhase(next)
           ? next.nextMatchups || []
           : refreshNextMatchups(
               autoQueueIds,
@@ -504,7 +514,9 @@ export default function PickleballOpenPlay() {
               engine,
               phase,
               maxUpcomingMatchups(next.courts),
-              next.matchmakingPriority
+              next.matchmakingPriority,
+              next.recentMatchups,
+              calibrationEngineContext(next) // Points-Based Adaptive Matchmaking only: session-local calibration affinity (null for every other mode)
             ),
       };
       // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
@@ -531,7 +543,7 @@ export default function PickleballOpenPlay() {
         // while stopped, regardless of the Auto-fill Courts setting;
         // manual dispatch (fillCourt/fillAllCourts/generateRemainingCourts)
         // is untouched and keeps working from whatever's already queued.
-        autoFillCourts: !withMatchups.queueingStopped && withMatchups.courtDispatchSettings?.autoFillCourts !== false,
+        autoFillCourts: !withMatchups.queueingStopped && !isCalibrationPhase(withMatchups) && withMatchups.courtDispatchSettings?.autoFillCourts !== false,
         isCourtReserved,
       });
       let withDispatch = {
@@ -644,6 +656,75 @@ export default function PickleballOpenPlay() {
   useEffect(() => {
     scheduleAnnouncementsRef.current = scheduleAnnouncements;
   }, [scheduleAnnouncements]);
+
+  // SHADOW MODE BEGIN — Adaptive Ranking Rotation shadow observation.
+  // Scorer device only. Runs ONLY for Open Play sessions whose real engine is
+  // Adaptive Skill Rotation, and ONLY after a meaningful scheduling change
+  // (matchups refreshed/dispatched, match ended, player available/unavailable,
+  // manual regenerate — see lib/rankingShadowLog.js classifyTrigger), debounced.
+  // It calculates what Adaptive Ranking Rotation WOULD have proposed and appends
+  // a compact observation to this browser's localStorage (window.pkShadow is
+  // the developer-only inspect/export/clear helper). It never calls save(),
+  // never touches state, never writes to Supabase, adds no subscription or
+  // polling; ratings come from the existing single bulk lookup (once per batch
+  // of new player ids). Turn off on a device: window.pkShadow.disable().
+  const shadowRuntimeRef = useRef(null);
+  const shadowHintRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !scorerAuthed) return undefined;
+    const runtime = createShadowRuntime();
+    shadowRuntimeRef.current = runtime;
+    installShadowDevTools(window);
+    return () => {
+      runtime.dispose();
+      shadowRuntimeRef.current = null;
+    };
+  }, [loaded, scorerAuthed]);
+  useEffect(() => {
+    const runtime = shadowRuntimeRef.current;
+    if (!runtime || !loaded || !scorerAuthed) return;
+    runtime.notify(state, { hint: shadowHintRef.current, sessionCode });
+    shadowHintRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.nextMatchups, state.courts, state.queueIds, state.players, state.matchHistory]);
+  // SHADOW MODE END
+
+  // Adaptive Ranking Rotation only — session PickleKing Points snapshot.
+  // Scorer device only (same gate as the other background effects). Whenever
+  // players exist that still lack a snapshot, waits briefly so several
+  // near-simultaneous check-ins collapse into ONE bulk rating lookup
+  // (fetchPlayerRatingsBulk -> a single `key IN (...)` query), then merges
+  // the result onto the LATEST state and saves it (not counted as activity).
+  // A failed lookup leaves the players un-snapshotted: the engine treats
+  // them as provisional 1000 until the next attempt — never a crash, and
+  // never a per-player fallback.
+  const rankingNeedKey = RANKING_POINTS_MODES.includes(state.rotationMode) ? playersNeedingRankingSnapshot(state.players).sort().join(",") : "";
+  useEffect(() => {
+    if (!loaded || !scorerAuthed || !rankingNeedKey) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const latest = stateRef.current;
+        if (!RANKING_POINTS_MODES.includes(latest.rotationMode)) return;
+        const result = await snapshotSessionRankings(latest.players);
+        if (cancelled || !result.changed) return;
+        const merged = { ...stateRef.current.players };
+        Object.keys(result.players).forEach((id) => {
+          const snap = result.players[id];
+          const cur = merged[id];
+          if (cur && typeof cur.rankingPoints !== "number") merged[id] = { ...cur, rankingPoints: snap.rankingPoints, rankingSource: snap.rankingSource, rankingPointsSeed: snap.rankingPoints };
+        });
+        save({ ...stateRef.current, players: merged }, { isActivity: false });
+      } catch (e) {
+        // leave un-snapshotted; engine falls back to provisional 1000
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, scorerAuthed, rankingNeedKey]);
 
   // Held Player Reminder — see PROJECT.md/FEATURES.md. The floating
   // reminder banner has been removed per direct facilitator feedback (it
@@ -1040,10 +1121,12 @@ export default function PickleballOpenPlay() {
         nextMatchupId: null,
         latecomerPriority: null,
         matchHistory: [],
+        recentMatchups: [], // Rotation Redesign R1 — bounded matchup-memory, see recordMatchupMemory in lib/utils.js
         sessionType,
         tournamentFormat,
         tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
+        ...createPhaseFields(rotationMode), // Points-Based Adaptive Matchmaking only: session phase / calibration / round lock ({} for every other mode)
         expectedGamesPerPlayer,
         adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
         skillChangeLog: [],
@@ -1472,6 +1555,7 @@ export default function PickleballOpenPlay() {
   };
 
   const fillAllCourts = () => {
+    if (isCalibrationPhase(state)) return; // calibration rounds are organizer-built
     let queueIds = [...state.queueIds];
     let remainingMatchups = [...(state.nextMatchups || [])];
     const courts = state.courts.map((c) => {
@@ -1561,13 +1645,16 @@ export default function PickleballOpenPlay() {
     const allIds = [...teamA, ...teamB];
     const allUnique = new Set(allIds).size === allIds.length;
     if (teamA.length !== 2 || teamB.length !== 2 || !allUnique) return;
+    // Points-Based Adaptive Matchmaking calibration rounds: stricter shared
+    // validation (nobody already playing / held / checked out / on another draft)
+    if (isCalibrationPhase(state) && !validateManualAssignment(state, courtIdx, teamA, teamB).ok) return;
 
     const queueIds = state.queueIds.filter((id) => !allIds.includes(id));
     const courts = state.courts.map((c, i) =>
       i === courtIdx ? { ...c, status: "live", teamA, teamB, scoreA: 0, scoreB: 0, manualLocked: true } : c
     );
     clearOneShotSnapshots();
-    save({ ...state, courts, queueIds });
+    save(noteCalibrationMatchStarted({ ...state, courts, queueIds }, allIds, court.number));
   };
 
   // "Unlock": reverses a lock before the match is decided — sends its 4
@@ -1586,8 +1673,22 @@ export default function PickleballOpenPlay() {
         : c
     );
     clearOneShotSnapshots();
-    save({ ...state, courts, queueIds });
+    save(applyCalibrationProfile(noteCalibrationMatchUnlocked({ ...state, courts, queueIds }, court.number)));
   };
+
+  // Points-Based Adaptive Matchmaking: organizer override to close a calibration
+  // round early (only when no calibration match is still running).
+  const advanceCalibration = () => save(forceAdvanceCalibration(state));
+
+  // Calibration strength (optional, session-local): the organizer orders the
+  // calibration match GROUPS of a round strongest -> weakest. Court numbers mean
+  // nothing; only this explicit order counts. Awards no Points; clearing it (or
+  // never setting it) leaves the Calibration Profile exactly as it was.
+  const setCalibrationStrengthOrder = (round, order) => {
+    const next = setStrengthOrder(state, round, order); // frozen (same object) once Adaptive Matchmaking has begun
+    if (next !== state) save(next);
+  };
+  const clearCalibrationStrengthOrder = (round) => setCalibrationStrengthOrder(round, null);
 
   // "Generate Remaining Courts": explicitly rebuilds nextMatchups from
   // scratch (same as Regenerate) using only players not spoken for by a
@@ -1597,6 +1698,10 @@ export default function PickleballOpenPlay() {
   // the rest filled in right away rather than waiting on the next
   // automatic refresh.
   const generateRemainingCourts = () => {
+    // Points-Based Adaptive Matchmaking: Rounds 1-2 are organizer-built — the
+    // system must not generate or deploy anything until calibration is done.
+    if (isCalibrationPhase(state)) return;
+    shadowHintRef.current = "manual_regenerate";
     const manualIds = manuallyReservedIds(state.courts);
     const queueIds = state.queueIds.filter((id) => !manualIds.has(id));
     // Smart Queue Management — a held matchup (like a locked one) must
@@ -1626,7 +1731,9 @@ export default function PickleballOpenPlay() {
           engine,
           phase,
           maxUpcomingMatchups(state.courts),
-          state.matchmakingPriority
+          state.matchmakingPriority,
+          state.recentMatchups,
+          calibrationEngineContext(state)
         );
 
     let remainingIds = [...state.queueIds];
@@ -1797,6 +1904,22 @@ export default function PickleballOpenPlay() {
     // partner/opponent/court history feeds the rotation engine's recency
     // scoring for the next round — see recordRotationHistory
     players = recordRotationHistory(players, teamA, teamB, court.number);
+    // Rotation Redesign R1 — bounded, session-level "did this exact
+    // team-vs-team pairing happen recently" fingerprint. Instrumentation
+    // only: nothing reads this yet, so it cannot change scheduling. See
+    // recordMatchupMemory's own comment in lib/utils.js.
+    const recentMatchups = recordMatchupMemory(state.recentMatchups, teamA, teamB);
+    // Adaptive Ranking Rotation only — mirror the Club Rating Engine's +15/-15
+    // onto the session's PickleKing Points snapshot (see lib/rankingSnapshot.js).
+    // No effect in any other rotation mode.
+    if (state.rotationMode === "adaptiveRanking" && (aWon || bWon)) {
+      players = applyRankingDelta(players, aWon ? teamA : teamB, aWon ? teamB : teamA);
+    }
+    // Points-Based Adaptive Matchmaking — cold-start aware session Points
+    // (larger, decaying swing for provisional players; see rankingSnapshot.js).
+    if (state.rotationMode === "pointsAdaptive" && (aWon || bWon)) {
+      players = applyProvisionalRankingDelta(players, aWon ? teamA : teamB, aWon ? teamB : teamA, { margin: Math.abs(scoreA - scoreB) });
+    }
 
     // Adaptive Skill Rotation — automatic promotion/relegation. Runs only
     // here, AFTER every stat/streak update above has already landed in
@@ -1880,6 +2003,15 @@ export default function PickleballOpenPlay() {
       phase: phasePlayed,
     };
     const matchHistory = [...(state.matchHistory || []), matchRecord];
+    // Points-Based Adaptive Matchmaking: an organizer-built calibration match
+    // (Rounds 1-2) is kept as session-local EVIDENCE — never as a label or as
+    // Points (see lib/calibrationProfile.js). Every other case leaves it as is.
+    const calibrationEvidence = isCalibrationPhase(state) && (aWon || bWon)
+      ? recordCalibrationEvidence(state.calibrationEvidence, {
+          round: state.calibration?.round || 1, teamA, teamB, winner: aWon ? "A" : "B", scoreA, scoreB,
+          ratings: Object.fromEntries(playedIds.map((id) => [id, preMatchState.players?.[id]?.rankingPoints ?? null])),
+        })
+      : state.calibrationEvidence;
 
     rateOpenPlayMatch(teamA, teamB, aWon, bWon);
 
@@ -1904,7 +2036,7 @@ export default function PickleballOpenPlay() {
       const nextMatchups = [...(state.nextMatchups || []), ...newMatchups];
       setRegenerateSnapshot(null); // stale after this round's requeue/repool
       setLastRoundSnapshot(preMatchState);
-      save({ ...state, courts, players, queueIds, nextMatchups, matchHistory, skillChangeLog }).finally(releaseGuard);
+      save(applyCalibrationProfile(noteMatchEnded({ ...state, courts, players, queueIds, nextMatchups, matchHistory, skillChangeLog, recentMatchups, calibrationEvidence }))).finally(releaseGuard);
       return;
     }
 
@@ -1918,7 +2050,7 @@ export default function PickleballOpenPlay() {
     const courts = sourceCourts.map((c, i) => (i === courtIdx ? resetCourtForNextMatch(c) : c));
     setRegenerateSnapshot(null); // stale after this round's requeue
     setLastRoundSnapshot(preMatchState);
-    save({ ...state, courts, players, queueIds, matchHistory, skillChangeLog }).finally(releaseGuard);
+    save(applyCalibrationProfile(noteMatchEnded({ ...state, courts, players, queueIds, matchHistory, skillChangeLog, recentMatchups, calibrationEvidence }))).finally(releaseGuard);
   };
 
   // restores the full app state from right before the last "End match"
@@ -2093,6 +2225,8 @@ export default function PickleballOpenPlay() {
   // actual work — this is just its thin UI wrapper (snapshot bookkeeping +
   // save).
   const regenerateMatchups = () => {
+    if (isCalibrationPhase(state)) return; // calibration rounds are organizer-built (see generateRemainingCourts)
+    shadowHintRef.current = "manual_regenerate";
     // Stop Queueing — "Regenerate matchups" explicitly builds NEW matchups
     // from scratch, so it's a no-op while queueing is stopped (see the
     // matching disabled state in ScorerView).
@@ -2236,7 +2370,10 @@ export default function PickleballOpenPlay() {
   // action in the Waiting Players panel; takes effect immediately for that
   // pair, at any point during the session, no session-wide setting needed.
   const setFixedPartner = (playerIdA, playerIdB) => {
-    const next = setFixedPartnerAction(state, playerIdA, playerIdB);
+    // Adaptive Ranking Rotation treats a fixed pair as a STRICT constraint, so
+    // in that mode already-built upcoming matchups that would split the pair
+    // are dissolved (lib/queueManagement.js); every other mode is unchanged.
+    const next = setFixedPartnerAction(state, playerIdA, playerIdB, { dissolveUpcoming: RANKING_POINTS_MODES.includes(state.rotationMode) });
     if (next === state) return;
     save(next);
   };
@@ -2557,7 +2694,7 @@ export default function PickleballOpenPlay() {
           onBack={() => setScreen("access")}
           creating={creating}
           createError={createError}
-          rotationModes={ROTATION_MODES}
+          rotationModes={SELECTABLE_ROTATION_MODES}
           sessionTypes={SESSION_TYPES}
           tournamentFormats={TOURNAMENT_FORMATS}
         />
@@ -2815,6 +2952,9 @@ export default function PickleballOpenPlay() {
                   setManualCourtPlayer={setManualCourtPlayer}
                   clearManualCourtPlayer={clearManualCourtPlayer}
                   lockManualCourt={lockManualCourt}
+                  advanceCalibration={advanceCalibration}
+                  setCalibrationStrengthOrder={setCalibrationStrengthOrder}
+                  clearCalibrationStrengthOrder={clearCalibrationStrengthOrder}
                   unlockManualCourt={unlockManualCourt}
                   generateRemainingCourts={generateRemainingCourts}
                   toggleLockMatchup={toggleLockMatchup}

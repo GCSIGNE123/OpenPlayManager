@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Megaphone, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { ROTATION_MODES, MATCHMAKING_PRIORITIES } from "../lib/constants.js";
+import { MATCHMAKING_PRIORITIES, rotationModeLabelFor } from "../lib/constants.js";
+import CalibrationStrengthOrder from "./CalibrationStrengthOrder.jsx";
+import { currentRoundNumber, isCalibrationPhase, phaseLabel, rotationBanner, roundLockStatus, usesPhases } from "../lib/openPlayPhases.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds, countInCourtPlayers } from "../lib/utils.js";
 import { getPairPartnerIndex, isPoolingRotation } from "../lib/winnerPoolRound.js";
 import CourtCard from "./CourtCard.jsx";
@@ -112,6 +114,9 @@ export default function ScorerView({
   clearManualCourtPlayer,
   lockManualCourt,
   unlockManualCourt,
+  advanceCalibration,
+  setCalibrationStrengthOrder,
+  clearCalibrationStrengthOrder,
   generateRemainingCourts,
   toggleLockMatchup,
   regenerateMatchups,
@@ -232,7 +237,7 @@ export default function ScorerView({
   // rotation mode is now chosen once at session creation (Create Session
   // screen) — this is a read-only label, not a control, so the organizer
   // can still see which mode is active without being able to switch it here
-  const rotationModeLabel = ROTATION_MODES.find((m) => m.value === rotationMode)?.label || rotationMode;
+  const rotationModeLabel = rotationModeLabelFor(rotationMode);
   // Persistent Matchmaking Priority Indicator — see PROJECT.md. Inspection
   // confirmed state.matchmakingPriority is NOT lost/cleared anywhere — it's
   // reapplied on every save() via refreshNextMatchups/regenerateNextMatchups,
@@ -250,7 +255,8 @@ export default function ScorerView({
   // matches matchHistory's own round numbering (see endMatch: `round:
   // (state.matchHistory || []).length + 1`) — the round the next completed
   // match would be recorded under, i.e. "what round are we currently on"
-  const currentRound = (matchHistory || []).length + 1;
+  // Points-Based Adaptive Matchmaking counts real rounds (calibration 1-2, then one per court-set of matches); every other mode keeps the running match count + 1
+  const currentRound = usesPhases(state) ? currentRoundNumber(state) : (matchHistory || []).length + 1;
 
   return (
     <div>
@@ -331,6 +337,28 @@ export default function ScorerView({
           <span style={styles.sessionInfoValue}>{currentRound}</span>
         </div>
       </div>
+      {usesPhases(state) && (
+        <div style={styles.infoBanner} data-testid="phase-banner">
+          <strong>{rotationBanner(state)}</strong>
+          {" · "}
+          <span>Rotation: Adaptive Matchmaking</span>
+          {" · "}
+          <span>Phase: {phaseLabel(state)}</span>
+          {" · "}
+          <span>{roundLockStatus(state)?.label}</span>
+          <div>
+            {isCalibrationPhase(state)
+              ? "You build every match by hand for the calibration rounds (use Manual assignment on each court, pick 2 + 2, then Lock court). Players who check in after a round is locked wait for the next round. Adaptive matchmaking starts automatically once Round 2 is finished."
+              : "The system now fills courts from ONE waiting pool using Open Play Points, wait time, games played and variety. Players who check in later join the queue by arrival time."}
+          </div>
+          <CalibrationStrengthOrder state={state} locked={!isCalibrationPhase(state)} onApply={setCalibrationStrengthOrder} onClear={clearCalibrationStrengthOrder} />
+          {isCalibrationPhase(state) && (
+            <button type="button" style={styles.secondaryBtn} onClick={advanceCalibration} title="Close this calibration round early (only when no calibration match is running)">
+              Finish this round
+            </button>
+          )}
+        </div>
+      )}
       {rotationMode === "progressiveSkill" && (
         <ProgressiveSkillPanel
           players={state.players}

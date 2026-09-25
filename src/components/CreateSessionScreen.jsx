@@ -10,6 +10,7 @@ import {
   disambiguateDuplicateNames,
   savePlayerRecord,
 } from "../lib/playerDatabase.js";
+import { ROTATION_MODE_DESCRIPTIONS } from "../lib/constants.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { uploadPlayerPhoto } from "../lib/photoStorage.js";
@@ -301,6 +302,11 @@ export default function CreateSessionScreen({
               </option>
             ))}
           </select>
+          {ROTATION_MODE_DESCRIPTIONS[rotationMode] && (
+            <p style={styles.editHint}>
+              <strong>{rotationModes.find((m) => m.value === rotationMode)?.label}:</strong> {ROTATION_MODE_DESCRIPTIONS[rotationMode]} The engine is fixed for the whole session.
+            </p>
+          )}
         </>
       )}
 

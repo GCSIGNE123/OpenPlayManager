@@ -1,6 +1,7 @@
 import { RotationEngine } from "./RotationEngine.js";
 import { BalancedRotationEngine } from "./BalancedRotationEngine.js";
 import { shuffle, uid } from "../lib/random.js";
+import { isRecentMatchup } from "../lib/matchupMemory.js";
 
 // Winner vs Winner / Loser vs Loser preference bonus — see scoreMatchup
 // below. Named/exported (rather than a literal buried in the scoring
@@ -10,6 +11,19 @@ import { shuffle, uid } from "../lib/random.js";
 // scoring scale (-100/-50/+20) so repeat-opponent avoidance always wins
 // when the two preferences conflict.
 export const WINNER_MATCH_BONUS = 30;
+
+// Rotation Redesign R2 — soft signal only. When a candidate 2+2 split
+// would recreate a team-vs-team pairing already present in R1's bounded
+// `recentMatchups` fingerprint list, this small penalty nudges
+// buildQuartetMatchup's scoring away from it. Deliberately smaller than
+// BalancedRotationEngine's own repeat-opponent scale (-100/-50/+20, which
+// already fires independently via scoreFullMatchup below since a repeated
+// exact matchup always means repeated individual opponents too) and
+// smaller than WINNER_MATCH_BONUS — this only ever acts as a tiebreaker
+// between splits the existing scoring already considers close, never a
+// hard block. R4 owns the explicit hard-block/tiered-penalty policy this
+// was originally reserved for; R2 does not implement that.
+export const RECENT_MATCHUP_PENALTY = 10;
 
 // LEGACY — kept only for scoreBreakdownFor/waitingBonusFor, the dev-only
 // inspection helpers scripts/simulate-adaptive-fairness.mjs prints (never
@@ -142,7 +156,7 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // top of this ranked list instead of a division-ordered or
   // games-first-ranked one.
   generateMatchups(context) {
-    const { waitingIds, players, existingMatchups } = context;
+    const { waitingIds, players, existingMatchups, recentMatchups = null } = context;
     const reserved = new Set((existingMatchups || []).flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = waitingIds.filter((id) => !reserved.has(id) && players[id]);
 
@@ -155,8 +169,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     // spanning Beginner and Intermediate is never force-paired — Adaptive
     // Skill Rotation's Beginner/Intermediate separation is structurally
     // untouched by this option.
-    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players);
-    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players);
+    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players, recentMatchups);
+    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players, recentMatchups);
 
     const merged = [...beginnerMatchups, ...intermediateMatchups].map((m) => {
       const ids = [...m.teamA, ...m.teamB];
@@ -190,33 +204,106 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // "leftover stays available for the next refresh" precedent every other
   // engine in this app already follows for an odd/insufficient pool).
   //
-  // Stage 2: for each group, team formation (buildTeams) and matchup
-  // quality (buildMatchupsFromTeams) run EXACTLY as before this redesign —
-  // completely unchanged code, just scoped to 4 players at a time instead
-  // of the whole division. `true` for allowSameSkillFallback mirrors this
-  // class's original behavior — a single division's pool is always
-  // single-skill, so BalancedRotationEngine's own mixed-pairing loop never
-  // finds a partner in the OTHER skill bucket and always needs its
-  // same-skill leftover path (pairLeftovers) to pair anyone at all.
-  generateDivisionMatchups(pool, players) {
+  // Stage 2 (Rotation Redesign R2): for each group, buildQuartetMatchup
+  // decides team formation AND the resulting matchup JOINTLY — see its own
+  // comment for why (BalancedRotationEngine.buildTeams's same-skill
+  // fallback, pairLeftovers, only ever considers partner-recency, which
+  // made the previous two-step "pick partners, then score opponents"
+  // pipeline structurally unable to optimize for opponent diversity or
+  // Winner-vs-Winner/Loser-vs-Loser — see the Rotation Algorithm Audit).
+  // This replaces the old buildTeams + buildMatchupsFromTeams call for
+  // Adaptive Skill Rotation ONLY; BalancedRotationEngine itself is
+  // untouched, so every other rotation mode still goes through its
+  // original buildTeams/pairLeftovers path exactly as before.
+  generateDivisionMatchups(pool, players, recentMatchups = null) {
     const { groups, groupNotes } = this.selectFairnessGroups(pool, players);
 
     const matchups = [];
     groups.forEach((quartet, i) => {
-      const teams = this.divisionEngine.buildTeams(quartet, players, true);
-      const rawMatchups = this.buildMatchupsFromTeams(teams, players);
-      // exactly 4 players in => exactly 2 teams => exactly 1 full matchup,
-      // every time (buildTeams never leaves a same-skill-of-4 pool
-      // unpaired) — rawMatchups.length === 1 is guaranteed here, but this
-      // stays a .forEach rather than an assumption so a future
-      // buildTeams edge case degrades to "no matchup this group" instead
-      // of throwing.
-      rawMatchups.forEach(({ teamA, teamB }) => {
-        matchups.push({ id: uid(), teamA, teamB, fairness: this.describeFairness(quartet, players, groupNotes[i]) });
-      });
+      // exactly 4 players in => exactly one 2+2 split chosen => exactly 1
+      // full matchup, every time (buildQuartetMatchup never leaves a
+      // quartet of 4 unpaired) — the null check below only guards a future
+      // edge case (e.g. a malformed quartet) degrading to "no matchup this
+      // group" instead of throwing.
+      const result = this.buildQuartetMatchup(quartet, players, recentMatchups);
+      if (result?.teamA && result?.teamB) {
+        matchups.push({ id: uid(), teamA: result.teamA, teamB: result.teamB, fairness: this.describeFairness(quartet, players, groupNotes[i]) });
+      }
     });
 
     return matchups;
+  }
+
+  // Rotation Redesign R2 — Opponent-Aware Team Formation, Adaptive Skill
+  // Rotation ONLY. For a same-skill quartet, the old path
+  // (BalancedRotationEngine.buildTeams -> pairLeftovers, since a
+  // single-division pool always fails the mixed beginner/intermediate loop
+  // and falls to the same-skill fallback) picked which 2 players partner
+  // using ONLY scorePartner — by the time opponent/Winner-Loser scoring
+  // ran afterward, only one team split still existed to score, making that
+  // scoring structurally inert (root cause in the Rotation Algorithm
+  // Audit). This fixes it by evaluating the actual resulting matchup for
+  // EVERY valid 2+2 split of the 4 players — partners first, opponents
+  // discovered afterward is exactly the bug; this instead computes
+  // "candidate team A + candidate team B -> resulting opponents +
+  // partners -> total score" for each split and keeps the best one.
+  //
+  // Partner Requests (a mutually-fixed partnerId) are honored exactly as
+  // before — extractFixedPartnerTeams (BalancedRotationEngine, reused
+  // read-only, never modified) pulls out any mutually-agreeing pair first.
+  // A fixed pair removes the free choice for that team (and, if BOTH
+  // resulting pairs in the quartet happen to be mutually fixed, for the
+  // whole quartet) — there is nothing to optimize in that case, only the
+  // forced outcome, same as the pre-R2 behavior.
+  buildQuartetMatchup(quartet, players, recentMatchups = null) {
+    const { teams: fixedTeams, remaining } = this.divisionEngine.extractFixedPartnerTeams(quartet, players);
+
+    if (fixedTeams.length >= 2) {
+      return { teamA: fixedTeams[0], teamB: fixedTeams[1] };
+    }
+    if (fixedTeams.length === 1) {
+      return { teamA: fixedTeams[0], teamB: remaining };
+    }
+    if (quartet.length !== 4) return null; // malformed input guard — never expected in practice
+
+    // No fixed partners — free choice among the 3 possible 2+2 splits of 4
+    // players. Shuffled before scoring (same "shuffle before an exact-tie
+    // sort" precedent as generateMatchups' own merge below) so an exact
+    // score tie never systematically favors one split.
+    const [p0, p1, p2, p3] = quartet;
+    const splits = shuffle([
+      [[p0, p1], [p2, p3]],
+      [[p0, p2], [p1, p3]],
+      [[p0, p3], [p1, p2]],
+    ]);
+
+    let best = null;
+    let bestScore = -Infinity;
+    for (const [teamA, teamB] of splits) {
+      const score = this.scoreQuartetSplit(teamA, teamB, players, recentMatchups);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { teamA, teamB };
+      }
+    }
+    return best;
+  }
+
+  // The complete candidate-split score — this is the joint evaluation R2
+  // requires: BalancedRotationEngine's own scoreFullMatchup (unchanged;
+  // partner diversity x2 + opponent diversity, nothing reimplemented) plus
+  // this engine's existing Winner-vs-Winner/Loser-vs-Loser preference
+  // (winnerBonusFor, also unchanged), plus a small optional R1
+  // recentMatchups signal (see RECENT_MATCHUP_PENALTY — soft, not a hard
+  // block; R4's job). Every term already existed before R2 except the
+  // recent-matchup one; R2's change is evaluating all 3 possible splits
+  // through this same total, not adding new scoring weights.
+  scoreQuartetSplit(teamA, teamB, players, recentMatchups) {
+    let score = this.divisionEngine.scoreFullMatchup(teamA, teamB, players) + this.winnerBonusFor(teamA, teamB, players);
+    if (recentMatchups && isRecentMatchup(recentMatchups, teamA, teamB)) {
+      score -= RECENT_MATCHUP_PENALTY;
+    }
+    return score;
   }
 
   // Stage 1 — see the Fairness Selection Redesign comment above the class.

@@ -57,6 +57,32 @@ export async function savePlayerRating(rating) {
   return stamped;
 }
 
+// Adaptive Ranking Rotation — bulk rating lookup for a session's registered
+// player ids: ONE storage query (window.storage.getMany -> `key IN (...)`),
+// never one request per player. Returns { [playerId]: PlayerRating } for
+// the ids that HAVE a stored rating; an id with no record (an unrated
+// player, or a walk-in with no Player Database id) is simply absent.
+// Deliberately does not fall back to per-key get() — if getMany is missing
+// this throws so an N+1 pattern can never sneak in silently.
+export async function fetchPlayerRatingsBulk(playerIds) {
+  const ids = [...new Set((playerIds || []).filter(Boolean))];
+  if (ids.length === 0) return {};
+  if (typeof window.storage.getMany !== "function") {
+    throw new Error("fetchPlayerRatingsBulk: window.storage.getMany is unavailable — refusing an N+1 fallback");
+  }
+  const { rows } = await window.storage.getMany(ids.map((id) => `${RATING_PREFIX}${id}`), true);
+  const out = {};
+  for (const row of rows) {
+    try {
+      const rating = JSON.parse(row.value);
+      if (rating && typeof rating.currentRating === "number") out[row.key.slice(RATING_PREFIX.length)] = rating;
+    } catch (e) {
+      // a corrupt record is treated as "no rating", never a crash
+    }
+  }
+  return out;
+}
+
 export async function fetchAllPlayerRatings() {
   const { keys } = await window.storage.list(RATING_PREFIX, true);
   const records = await Promise.all(

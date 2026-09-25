@@ -1,6 +1,7 @@
 import { getRotationEngine, refreshNextMatchups, regenerateNextMatchups, maxUpcomingMatchups, dissolveMatchupIfReserved, courtDisplayName } from "./utils.js";
 import { progressiveSkillPhaseFor } from "./progressiveSkillPhase.js";
 import { uid } from "./random.js";
+import { calibrationEngineContext } from "./calibrationProfile.js";
 
 // Smart Queue Management — see PROJECT.md/FEATURES.md. Every action here is
 // a pure, UI-agnostic `(state, ...) => newState` function — none of them
@@ -257,7 +258,37 @@ export function derivePaymentStats(players) {
 // one-sided pointer at a player who's since paired with someone else. A
 // no-op if either id is missing, they're the same player, or they're
 // already each other's partner.
-export function setFixedPartner(state, playerIdA, playerIdB) {
+//
+// `dissolveUpcoming` (default false — every existing caller and rotation mode
+// behaves exactly as before) is used ONLY by Adaptive Ranking Rotation, whose
+// fixed pairs are a strict teaming constraint: when true, any UNLOCKED,
+// UNHELD upcoming matchup that reserves one or both players without keeping
+// them together is dissolved so the very next regeneration re-forms it with
+// the pair intact. See dissolveUpcomingForFixedPair.
+export function setFixedPartner(state, playerIdA, playerIdB, { dissolveUpcoming = false } = {}) {
+  const next = setFixedPartnerCore(state, playerIdA, playerIdB);
+  if (!dissolveUpcoming || next === state) return next;
+  return dissolveUpcomingForFixedPair(next, playerIdA, playerIdB);
+}
+
+// Pure. Drops every upcoming matchup that includes exactly one of the two
+// players, or both of them on OPPOSITE teams (a matchup that already has them
+// as teammates is kept). Locked and held matchups are organizer decisions and
+// are never touched here. Players stay in queueIds (they never left it), so
+// they are simply waiting again; players on a live/dispatching court are not
+// in nextMatchups at all and are never interrupted — the pair is honored when
+// they come back to the queue. A no-op (same state object) when nothing is
+// affected.
+export function dissolveUpcomingForFixedPair(state, playerIdA, playerIdB) {
+  const nm = state.nextMatchups || [];
+  const together = (m) => [m.teamA, m.teamB].some((t) => t.includes(playerIdA) && t.includes(playerIdB));
+  const touches = (m) => [...m.teamA, ...m.teamB].some((id) => id === playerIdA || id === playerIdB);
+  const kept = nm.filter((m) => m.locked || m.held || !touches(m) || together(m));
+  if (kept.length === nm.length) return state;
+  return { ...state, nextMatchups: kept };
+}
+
+function setFixedPartnerCore(state, playerIdA, playerIdB) {
   if (!playerIdA || !playerIdB || playerIdA === playerIdB) return state;
   const a = state.players[playerIdA];
   const b = state.players[playerIdB];
@@ -470,7 +501,7 @@ export function regenerate(state) {
     state.progressiveSkillThresholds
   );
   const cap = maxUpcomingMatchups(state.courts);
-  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap, state.matchmakingPriority);
+  const nextMatchups = regenerateNextMatchups(state.queueIds, state.players, state.nextMatchups || [], engine, phase, cap, state.matchmakingPriority, state.recentMatchups, calibrationEngineContext(state));
   return { ...state, nextMatchups };
 }
 
