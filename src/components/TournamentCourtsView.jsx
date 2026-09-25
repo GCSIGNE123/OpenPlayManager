@@ -462,6 +462,10 @@ export default function TournamentCourtsView({
   const availableCourts = courtAssignmentService.getAvailableCourts(tournament);
   const queue = courtQueueService.getQueue(tournament);
   const occupiedCourts = courts.filter((c) => c.currentMatch);
+  // Matches already earmarked for a specific court get their own section; the
+  // general Match Queue lists only the rest.
+  const preAssigned = queue.filter((e) => e.match.nextCourt != null);
+  const generalQueue = queue.filter((e) => e.match.nextCourt == null);
   // LIVE courts that can still take a "play next here" marker (one per court).
   const liveCourts = courts.filter((c) => c.currentMatch?.status === "inProgress" && !queue.some((e) => e.match.nextCourt === c.number));
   const queueWithOccupied = Object.assign(queue, { allOccupiedCourts: occupiedCourts });
@@ -594,12 +598,45 @@ export default function TournamentCourtsView({
         </div>
       </div>
 
+      {preAssigned.length > 0 && (
+        <>
+          <h3 style={{ ...styles.tSectionHeading, marginTop: 20 }}>Pre-assigned to Courts</h3>
+          <ul style={styles.qualifiersList}>
+            {preAssigned
+              .slice()
+              .sort((x, y) => x.match.nextCourt - y.match.nextCourt)
+              .map((entry) => {
+                const court = courts.find((c) => c.number === entry.match.nextCourt);
+                const courtFree = availableCourts.some((c) => c.number === entry.match.nextCourt);
+                const label = court ? courtDisplayName(court) : `Court ${entry.match.nextCourt}`;
+                return (
+                  <li key={entry.match.id} style={styles.queueListItem}>
+                    <span>
+                      <span style={styles.queueNum}>{label}</span>{" "}
+                      <span style={styles.queueMatchup}>{matchupLabel(entry.match)}</span>
+                      <span style={styles.queueSourceTag}>{courtFree ? "COURT FREE" : "WAITING FOR LIVE MATCH"}</span>
+                    </span>
+                    <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <button type="button" style={styles.secondaryBtn} disabled={!courtFree} onClick={() => onAssignMatch(entry.match.id, entry.match.nextCourt)}>
+                        Assign to {label}
+                      </button>
+                      <button type="button" style={styles.secondaryBtn} onClick={() => onClearNextOnCourt(entry.match.id)}>
+                        Remove
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+        </>
+      )}
+
       <h3 style={{ ...styles.tSectionHeading, marginTop: 20 }}>Match Queue</h3>
-      {queue.length === 0 ? (
+      {generalQueue.length === 0 ? (
         <p style={styles.tControlHint}>No matches are waiting for a court right now.</p>
       ) : (
         <ul style={styles.qualifiersList}>
-          {queue.map((entry) => (
+          {generalQueue.map((entry) => (
             <QueueRow
               key={entry.match.id}
               entry={entry}
