@@ -104,6 +104,14 @@ export async function rateMatch(tournament, match, source) {
   }
 }
 
+// End Match used to block ~7s on rating writes (several sequential Supabase
+// round trips per player) before the result was even saved or the court
+// freed. Ratings don't feed the tournament record, so they now run after the
+// result is saved; a failure is logged, never surfaced as a failed End Match.
+function rateMatchInBackground(tournament, match, source) {
+  rateMatch(tournament, match, source).catch((e) => console.error("Rating update failed:", e));
+}
+
 export function buildEntrants(players, mode) {
   if (mode === "doubles") {
     return pairIntoTeams(players).map(([a, b]) => makeEntrant(`${a.name} / ${b.name}`, [a.id, b.id]));
@@ -277,7 +285,7 @@ export async function saveMatchResult(tournament, matchId, result) {
   const updated = engine.updateMatchResult(tournament, matchId, result);
   const { match } = findMatch(updated, matchId);
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (!match.isBye) await rateMatch(updated, match, tournament.format === "league" ? "league" : "tournament");
+  if (!match.isBye) rateMatchInBackground(updated, match, tournament.format === "league" ? "league" : "tournament");
   const withNextMatchCleared =
     withAutoFill.nextMatchId === matchId ? { ...withAutoFill, nextMatchId: null } : withAutoFill;
   return saveTournament(withNextMatchCleared);
@@ -373,7 +381,7 @@ export async function savePlayoffMatchResult(tournament, matchId, result) {
   }
 
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(updated, match, "tournament");
+  if (match) rateMatchInBackground(updated, match, "tournament");
   // Tournament Champion — awarded the moment the championship match
   // completes the whole bracket, to every one of the champion team's
   // underlying players (both, for doubles).
@@ -438,7 +446,7 @@ export async function saveWalkover(tournament, matchId, winnerId) {
   }
 
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(updated, match, "tournament");
+  if (match) rateMatchInBackground(updated, match, "tournament");
   if (field === "bracket" && bracket.status === "completed" && bracket.champion) {
     const championIds = resolvePlayerIds(updated, bracket.champion);
     for (const playerId of championIds) {
@@ -726,7 +734,7 @@ export async function saveDoubleEliminationMatchResult(tournament, matchId, resu
   const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -757,7 +765,7 @@ export async function saveDoubleEliminationWalkover(tournament, matchId, winnerI
   const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket: finalWinnersBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -778,7 +786,7 @@ export async function saveDoubleEliminationLosersMatchResult(tournament, matchId
   const deBracket = { ...tournament.doubleEliminationBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -805,7 +813,7 @@ export async function saveDoubleEliminationLosersWalkover(tournament, matchId, w
   const deBracket = { ...tournament.doubleEliminationBracket, losersBracket: finalLosersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
 
@@ -843,7 +851,7 @@ export async function saveGrandFinalMatchResult(tournament, matchId, result) {
   const deBracket = { ...tournament.doubleEliminationBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   // Tournament Champion — awarded the moment the Grand Final (including a
   // Game 2 reset, if one happened) actually decides a champion.
   if (grandFinal.status === "completed" && grandFinal.champion) {
@@ -871,7 +879,7 @@ export async function saveGrandFinalWalkover(tournament, matchId, winnerId) {
   const deBracket = { ...tournament.doubleEliminationBracket, grandFinal: finalGrandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
   const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
-  if (match) await rateMatch(withAutoFill, match, "tournament");
+  if (match) rateMatchInBackground(withAutoFill, match, "tournament");
   if (finalGrandFinal.status === "completed" && finalGrandFinal.champion) {
     const championIds = resolvePlayerIds(withAutoFill, finalGrandFinal.champion);
     for (const playerId of championIds) {
