@@ -137,10 +137,6 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                       </button>
                     </div>
                   </div>
-                  <button type="button" style={styles.tWonBtn} onClick={() => onDeclareWinner(current.id, "teamA")} title="Skip point-by-point scoring — mark Team A the winner, 11-0">
-                    <Trophy size={11} strokeWidth={2.5} />
-                    Won
-                  </button>
                 </div>
                 <div style={styles.tTeamCard(servingTeam === "teamB")}>
                   <div style={styles.tTeamCardHead}>
@@ -158,10 +154,6 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                       </button>
                     </div>
                   </div>
-                  <button type="button" style={styles.tWonBtn} onClick={() => onDeclareWinner(current.id, "teamB")} title="Skip point-by-point scoring — mark Team B the winner, 11-0">
-                    <Trophy size={11} strokeWidth={2.5} />
-                    Won
-                  </button>
                 </div>
               </div>
 
@@ -342,7 +334,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
 // One Match Queue row — enriched with Queue Position/Match Type/Priority/
 // Estimated Wait (see CourtQueueService.getQueue), plus manual-override
 // Delay/Pin actions.
-function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin, onUnpin, isNextMatch, onSetNextMatch }) {
+function QueueRow({ entry, availableCourts, onAssign, onPin, onUnpin, isNextMatch, onSetNextMatch }) {
   const [courtNumber, setCourtNumber] = useState("");
   const delayed = entry.match.queueOverride?.delayed;
   const pinnedCourt = entry.match.queueOverride?.pinnedCourt;
@@ -388,10 +380,6 @@ function QueueRow({ entry, availableCourts, onAssign, onDelay, onUndelay, onPin,
           }}
         >
           Assign
-        </button>
-        <button type="button" style={styles.secondaryBtn} onClick={() => (delayed ? onUndelay(entry.match.id) : onDelay(entry.match.id))}>
-          {delayed ? <PlayCircle size={13} strokeWidth={2.5} /> : <Pause size={13} strokeWidth={2.5} />}
-          {delayed ? "Undelay" : "Delay"}
         </button>
         {pinnedCourt != null ? (
           <button type="button" style={styles.secondaryBtn} onClick={() => onUnpin(entry.match.id)}>
@@ -614,8 +602,6 @@ export default function TournamentCourtsView({
               entry={entry}
               availableCourts={availableCourts}
               onAssign={onAssignMatch}
-              onDelay={onDelayMatch}
-              onUndelay={onUndelayMatch}
               onPin={onPinMatch}
               onUnpin={onUnpinMatch}
               isNextMatch={entry.match.id === nextMatchId}
