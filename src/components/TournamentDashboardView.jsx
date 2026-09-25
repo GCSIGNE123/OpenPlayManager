@@ -16,6 +16,8 @@ import {
   saveResumeMatch,
   saveWalkover,
   saveCourtAssignment,
+  saveSetNextOnCourt,
+  saveClearNextOnCourt,
   saveAdjustMatchScore,
   saveDeclareCourtWinner,
   saveSetServeNumber,
@@ -913,6 +915,26 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     speakAnnouncement(text, cfg, () => {});
   };
 
+  const handleSetNextOnCourt = async (matchId, courtNumber) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveSetNextOnCourt(tournament, matchId, courtNumber));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
+  const handleClearNextOnCourt = async (matchId) => {
+    if (!tournament) return;
+    setCourtError("");
+    try {
+      setTournament(await saveClearNextOnCourt(tournament, matchId));
+    } catch (e) {
+      setCourtError(e.message);
+    }
+  };
+
   const handleAssignMatch = async (matchId, courtNumber) => {
     if (!tournament) return;
     setCourtError("");
@@ -1449,6 +1471,8 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           loading={loading}
           courtError={courtError}
           onAssignMatch={handleAssignMatch}
+          onSetNextOnCourt={handleSetNextOnCourt}
+          onClearNextOnCourt={handleClearNextOnCourt}
           onReleaseCourt={handleReleaseCourt}
           onReassignMatch={handleReassignMatch}
           onSwapCourts={handleSwapCourts}

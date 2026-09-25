@@ -473,6 +473,14 @@ export async function saveCourtAssignment(tournament, matchId, courtNumber) {
 // Court Assignment & Match Queue Engine: a manual "Release" only frees the
 // court — Tournament Mode never auto-fills it; the organizer assigns the next
 // match explicitly (saveCourtAssignment).
+export async function saveSetNextOnCourt(tournament, matchId, courtNumber) {
+  return saveTournament(courtAssignmentService.setNextOnCourt(tournament, matchId, courtNumber));
+}
+
+export async function saveClearNextOnCourt(tournament, matchId) {
+  return saveTournament(courtAssignmentService.clearNextOnCourt(tournament, matchId));
+}
+
 export async function saveCourtRelease(tournament, courtNumber) {
   const updated = courtAssignmentService.releaseCourt(tournament, courtNumber);
   return saveTournament(updated);

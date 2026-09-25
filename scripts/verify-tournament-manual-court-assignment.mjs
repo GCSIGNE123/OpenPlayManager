@@ -101,6 +101,27 @@ console.log("\n8b. Scorer name recorded at Start Match");
   assert("no name -> no scorerName field, start still works", m(v, "M2").scorerName === undefined && m(v, "M2").status === "inProgress");
 }
 
+console.log("\n8c. Queue a match as 'playing next' on a LIVE court");
+{
+  let u = await T.saveCourtAssignment(fixture(), "M1", 3);
+  u = await T.saveMatchStart(u, "M1", "Sam");
+  u = await T.saveSetNextOnCourt(u, "M2", 3);
+  assert("marker set, match still unassigned (court stays occupied by the live match)", m(u, "M2").nextCourt === 3 && m(u, "M2").court === null);
+  assert("live match untouched and still on Court 3", courtOf(u, "M1") === 3 && m(u, "M1").status === "inProgress");
+  assert("M2 still in the queue", service.refreshQueue(u).queue.some((e) => e.match.id === "M2"));
+  assert("second match cannot claim the same court's next slot", (() => { try { service.setNextOnCourt(u, "M3", 3); return false; } catch { return true; } })());
+  assert("an empty court cannot take a next marker (use Assign)", (() => { try { service.setNextOnCourt(u, "M3", 4); return false; } catch { return true; } })());
+  u = await T.saveMatchResult(u, "M1", { scoreA: 11, scoreB: 5, winnerId: teams[0].id });
+  assert("after the live match ends, Court 3 is free, NOT auto-filled, marker kept", avail(u).includes(3) && courtOf(u, "M2") === null && m(u, "M2").nextCourt === 3);
+  u = await T.saveCourtAssignment(u, "M2", 3);
+  assert("real Assign consumes the marker", courtOf(u, "M2") === 3 && m(u, "M2").nextCourt === undefined);
+  let w = await T.saveCourtAssignment(fixture(), "M1", 3);
+  w = await T.saveMatchStart(w, "M1", "Sam");
+  w = await T.saveSetNextOnCourt(w, "M2", 3);
+  w = await T.saveClearNextOnCourt(w, "M2");
+  assert("marker can be cleared", m(w, "M2").nextCourt === null);
+}
+
 console.log("\n9. Source guards");
 const src = strip(read("src/lib/tournament.js"));
 assert("tournament.js no longer calls autoAssign / releaseAndAutoFill", !/\.autoAssign\(|releaseAndAutoFill\(/.test(src));

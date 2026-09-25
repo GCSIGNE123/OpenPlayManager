@@ -234,6 +234,10 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                   Match Status: {STATUS_LABELS[current.status]}
                   {current.scorerName ? ` · Scorer: ${current.scorerName}` : ""}
                 </div>
+                {(() => {
+                  const nxt = queue.find((e) => e.match.nextCourt === court.number);
+                  return nxt ? <div style={styles.tControlHint}>Playing next here: {nxt.match.teamA?.label} vs {nxt.match.teamB?.label}</div> : null;
+                })()}
               </div>
             </>
           )}
@@ -334,7 +338,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
 // One Match Queue row — enriched with Queue Position/Match Type/Priority/
 // Estimated Wait (see CourtQueueService.getQueue), plus manual-override
 // Delay/Pin actions.
-function QueueRow({ entry, availableCourts, onAssign, onPin, onUnpin, isNextMatch, onSetNextMatch }) {
+function QueueRow({ entry, availableCourts, liveCourts, onAssign, onSetNextOnCourt, onClearNextOnCourt, isNextMatch, onSetNextMatch }) {
   const [courtNumber, setCourtNumber] = useState("");
   const delayed = entry.match.queueOverride?.delayed;
   const pinnedCourt = entry.match.queueOverride?.pinnedCourt;
@@ -347,6 +351,13 @@ function QueueRow({ entry, availableCourts, onAssign, onPin, onUnpin, isNextMatc
         <span style={styles.queueSourceTag}>{entry.matchType}</span>
         <span style={styles.queueSourceTag}>~{entry.estimatedWaitMinutes}m wait</span>
         {delayed && <span style={styles.queueSourceTag}>DELAYED</span>}
+        {entry.match.nextCourt != null && (
+          <span style={styles.queueSourceTag}>
+            NEXT ON COURT {(() => { const nc = liveCourts.concat(availableCourts).find((c) => c.number === entry.match.nextCourt); return nc ? courtDisplayName(nc) : entry.match.nextCourt; })()}
+            {" "}
+            <button type="button" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }} onClick={() => onClearNextOnCourt(entry.match.id)} title="Remove the next-on-court marker" aria-label="Remove next-on-court marker">×</button>
+          </span>
+        )}
         {pinnedCourt != null && <span style={styles.queueSourceTag}>PINNED: {(() => { const pc = availableCourts.find((c) => c.number === pinnedCourt); return pc ? courtDisplayName(pc) : `Court ${pinnedCourt}`; })()}</span>}
         {isNextMatch && (
           <span style={{ ...styles.courtBadge, background: "var(--ball)" }}>
@@ -369,37 +380,25 @@ function QueueRow({ entry, availableCourts, onAssign, onPin, onUnpin, isNextMatc
               {courtDisplayName(c)}
             </option>
           ))}
+          {liveCourts.map((c) => (
+            <option key={`live-${c.id}`} value={c.number}>
+              {courtDisplayName(c)} — live, play next
+            </option>
+          ))}
         </select>
         <button
           type="button"
           style={styles.secondaryBtn}
           disabled={!courtNumber}
           onClick={() => {
-            onAssign(entry.match.id, Number(courtNumber));
+            const n = Number(courtNumber);
+            if (liveCourts.some((c) => c.number === n)) onSetNextOnCourt(entry.match.id, n);
+            else onAssign(entry.match.id, n);
             setCourtNumber("");
           }}
         >
           Assign
         </button>
-        {pinnedCourt != null ? (
-          <button type="button" style={styles.secondaryBtn} onClick={() => onUnpin(entry.match.id)}>
-            <PinOff size={13} strokeWidth={2.5} />
-            Unpin
-          </button>
-        ) : (
-          <select
-            style={styles.courtSelect}
-            value=""
-            onChange={(e) => e.target.value && onPin(entry.match.id, Number(e.target.value))}
-          >
-            <option value="">Pin to…</option>
-            {availableCourts.map((c) => (
-              <option key={c.id} value={c.number}>
-                {courtDisplayName(c)}
-              </option>
-            ))}
-          </select>
-        )}
       </span>
     </li>
   );
@@ -440,6 +439,8 @@ export default function TournamentCourtsView({
   onEndMatch,
   nextMatchId,
   onSetNextMatch,
+  onSetNextOnCourt,
+  onClearNextOnCourt,
 }) {
   const [newCourtName, setNewCourtName] = useState("");
   // Tournament Manager visual redesign, Stage 1 — see PROJECT.md/
@@ -461,6 +462,8 @@ export default function TournamentCourtsView({
   const availableCourts = courtAssignmentService.getAvailableCourts(tournament);
   const queue = courtQueueService.getQueue(tournament);
   const occupiedCourts = courts.filter((c) => c.currentMatch);
+  // LIVE courts that can still take a "play next here" marker (one per court).
+  const liveCourts = courts.filter((c) => c.currentMatch?.status === "inProgress" && !queue.some((e) => e.match.nextCourt === c.number));
   const queueWithOccupied = Object.assign(queue, { allOccupiedCourts: occupiedCourts });
 
   const requestStart = (entryOrMatch) => {
@@ -601,9 +604,10 @@ export default function TournamentCourtsView({
               key={entry.match.id}
               entry={entry}
               availableCourts={availableCourts}
+              liveCourts={liveCourts}
               onAssign={onAssignMatch}
-              onPin={onPinMatch}
-              onUnpin={onUnpinMatch}
+              onSetNextOnCourt={onSetNextOnCourt}
+              onClearNextOnCourt={onClearNextOnCourt}
               isNextMatch={entry.match.id === nextMatchId}
               onSetNextMatch={onSetNextMatch}
             />

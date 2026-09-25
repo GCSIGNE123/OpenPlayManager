@@ -215,7 +215,10 @@ export class CourtAssignmentService {
     if (!entry.match.teamA || !entry.match.teamB) throw new Error("Both teams must be known before this match can be assigned a court.");
     if (entry.match.court !== null) throw new Error("This match is already assigned to a court.");
 
-    return updateMatchIn(tournament, matchId, (m) => ({ ...m, court: courtNumber }));
+    return updateMatchIn(tournament, matchId, (m) => {
+      const { nextCourt, ...rest } = m; // a next-on-court marker is consumed by a real assignment
+      return { ...rest, court: courtNumber };
+    });
   }
 
   // Finds whatever non-completed match currently occupies `courtNumber`
@@ -300,6 +303,31 @@ export class CourtAssignmentService {
       ...m,
       serve: { team: m.serve?.team ?? "teamA", number },
     }));
+  }
+
+  // "Next on this court" — an announcement marker only: tells players which
+  // court a queued match will play on once the LIVE match there finishes. It
+  // never occupies the court (match.court stays null) and never auto-assigns;
+  // the organizer still assigns the match normally when the court frees up.
+  // One marker per court, one per match.
+  setNextOnCourt(tournament, matchId, courtNumber) {
+    const court = (tournament.courts || []).find((c) => c.number === courtNumber);
+    if (!court) throw new Error("Court not found.");
+    if (currentMatchForCourt(tournament, courtNumber)?.status !== "inProgress") {
+      throw new Error("Only a court with a live match can have a next match queued.");
+    }
+    const entry = findMatchEntry(tournament, matchId);
+    if (!entry) throw new Error("Match not found.");
+    if (entry.match.status !== "pending" || entry.match.court !== null) throw new Error("Only a queued match can be set as next on a court.");
+    if (!entry.match.teamA || !entry.match.teamB) throw new Error("Both teams must be known before this match can be queued for a court.");
+    const taken = collectMatches(tournament).some((e) => e.match.id !== matchId && e.match.status === "pending" && e.match.nextCourt === courtNumber);
+    if (taken) throw new Error("This court already has a next match.");
+    return updateMatchIn(tournament, matchId, (m) => ({ ...m, nextCourt: courtNumber }));
+  }
+
+  clearNextOnCourt(tournament, matchId) {
+    if (!findMatchEntry(tournament, matchId)) throw new Error("Match not found.");
+    return updateMatchIn(tournament, matchId, (m) => ({ ...m, nextCourt: null }));
   }
 
   // Records who is scoring a match (entered when Start Match is clicked, for
