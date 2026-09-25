@@ -157,7 +157,10 @@ console.log("\nRound Robin — Next Match actually auto-fills a freed court next
   t = await saveMatchStart(t, matchA.id);
   t = await saveMatchResult(t, matchA.id, { scoreA: 11, scoreB: 5, winnerId: matchA.teamA.id });
   const court1Match = collectMatches(t).find((e) => e.match.court === 1 && e.match.status !== "completed");
-  assert("the designated Next Match (matchC) auto-fills the freed court", court1Match?.match.id === matchC.id);
+  // Tournament Mode no longer auto-fills: the freed court stays empty and the
+  // designated Next Match waits for an explicit organizer Assign.
+  assert("the freed court is NOT auto-filled (manual assignment only)", !court1Match);
+  assert("designated Next Match (matchC) is still marked but unassigned", t.nextMatchId === matchC.id && collectMatches(t).find((e) => e.match.id === matchC.id).match.court === null);
   assert("matchB (natural next) is still waiting, untouched", collectMatches(t).find((e) => e.match.id === matchB.id).match.court === null);
 }
 

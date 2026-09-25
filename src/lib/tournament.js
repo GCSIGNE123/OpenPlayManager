@@ -276,7 +276,7 @@ export async function saveMatchResult(tournament, matchId, result) {
   const engine = getTournamentEngine(tournament.format);
   const updated = engine.updateMatchResult(tournament, matchId, result);
   const { match } = findMatch(updated, matchId);
-  const withAutoFill = match.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (!match.isBye) await rateMatch(updated, match, tournament.format === "league" ? "league" : "tournament");
   const withNextMatchCleared =
     withAutoFill.nextMatchId === matchId ? { ...withAutoFill, nextMatchId: null } : withAutoFill;
@@ -372,7 +372,7 @@ export async function savePlayoffMatchResult(tournament, matchId, result) {
     updated = { ...updated, consolationBracket };
   }
 
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(updated, match, "tournament");
   // Tournament Champion — awarded the moment the championship match
   // completes the whole bracket, to every one of the champion team's
@@ -437,7 +437,7 @@ export async function saveWalkover(tournament, matchId, winnerId) {
     updated = { ...updated, consolationBracket };
   }
 
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(updated, match, "tournament");
   if (field === "bracket" && bracket.status === "completed" && bracket.champion) {
     const championIds = resolvePlayerIds(updated, bracket.champion);
@@ -462,12 +462,11 @@ export async function saveCourtAssignment(tournament, matchId, courtNumber) {
   return saveTournament(updated);
 }
 
-// Court Assignment & Match Queue Engine: release + auto-fill as one action
-// (see CourtAssignmentEngine.releaseAndAutoFill) — a manual "Release" click
-// immediately offers the freed court to the next queued match, same as a
-// match completing naturally does.
+// Court Assignment & Match Queue Engine: a manual "Release" only frees the
+// court — Tournament Mode never auto-fills it; the organizer assigns the next
+// match explicitly (saveCourtAssignment).
 export async function saveCourtRelease(tournament, courtNumber) {
-  const updated = courtAssignmentEngine.releaseAndAutoFill(tournament, courtNumber);
+  const updated = courtAssignmentService.releaseCourt(tournament, courtNumber);
   return saveTournament(updated);
 }
 
@@ -726,7 +725,7 @@ export async function saveDoubleEliminationMatchResult(tournament, matchId, resu
   const match = winnersBracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
   const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
@@ -757,7 +756,7 @@ export async function saveDoubleEliminationWalkover(tournament, matchId, winnerI
   const match = { ...found, ...overlay };
   const deBracket = { ...tournament.doubleEliminationBracket, winnersBracket: finalWinnersBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
@@ -778,7 +777,7 @@ export async function saveDoubleEliminationLosersMatchResult(tournament, matchId
   const match = losersBracket.rounds.flatMap((r) => r.matches).find((m) => m.id === matchId);
   const deBracket = { ...tournament.doubleEliminationBracket, losersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
@@ -805,7 +804,7 @@ export async function saveDoubleEliminationLosersWalkover(tournament, matchId, w
   const match = { ...found, ...overlay };
   const deBracket = { ...tournament.doubleEliminationBracket, losersBracket: finalLosersBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   return saveTournament(withAutoFill);
 }
@@ -843,7 +842,7 @@ export async function saveGrandFinalMatchResult(tournament, matchId, result) {
   const match = gameKey ? grandFinal[gameKey] : null;
   const deBracket = { ...tournament.doubleEliminationBracket, grandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   // Tournament Champion — awarded the moment the Grand Final (including a
   // Game 2 reset, if one happened) actually decides a champion.
@@ -871,7 +870,7 @@ export async function saveGrandFinalWalkover(tournament, matchId, winnerId) {
   const match = finalGrandFinal[gameKeyBefore];
   const deBracket = { ...tournament.doubleEliminationBracket, grandFinal: finalGrandFinal };
   let updated = stampDoubleEliminationStatus({ ...tournament, doubleEliminationBracket: deBracket });
-  const withAutoFill = match?.court != null ? courtAssignmentEngine.autoAssign(updated, match.court) : updated;
+  const withAutoFill = updated; // manual court assignment only: a freed court stays empty (no autoAssign)
   if (match) await rateMatch(withAutoFill, match, "tournament");
   if (finalGrandFinal.status === "completed" && finalGrandFinal.champion) {
     const championIds = resolvePlayerIds(withAutoFill, finalGrandFinal.champion);
