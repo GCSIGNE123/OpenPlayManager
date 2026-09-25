@@ -267,7 +267,7 @@ export class CourtAssignmentService {
           scoreA: nextScore.teamA ?? 0,
           scoreB: nextScore.teamB ?? 0,
           servingTeam: m.serve?.team ?? "teamA",
-          serveNumber: m.serve?.number ?? 1,
+          serveNumber: m.serve?.number ?? 2,
           timestamp: Date.now(),
         };
         const pointLog = [...(m.pointLog || []), point].slice(-MAX_POINT_LOG);
@@ -311,7 +311,7 @@ export class CourtAssignmentService {
     if (entry.match.status !== "inProgress") throw new Error("Only a match in progress can change serve.");
     return updateMatchIn(tournament, matchId, (m) => {
       const team = m.serve?.team ?? "teamA";
-      const number = (m.serve?.number ?? 1) === 1 ? 2 : 1;
+      const number = (m.serve?.number ?? 2) === 1 ? 2 : 1;
       return { ...m, serve: { team, number } };
     });
   }

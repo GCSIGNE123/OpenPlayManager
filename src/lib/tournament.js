@@ -831,7 +831,7 @@ export async function saveGrandFinalMatchStart(tournament, matchId) {
   const nextGrandFinal = {
     ...grandFinal,
     status: "running",
-    [gameKey]: { ...grandFinal[gameKey], status: "inProgress", startedAt: Date.now() },
+    [gameKey]: { ...grandFinal[gameKey], status: "inProgress", startedAt: Date.now(), serve: { team: grandFinal[gameKey].serve?.team ?? "teamA", number: 2 } },
   };
   return saveTournament({ ...tournament, doubleEliminationBracket: { ...tournament.doubleEliminationBracket, grandFinal: nextGrandFinal } });
 }

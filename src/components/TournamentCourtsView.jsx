@@ -75,7 +75,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
 
   const isLive = current?.status === "inProgress";
   const servingTeam = current?.serve?.team ?? "teamA";
-  const serveNumber = current?.serve?.number ?? 1;
+  const serveNumber = current?.serve?.number ?? 2;
 
   return (
     <div>

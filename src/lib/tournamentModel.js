@@ -91,7 +91,7 @@ export function makeMatch({ round, court, teamA, teamB, isBye = false }) {
     // feature simply lacks them, and every reader defaults the same way
     // (CourtAssignmentService's own `m.serve?.team ?? "teamA"`), so no
     // migration is needed for already-stored tournaments.
-    serve: { team: "teamA", number: 1 },
+    serve: { team: "teamA", number: 2 },
     // Bounded (MAX_POINT_LOG, see CourtAssignmentService.js) append-only log
     // of completed points — same "bounded activity log" precedent as
     // queueActivityLog/skillChangeLog. Only a "+" adjustment appends; "-"
@@ -320,7 +320,7 @@ export function startMatch(tournament, matchId) {
     if (p.id !== found.pool.id) return p;
     const rounds = p.rounds.map((r) => {
       if (r.roundNumber !== found.round.roundNumber) return r;
-      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now() } : m));
+      const matches = r.matches.map((m) => (m.id === matchId ? { ...m, status: "inProgress", startedAt: Date.now(), serve: { team: m.serve?.team ?? "teamA", number: 2 } } : m));
       return { ...r, matches, status: computeRoundStatus(matches) };
     });
     return { ...p, rounds, status: computePoolStatus({ rounds }) };

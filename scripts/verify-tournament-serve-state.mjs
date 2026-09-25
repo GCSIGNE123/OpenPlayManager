@@ -34,28 +34,28 @@ console.log("\n1. Initial serve state");
 {
   const t = fixture();
   const m = matchOf(t);
-  assert("defaults to teamA, 1st Serve", m.serve.team === "teamA" && m.serve.number === 1);
+  assert("defaults to teamA, 2nd Serve (game start at 0-0)", m.serve.team === "teamA" && m.serve.number === 2);
   assert("pointLog starts empty", Array.isArray(m.pointLog) && m.pointLog.length === 0);
 }
 
 console.log("\n2. 1st Serve / 2nd Serve toggle — manual, no score/team change");
 {
   let t = fixture();
-  t = service.setServeNumber(t, matchOf(t).id, 2);
-  assert("serve.number set to 2", matchOf(t).serve.number === 2);
+  t = service.setServeNumber(t, matchOf(t).id, 1);
+  assert("serve.number set to 1", matchOf(t).serve.number === 1);
   assert("serve.team unchanged", matchOf(t).serve.team === "teamA");
   assert("score untouched", matchOf(t).score.teamA === null && matchOf(t).score.teamB === null);
-  t = service.setServeNumber(t, matchOf(t).id, 1);
-  assert("toggled back to 1st Serve", matchOf(t).serve.number === 1);
+  t = service.setServeNumber(t, matchOf(t).id, 2);
+  assert("toggled back to 2nd Serve", matchOf(t).serve.number === 2);
 }
 
 console.log("\n3. Change Serve — flips 1st/2nd for the SAME team");
 {
   let t = fixture();
   t = service.changeServe(t, matchOf(t).id);
-  assert("1 -> 2", matchOf(t).serve.number === 2 && matchOf(t).serve.team === "teamA");
-  t = service.changeServe(t, matchOf(t).id);
   assert("2 -> 1", matchOf(t).serve.number === 1 && matchOf(t).serve.team === "teamA");
+  t = service.changeServe(t, matchOf(t).id);
+  assert("1 -> 2", matchOf(t).serve.number === 2 && matchOf(t).serve.team === "teamA");
 }
 
 console.log("\n4. Side Out — switches serving team, resets to 1st Serve, never touches score");

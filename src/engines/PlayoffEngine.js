@@ -141,7 +141,7 @@ export class PlayoffEngine {
     if (!found.match.teamA || !found.match.teamB) {
       throw new Error("Both teams must be known before this match can start — it's waiting on a previous round.");
     }
-    const updatedMatch = { ...advancementService.updateMatchStatus(found.match, "inProgress"), startedAt: Date.now() };
+    const updatedMatch = { ...advancementService.updateMatchStatus(found.match, "inProgress"), startedAt: Date.now(), serve: { team: found.match.serve?.team ?? "teamA", number: 2 } };
     return writeBackMatch(bracket, found, updatedMatch);
   }
 
