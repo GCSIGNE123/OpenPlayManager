@@ -92,6 +92,15 @@ t = await T.saveCourtAssignment(t, "M4", 3);
 t = await T.saveSwapCourts(t, 3, 4);
 assert("swap exchanged M4 and M2", courtOf(t, "M4") === 4 && courtOf(t, "M2") === 3);
 
+console.log("\n8b. Scorer name recorded at Start Match");
+{
+  let u = await T.saveCourtAssignment(fixture(), "M1", 3);
+  u = await T.saveMatchStart(u, "M1", "  Sam Scorer ");
+  assert("scorerName stored (trimmed) on the started match", m(u, "M1").scorerName === "Sam Scorer" && m(u, "M1").status === "inProgress");
+  const v = await T.saveMatchStart(fixture(), "M2");
+  assert("no name -> no scorerName field, start still works", m(v, "M2").scorerName === undefined && m(v, "M2").status === "inProgress");
+}
+
 console.log("\n9. Source guards");
 const src = strip(read("src/lib/tournament.js"));
 assert("tournament.js no longer calls autoAssign / releaseAndAutoFill", !/\.autoAssign\(|releaseAndAutoFill\(/.test(src));

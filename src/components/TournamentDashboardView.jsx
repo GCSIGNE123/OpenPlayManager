@@ -622,11 +622,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     await onGenerate(mode, poolCount, advancesPerPool, seedingMethod);
   };
 
-  const handleStartMatch = async (matchId) => {
+  const handleStartMatch = async (matchId, scorerName) => {
     if (!tournament) return;
     setMatchError("");
     try {
-      const updated = await saveMatchStart(tournament, matchId);
+      const updated = await saveMatchStart(tournament, matchId, scorerName);
       setTournament(updated);
     } catch (e) {
       setMatchError(e.message);
@@ -686,11 +686,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
   // operating on tournament.bracket instead of tournament.pools. This is
   // what makes "refresh the bracket immediately" free — the same live
   // `tournament` object already flows down to the Bracket tab.
-  const handlePlayoffStartMatch = async (matchId) => {
+  const handlePlayoffStartMatch = async (matchId, scorerName) => {
     if (!tournament) return;
     setMatchError("");
     try {
-      const updated = await savePlayoffMatchStart(tournament, matchId);
+      const updated = await savePlayoffMatchStart(tournament, matchId, scorerName);
       setTournament(updated);
     } catch (e) {
       setMatchError(e.message);

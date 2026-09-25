@@ -267,8 +267,8 @@ export function getTournamentEngine(format) {
 // updateMatchResult) rather than swallowing them — callers surface the
 // message directly to the organizer instead of silently no-op'ing.
 
-export async function saveMatchStart(tournament, matchId) {
-  const updated = startMatch(tournament, matchId);
+export async function saveMatchStart(tournament, matchId, scorerName) {
+  const updated = courtAssignmentService.setMatchScorer(startMatch(tournament, matchId), matchId, scorerName);
   return saveTournament(updated);
 }
 
@@ -346,10 +346,10 @@ function resolveBracketField(tournament, matchId) {
   throw new Error("Match not found.");
 }
 
-export async function savePlayoffMatchStart(tournament, matchId) {
+export async function savePlayoffMatchStart(tournament, matchId, scorerName) {
   const field = resolveBracketField(tournament, matchId);
   const bracket = playoffEngine.startMatch(tournament[field], matchId);
-  return saveTournament({ ...tournament, [field]: bracket });
+  return saveTournament(courtAssignmentService.setMatchScorer({ ...tournament, [field]: bracket }, matchId, scorerName));
 }
 
 // Same auto-fill trigger as saveMatchResult above, for the bracket side —

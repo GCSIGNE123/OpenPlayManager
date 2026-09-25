@@ -302,6 +302,15 @@ export class CourtAssignmentService {
     }));
   }
 
+  // Records who is scoring a match (entered when Start Match is clicked, for
+  // record-keeping only). Status-agnostic and additive: never gates anything.
+  setMatchScorer(tournament, matchId, name) {
+    const scorerName = String(name || "").trim();
+    if (!scorerName) return tournament;
+    if (!findMatchEntry(tournament, matchId)) throw new Error("Match not found.");
+    return updateMatchIn(tournament, matchId, (m) => ({ ...m, scorerName }));
+  }
+
   // Change Serve — flips serve.number between 1st and 2nd for the SAME
   // serving team (the same-team second-server handoff), without changing
   // who is serving. Score is never touched.

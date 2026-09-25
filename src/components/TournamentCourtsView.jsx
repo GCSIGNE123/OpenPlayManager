@@ -240,6 +240,7 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 <div style={styles.tStatusDotRow}>
                   <span style={styles.tStatusDot(current.status)} />
                   Match Status: {STATUS_LABELS[current.status]}
+                  {current.scorerName ? ` · Scorer: ${current.scorerName}` : ""}
                 </div>
               </div>
             </>
@@ -460,6 +461,8 @@ export default function TournamentCourtsView({
   // starts null and is resolved (first LIVE court, else first court) once
   // `courts` exists further down.
   const [selectedCourtId, setSelectedCourtId] = useState(null);
+  const [pendingStart, setPendingStart] = useState(null);
+  const [scorerDraft, setScorerDraft] = useState("");
 
   if (loading) return <p style={styles.editHint}>Loading tournament…</p>;
   if (!tournament) {
@@ -472,13 +475,26 @@ export default function TournamentCourtsView({
   const occupiedCourts = courts.filter((c) => c.currentMatch);
   const queueWithOccupied = Object.assign(queue, { allOccupiedCourts: occupiedCourts });
 
-  const handleStartMatch = (entryOrMatch) => {
+  const requestStart = (entryOrMatch) => {
+    let saved = "";
+    try { saved = localStorage.getItem("opl-tournament-scorer-name") || ""; } catch { /* storage unavailable */ }
+    setScorerDraft(saved);
+    setPendingStart(entryOrMatch);
+  };
+  const confirmStart = () => {
+    const name = scorerDraft.trim();
+    if (!name || !pendingStart) return;
+    try { localStorage.setItem("opl-tournament-scorer-name", name); } catch { /* storage unavailable */ }
+    handleStartMatch(pendingStart, name);
+    setPendingStart(null);
+  };
+  const handleStartMatch = (entryOrMatch, scorerName) => {
     // court.currentMatch doesn't carry its own `source`, so match id
     // membership in tournament.bracket's matches is the simplest reliable
     // check — cheaper than threading source through refreshQueue's shape.
     const isPlayoffMatch = tournament.bracket?.rounds.some((r) => r.matches.some((m) => m.id === entryOrMatch.id));
-    if (isPlayoffMatch) onStartPlayoffMatch(entryOrMatch.id);
-    else onStartPoolMatch(entryOrMatch.id);
+    if (isPlayoffMatch) onStartPlayoffMatch(entryOrMatch.id, scorerName);
+    else onStartPoolMatch(entryOrMatch.id, scorerName);
   };
 
   // Tournament Manager visual redesign, Stage 1 — see PROJECT.md/
@@ -526,6 +542,23 @@ export default function TournamentCourtsView({
         </button>
       </div>
 
+      {pendingStart && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={() => setPendingStart(null)}>
+          <form
+            style={{ ...styles.tPanel, width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 12 }}
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => { e.preventDefault(); confirmStart(); }}
+          >
+            <p style={styles.tFieldLabel}>Scorer name (for match records)</p>
+            <input autoFocus style={styles.tInput} value={scorerDraft} onChange={(e) => setScorerDraft(e.target.value)} placeholder="Enter your name" maxLength={60} />
+            <div style={styles.tControlsRow}>
+              <button type="button" style={{ ...styles.tActionBtn, flex: 1 }} onClick={() => setPendingStart(null)}>Cancel</button>
+              <button type="submit" disabled={!scorerDraft.trim()} style={{ ...styles.tActionBtn, flex: 1, background: "var(--t-primary)", color: "#FFFFFF", border: "none", opacity: scorerDraft.trim() ? 1 : 0.5 }}>Start match</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div style={styles.tCourtsLayout}>
         <div style={styles.tCourtsSidebar}>
           <div style={styles.tSectionHeading}>Courts</div>
@@ -551,7 +584,7 @@ export default function TournamentCourtsView({
               onRelease={onReleaseCourt}
               onReassign={onReassignMatch}
               onSwap={onSwapCourts}
-              onStartMatch={handleStartMatch}
+              onStartMatch={requestStart}
               onSetStatus={onSetCourtStatus}
               onRemove={onRemoveCourt}
               onReannounce={onReannounce}
