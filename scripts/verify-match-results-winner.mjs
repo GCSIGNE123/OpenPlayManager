@@ -91,5 +91,17 @@ console.log("\n3. Consistency: the same tournament's Playoff Results / Tournamen
   assert("...and matches Tournament Summary's Champion row", matchReport.rows[0][4] === summaryChampionRow?.[1]);
 }
 
+console.log("\n4. Scorer column (name entered at Start Match)");
+{
+  const a = makeParticipant("Ana / Ben", ["a", "b"]);
+  const b = makeParticipant("Cara / Dan", ["c", "d"]);
+  const mk = (id, extra) => ({ id, round: 1, court: 1, teamA: a, teamB: b, isBye: false, status: "completed", winner: a.id, score: { teamA: 11, teamB: 3 }, completedAt: Date.now(), ...extra });
+  const report = service.generateMatchReport({ pools: [{ id: "P1", label: "Pool A", entrants: [a, b], rounds: [{ roundNumber: 1, matches: [mk("S1", { scorerName: "Sam Scorer" }), mk("S2", {})] }] }], bracket: null });
+  assert("column header present between Winner and Completion Time", report.columns.join("|") === "Round|Court|Teams|Score|Winner|Scorer|Completion Time");
+  assert("scorer name shown", report.rows[0][5] === "Sam Scorer");
+  assert("no scorer recorded -> em dash", report.rows[1][5] === "—");
+  assert("every row matches the column count", report.rows.every((r) => r.length === report.columns.length));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -201,12 +201,13 @@ export class TournamentReportService {
           `${match.teamA?.label ?? "—"} vs ${match.teamB?.label ?? "—"}`,
           `${match.score?.teamA ?? "—"}–${match.score?.teamB ?? "—"}`,
           match.winner === teamAId ? match.teamA.label : match.winner === teamBId ? match.teamB.label : "—",
+          match.scorerName || "—",
           match.completedAt ? new Date(match.completedAt).toLocaleString() : "—",
         ];
       });
     return {
       title: "Match Results Report",
-      columns: ["Round", "Court", "Teams", "Score", "Winner", "Completion Time"],
+      columns: ["Round", "Court", "Teams", "Score", "Winner", "Scorer", "Completion Time"],
       rows,
     };
   }
