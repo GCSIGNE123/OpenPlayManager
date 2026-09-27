@@ -129,9 +129,10 @@ export async function buildAndSaveRoundRobinTournament({
   advancesPerPool = 1,
   courtNames = null, // Tournament Templates' "Default Court Names" — see makeTournament
   matchScoringRules = null, // Tournament Templates' "Match Scoring Rules" — see makeTournament
+  poolAssignments = null, // Manual Pool Assignment — {entrantKey -> poolIndex} from the Pool Assignment step; only read when assignmentMethod === "manual" (engines/PoolAssignment.js's assignPools ignores it for every other method)
 }) {
   const entrants = buildEntrants(players, mode);
-  const groups = assignPools(entrants, poolCount, assignmentMethod);
+  const groups = assignPools(entrants, poolCount, assignmentMethod, poolAssignments);
   // "Teams Advancing Per Pool" can't exceed the smallest pool's size, and
   // (Pool Qualification Engine) at least one qualifier is required — the
   // UI already blocks both before Generate is even clickable, this is the

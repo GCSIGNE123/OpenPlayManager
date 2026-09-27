@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Megaphone, Pencil, Play, RefreshCw, Star, Users, X } from "lucide-react";
 import { styles } from "../styles.js";
+import PoolAssignmentPanel from "./PoolAssignmentPanel.jsx";
 
 // Real now (Tournament Match Management) — the status a match/round is
 // actually in, driven by lib/tournamentModel.js's startMatch/
@@ -289,6 +290,11 @@ export default function TournamentScheduleView({
   announcingNextMatch,
   mode,
   setMode,
+  pendingPoolAssignment,
+  onSetPoolAssignmentTeam,
+  onConfirmPoolAssignment,
+  onEditPoolAssignment,
+  onResetPoolAssignment,
 }) {
   // Tournament Templates — if the organizer picked "Use Template" at
   // Create Session, its config rides along as state.pendingTournamentTemplate
@@ -403,11 +409,20 @@ export default function TournamentScheduleView({
   // buildAndSaveRoundRobinTournament's own belt-and-suspenders check.
   const smallestPoolSize = effectivePoolCount >= 1 ? Math.floor(playerCount / effectivePoolCount) : 0;
   const advancesFitsPools = effectiveAdvances >= 1 && effectiveAdvances <= smallestPoolSize;
+  // Manual Pool Assignment — with more than one pool, Generate Schedule
+  // additionally needs a CONFIRMED pool assignment that actually matches
+  // the mode/pool-count currently selected (a stale draft from a different
+  // pool count never silently counts as "confirmed" for this one).
+  const needsPoolAssignment = effectivePoolCount > 1;
+  const poolAssignmentReady =
+    !needsPoolAssignment ||
+    (pendingPoolAssignment?.confirmed && pendingPoolAssignment.mode === mode && pendingPoolAssignment.poolCount === effectivePoolCount);
   const canGenerate =
     playerCount >= 2 &&
     effectivePoolCount >= 1 &&
     playerCount >= effectivePoolCount * 2 &&
     advancesFitsPools &&
+    poolAssignmentReady &&
     !generating &&
     !tournamentCompleted;
 
@@ -540,17 +555,41 @@ export default function TournamentScheduleView({
             Teams advancing per pool can't exceed the smallest pool's size ({smallestPoolSize}).
           </p>
         )}
+        {needsPoolAssignment && !poolAssignmentReady && (
+          <p style={styles.tWarningText}>Confirm Pools below before generating the schedule.</p>
+        )}
         {!tournamentCompleted && (
           <button
             style={{ ...styles.tPrimaryBtn, ...(!canGenerate ? styles.tBtnDisabled : {}) }}
             disabled={!canGenerate}
-            onClick={() => onGenerate(mode, effectivePoolCount, effectiveAdvances)}
+            onClick={() =>
+              onGenerate(
+                mode,
+                effectivePoolCount,
+                effectiveAdvances,
+                undefined,
+                needsPoolAssignment ? pendingPoolAssignment.assignments : null
+              )
+            }
           >
             {tournament ? <RefreshCw size={16} strokeWidth={2.5} /> : <Users size={16} strokeWidth={2.5} />}
             {generating ? (tournament ? "Regenerating…" : "Generating…") : tournament ? "Regenerate schedule" : "Generate schedule"}
           </button>
         )}
       </div>
+
+      {!tournament && !tournamentCompleted && needsPoolAssignment && (
+        <PoolAssignmentPanel
+          players={state.players}
+          mode={mode}
+          poolCount={effectivePoolCount}
+          draft={pendingPoolAssignment}
+          onSetTeam={onSetPoolAssignmentTeam}
+          onConfirm={onConfirmPoolAssignment}
+          onEdit={onEditPoolAssignment}
+          onReset={onResetPoolAssignment}
+        />
+      )}
 
       {loading && <p style={styles.tControlHint}>Loading schedule…</p>}
 

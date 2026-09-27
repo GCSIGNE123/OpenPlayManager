@@ -568,7 +568,19 @@ function OverviewPanel({ tournament, loading }) {
 // looking at. The pool tab row only renders once there's more than one pool
 // — with the default poolCount of 1, the Dashboard looks and behaves
 // exactly like it did before Pool Support.
-export default function TournamentDashboardView({ state, tournamentId, onGenerate, generating, generateError, onSetPartner, onClearPartner }) {
+export default function TournamentDashboardView({
+  state,
+  tournamentId,
+  onGenerate,
+  generating,
+  generateError,
+  onSetPartner,
+  onClearPartner,
+  onSetPoolAssignmentTeam,
+  onConfirmPoolAssignment,
+  onEditPoolAssignment,
+  onResetPoolAssignment,
+}) {
   const [tab, setTab] = useState("overview");
   const [tournament, setTournament] = useState(null);
   // Custom Doubles Team Assignment — see PROJECT.md/FEATURES.md and
@@ -614,14 +626,14 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
     };
   }, [tournamentId]);
 
-  const handleGenerate = async (mode, poolCount, advancesPerPool, seedingMethod) => {
+  const handleGenerate = async (mode, poolCount, advancesPerPool, seedingMethod, poolAssignments) => {
     setMatchError("");
     if (tournament?.status === "completed") {
       setMatchError("This tournament is already completed — the schedule can't be regenerated.");
       return;
     }
     setSelectedPool("all");
-    await onGenerate(mode, poolCount, advancesPerPool, seedingMethod);
+    await onGenerate(mode, poolCount, advancesPerPool, seedingMethod, poolAssignments);
   };
 
   const handleStartMatch = async (matchId, scorerName) => {
@@ -1404,6 +1416,11 @@ export default function TournamentDashboardView({ state, tournamentId, onGenerat
           announcingNextMatch={announcingNextMatch}
           mode={scheduleMode}
           setMode={setScheduleMode}
+          pendingPoolAssignment={state.pendingPoolAssignment}
+          onSetPoolAssignmentTeam={onSetPoolAssignmentTeam}
+          onConfirmPoolAssignment={onConfirmPoolAssignment}
+          onEditPoolAssignment={onEditPoolAssignment}
+          onResetPoolAssignment={onResetPoolAssignment}
         />
       )}
 

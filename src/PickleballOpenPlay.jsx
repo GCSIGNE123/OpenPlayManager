@@ -1201,7 +1201,7 @@ export default function PickleballOpenPlay() {
   // unchanged; Double Elimination is a new, separate, standalone builder
   // (buildAndSaveDoubleEliminationTournament, no pool stage) — see
   // lib/tournament.js/DoubleEliminationEngine.js.
-  const generateTournamentSchedule = async (mode, poolCount = 1, advancesPerPool = 1, seedingMethod = "random") => {
+  const generateTournamentSchedule = async (mode, poolCount = 1, advancesPerPool = 1, seedingMethod = "random", poolAssignments = null) => {
     setGeneratingSchedule(true);
     setScheduleError("");
     try {
@@ -1228,13 +1228,53 @@ export default function PickleballOpenPlay() {
               // buildAndSaveRoundRobinTournament already treats as "no override."
               courtNames: state.pendingTournamentTemplate?.defaultCourtNames ?? undefined,
               matchScoringRules: state.pendingTournamentTemplate?.matchScoringRules ?? undefined,
+              // Manual Pool Assignment — see PoolAssignmentPanel.jsx. Only set
+              // (and only read by buildAndSaveRoundRobinTournament) when the
+              // organizer confirmed a manual assignment; every other session
+              // passes null through unchanged, exactly as before this feature.
+              assignmentMethod: poolAssignments ? "manual" : "random",
+              poolAssignments,
             });
-      await save({ ...state, tournamentId: tournament.id });
+      // Manual Pool Assignment is single-use, scoped to the schedule it just
+      // built — clear the pending draft so a later Regenerate defaults back
+      // to a fresh Pool Assignment step rather than silently reusing a stale
+      // (possibly now-mismatched) team -> pool mapping.
+      await save({ ...state, tournamentId: tournament.id, pendingPoolAssignment: null });
     } catch (e) {
       setScheduleError(e.message || "Couldn't generate the schedule.");
     } finally {
       setGeneratingSchedule(false);
     }
+  };
+
+  // Manual Pool Assignment — see PoolAssignmentPanel.jsx/engines/PoolAssignment.js.
+  // Pure draft state, persisted on the session the same way Tournament
+  // Templates' pendingTournamentTemplate is: survives refresh/reload because
+  // it rides along in `state`, and is read only up to the moment Generate
+  // Schedule runs (generateTournamentSchedule above clears it immediately
+  // after). Never shown once a tournament already exists — see
+  // PoolAssignmentPanel's own gating in TournamentScheduleView.jsx.
+  const setPoolAssignmentTeam = (mode, poolCount, teamKey, poolIndex) => {
+    const prev = state.pendingPoolAssignment;
+    // A stale draft (different mode/poolCount, or already confirmed) starts
+    // fresh rather than mixing assignments from a different pool layout.
+    const base = prev && prev.mode === mode && prev.poolCount === poolCount && !prev.confirmed ? prev.assignments : {};
+    const assignments = { ...base };
+    if (poolIndex === null) delete assignments[teamKey];
+    else assignments[teamKey] = poolIndex;
+    save({ ...state, pendingPoolAssignment: { mode, poolCount, assignments, confirmed: false } });
+  };
+  const confirmPoolAssignment = () => {
+    if (!state.pendingPoolAssignment || state.pendingPoolAssignment.confirmed) return;
+    save({ ...state, pendingPoolAssignment: { ...state.pendingPoolAssignment, confirmed: true } });
+  };
+  const editPoolAssignment = () => {
+    if (!state.pendingPoolAssignment?.confirmed) return;
+    save({ ...state, pendingPoolAssignment: { ...state.pendingPoolAssignment, confirmed: false } });
+  };
+  const resetPoolAssignment = () => {
+    if (!state.pendingPoolAssignment) return;
+    save({ ...state, pendingPoolAssignment: null });
   };
 
   const leaveSession = () => {
@@ -2927,6 +2967,10 @@ export default function PickleballOpenPlay() {
                   generateError={scheduleError}
                   onSetPartner={setFixedPartner}
                   onClearPartner={clearFixedPartner}
+                  onSetPoolAssignmentTeam={setPoolAssignmentTeam}
+                  onConfirmPoolAssignment={confirmPoolAssignment}
+                  onEditPoolAssignment={editPoolAssignment}
+                  onResetPoolAssignment={resetPoolAssignment}
                 />
               )}
 
