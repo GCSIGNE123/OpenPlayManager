@@ -157,6 +157,21 @@ console.log("\n8. Existing (pre-feature) tournaments — random assignment — s
   assert("all 8 players still land in a pool", total === 8);
 }
 
+console.log("\n8b. Regenerate: an already-generated (not completed) tournament can still be given a fresh manual pool assignment");
+{
+  const players = Array.from({ length: 8 }, (_, i) => mkPlayer(`g${i}`, `G${i}`));
+  const T2 = await import("../src/lib/tournament.js");
+  // first generate — random, exactly as the existing "Generate schedule" flow always has
+  const first = await T.buildAndSaveRoundRobinTournament({ sessionCode: "MANUALPOOL5", players, mode: "singles", courtsCount: 2, poolCount: 2 });
+  assert("first generate uses random assignment, status not completed", first.assignmentMethod === "random" && first.status !== "completed");
+  // Regenerate with a manual assignment this time — the same players, reshuffled by hand
+  const entrants = T2.buildEntrants(players, "singles");
+  const assignments = {};
+  entrants.forEach((e, i) => { assignments[entrantKey(e)] = i < 4 ? 0 : 1; });
+  const second = await T.buildAndSaveRoundRobinTournament({ sessionCode: "MANUALPOOL5", players, mode: "singles", courtsCount: 2, poolCount: 2, assignmentMethod: "manual", poolAssignments: assignments });
+  assert("Regenerate with a manual assignment rebuilds the pools exactly as specified", second.pools[0].entrants.map((e) => e.label).join(",") === "G0,G1,G2,G3" && second.pools[1].entrants.map((e) => e.label).join(",") === "G4,G5,G6,G7");
+}
+
 console.log("\n9. distributeEvenly / poolLabel (existing helpers) are untouched by the manual seam");
 {
   assert("distributeEvenly still splits evenly with remainder to earliest pools", JSON.stringify(distributeEvenly(18, 3)) === "[6,6,6]" && JSON.stringify(distributeEvenly(22, 4)) === "[6,6,5,5]");
@@ -172,7 +187,7 @@ console.log("\n10. Wiring: PoolAssignmentPanel reuses the existing manual seam, 
   assert("the panel keys assignments by entrantKey (stable across buildEntrants calls), not entrant.id", /entrantKey/.test(panel));
   const view = read("src/components/TournamentScheduleView.jsx");
   assert("Generate Schedule is gated on a CONFIRMED manual assignment when there's more than one pool", /needsPoolAssignment/.test(view) && /poolAssignmentReady/.test(view));
-  assert("the panel is only shown before a tournament exists (frozen once generated, like Team Setup)", /!tournament && !tournamentCompleted && needsPoolAssignment/.test(view));
+  assert("the panel is shown for both the first Generate and every Regenerate, hidden only once the tournament is completed", /!tournamentCompleted && needsPoolAssignment/.test(view));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

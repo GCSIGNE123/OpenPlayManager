@@ -578,7 +578,7 @@ export default function TournamentScheduleView({
         )}
       </div>
 
-      {!tournament && !tournamentCompleted && needsPoolAssignment && (
+      {!tournamentCompleted && needsPoolAssignment && (
         <PoolAssignmentPanel
           players={state.players}
           mode={mode}

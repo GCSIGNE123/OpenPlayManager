@@ -19,11 +19,15 @@ import { entrantKey, poolLabel } from "../engines/PoolAssignment.js";
 // pendingTournamentTemplate does, and is cleared the moment Generate
 // Schedule actually runs (generateTournamentSchedule).
 //
-// Only ever rendered before a tournament exists (see TournamentScheduleView,
-// which hides this panel once `tournament` is set) — once Generate Schedule
-// runs, entrants are frozen into the saved record and Team Setup's own
-// comment already explains why re-deriving them here would be meaningless;
-// Regenerate schedule is the pre-existing, separately-warned escape hatch.
+// Rendered both before the FIRST Generate Schedule and again for every
+// Regenerate (see TournamentScheduleView — hidden only once the tournament
+// is `completed`, same condition Regenerate itself already uses). A
+// completed tournament's frozen entrants make a fresh pool assignment
+// meaningless, same reasoning as Team Setup's own header comment; every
+// earlier tournament state (including one with an already-generated,
+// not-yet-completed schedule) can still have its pools reassigned, exactly
+// as Regenerate schedule already warns it will rebuild from current
+// players/results.
 export default function PoolAssignmentPanel({ players, mode, poolCount, draft, onSetTeam, onConfirm, onEdit, onReset }) {
   if (poolCount < 2) return null; // a single pool has nothing to assign — Generate Schedule proceeds directly
 
