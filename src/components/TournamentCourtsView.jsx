@@ -410,9 +410,14 @@ function QueueRow({ entry, availableCourts, liveCourts, onAssign, onSetNextOnCou
 // on every render via CourtAssignmentService.refreshQueue +
 // CourtQueueService.getQueue — the Court Board and Queue "refresh
 // automatically" for free, same as every other live view in this app.
-// Auto-assignment itself (filling a freed court automatically) happens
-// server-side in lib/tournament.js's saveMatchResult/saveCourtRelease —
-// this view just reflects whatever CourtAssignmentEngine already decided.
+// Tournament Mode has NO automatic court filling: a court freed by
+// lib/tournament.js's saveMatchResult/saveCourtRelease simply stays
+// AVAILABLE (see those functions' own "manual court assignment only"
+// comments) — every court gets a match only through this view's own
+// explicit Assign/Reassign/Swap actions below. (An earlier draft of this
+// comment described an auto-fill step that was never actually kept —
+// see scripts/verify-tournament-manual-court-assignment.mjs for the
+// behavior this view actually has.)
 export default function TournamentCourtsView({
   tournament,
   loading,
