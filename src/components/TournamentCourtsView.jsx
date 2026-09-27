@@ -123,7 +123,16 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
               <div style={styles.tTeamCards}>
                 <div style={styles.tTeamCard(servingTeam === "teamA")}>
                   <div style={styles.tTeamCardHead}>
-                    <span style={styles.tTeamName}>{current.teamA.label}</span>
+                    <span style={styles.tServeNameBox(servingTeam === "teamA")}>
+                      <span style={styles.tTeamName}>{current.teamA.label}</span>
+                      {servingTeam === "teamA" && (
+                        <span style={styles.tServeBallRow} aria-label={`${serveNumber === 1 ? "1st" : "2nd"} serve`}>
+                          {Array.from({ length: serveNumber }).map((_, i) => (
+                            <span key={i} style={styles.tServeBallDot} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
                     <span style={styles.tServeStatePill(servingTeam === "teamA")}>{servingTeam === "teamA" ? "SERVING" : "RECEIVING"}</span>
                   </div>
                   <div style={styles.tTeamScoreRow}>
@@ -140,7 +149,16 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 </div>
                 <div style={styles.tTeamCard(servingTeam === "teamB")}>
                   <div style={styles.tTeamCardHead}>
-                    <span style={styles.tTeamName}>{current.teamB.label}</span>
+                    <span style={styles.tServeNameBox(servingTeam === "teamB")}>
+                      <span style={styles.tTeamName}>{current.teamB.label}</span>
+                      {servingTeam === "teamB" && (
+                        <span style={styles.tServeBallRow} aria-label={`${serveNumber === 1 ? "1st" : "2nd"} serve`}>
+                          {Array.from({ length: serveNumber }).map((_, i) => (
+                            <span key={i} style={styles.tServeBallDot} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
                     <span style={styles.tServeStatePill(servingTeam === "teamB")}>{servingTeam === "teamB" ? "SERVING" : "RECEIVING"}</span>
                   </div>
                   <div style={styles.tTeamScoreRow}>
@@ -410,9 +428,14 @@ function QueueRow({ entry, availableCourts, liveCourts, onAssign, onSetNextOnCou
 // on every render via CourtAssignmentService.refreshQueue +
 // CourtQueueService.getQueue — the Court Board and Queue "refresh
 // automatically" for free, same as every other live view in this app.
-// Auto-assignment itself (filling a freed court automatically) happens
-// server-side in lib/tournament.js's saveMatchResult/saveCourtRelease —
-// this view just reflects whatever CourtAssignmentEngine already decided.
+// Tournament Mode has NO automatic court filling: a court freed by
+// lib/tournament.js's saveMatchResult/saveCourtRelease simply stays
+// AVAILABLE (see those functions' own "manual court assignment only"
+// comments) — every court gets a match only through this view's own
+// explicit Assign/Reassign/Swap actions below. (An earlier draft of this
+// comment described an auto-fill step that was never actually kept —
+// see scripts/verify-tournament-manual-court-assignment.mjs for the
+// behavior this view actually has.)
 export default function TournamentCourtsView({
   tournament,
   loading,
