@@ -495,20 +495,67 @@ export function makeTournament({
 // write to an already-archived record is the archive action itself (see
 // TournamentHistoryService.archiveTournament + lib/tournament.js's
 // saveArchiveTournament), which passes { allowArchived: true } explicitly.
+// Optimistic concurrency (Red-Team Audit item 3) — a stale whole-object
+// overwrite ("Client A saves 3-0, Client B — still holding its pre-A copy —
+// saves its own stale 2-1 and silently clobbers A's point") is prevented
+// here, not by comparing app-level `updatedAt` timestamps client-side
+// (races the same way client A/B's own writes do), but by passing the
+// row's actual last-read storage `updatedAt` token through as `ifMatch` to
+// storage.js's `set`, which turns it into a real, database-atomic
+// compare-and-swap (`UPDATE ... WHERE updated_at = ifMatch`).
+//
+// `_rev` carries that token as a PLAIN, ORDINARY (enumerable) field on the
+// tournament object — deliberately not hidden/non-enumerable — specifically
+// so it survives every `{ ...tournament, someField }` spread the various
+// save*/handle* wrappers and engines (CourtAssignmentService, PlayoffEngine,
+// TournamentRulesService, ...) already do on their way to calling
+// saveTournament, exactly like `id`/`name`/every other field already does.
+// Two independent fetches of the same tournament (two browser tabs, or two
+// `fetchTournament` calls in a test) each get their OWN object with their
+// OWN `_rev` baked in as ordinary data — genuinely independent, no shared
+// cache to accidentally leak one "client"'s progress into another's.
+// Stripped back out of the JSON actually written to storage (see
+// `toPersist` below) so it never pollutes the stored record; the returned
+// in-memory object still carries the fresh one for the caller's next save.
+export const REV_FIELD = "_rev";
+
+// A tournament that was never fetched (freshly built by makeTournament,
+// about to be created for the first time) has no `_rev` at all, so
+// `ifMatch` is undefined and storage.js falls back to its original
+// unconditional upsert — exactly right for a genuine first write, where
+// there is nothing to conflict with yet.
+//
+// On a conflict, storage.js's StaleWriteError is re-thrown with a message
+// every existing save*/handle* caller in lib/tournament.js already surfaces
+// via its own `catch (e) { setXError(e.message) }` — no new error-handling
+// shape needed there. `.code` is preserved so a caller that wants to
+// specifically detect "stale, please refresh" (rather than a generic
+// failure) can check `e.code === "STALE_WRITE"` instead of parsing text.
 export async function saveTournament(tournament, { allowArchived = false } = {}) {
   if (tournament.archived && !allowArchived) {
     throw new Error("This tournament is archived and read-only.");
   }
-  const stamped = { ...tournament, updatedAt: Date.now() };
-  await window.storage.set(`${TOURNAMENT_PREFIX}${tournament.id}`, JSON.stringify(stamped), true);
-  return stamped;
+  const ifMatch = tournament[REV_FIELD];
+  const { [REV_FIELD]: _drop, ...toPersist } = { ...tournament, updatedAt: Date.now() };
+  let res;
+  try {
+    res = await window.storage.set(`${TOURNAMENT_PREFIX}${tournament.id}`, JSON.stringify(toPersist), true, { ifMatch });
+  } catch (e) {
+    if (e?.code === "STALE_WRITE") {
+      const err = new Error("This tournament was updated elsewhere — refresh and try again before saving.");
+      err.code = "STALE_WRITE";
+      throw err;
+    }
+    throw e;
+  }
+  return { ...toPersist, [REV_FIELD]: res?.updatedAt };
 }
 
 export async function fetchTournament(id) {
   if (!id) return null;
   try {
     const res = await window.storage.get(`${TOURNAMENT_PREFIX}${id}`, true);
-    return JSON.parse(res.value);
+    return { ...JSON.parse(res.value), [REV_FIELD]: res.updatedAt };
   } catch (e) {
     return null; // deleted, or never existed
   }
