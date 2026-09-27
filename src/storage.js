@@ -23,7 +23,7 @@ const TABLE = "opl_kv";
 async function get(key, shared = false) {
   const { data, error } = await supabase
     .from(TABLE)
-    .select("value")
+    .select("value, updated_at")
     .eq("key", key)
     .eq("shared", shared)
     .maybeSingle();
@@ -33,15 +33,55 @@ async function get(key, shared = false) {
     // returning null
     throw new Error(`storage.get: key not found: ${key}`);
   }
-  return { key, value: data.value, shared };
+  // `updatedAt` is the row's own conflict-detection token — see `set`'s
+  // `ifMatch` below. Every existing caller already ignores extra fields on
+  // this return value, so surfacing it here is additive/non-breaking.
+  return { key, value: data.value, shared, updatedAt: data.updated_at };
 }
 
-async function set(key, value, shared = false) {
-  const { error } = await supabase
+// Thrown by `set` when `ifMatch` was given and didn't match the row's
+// CURRENT `updated_at` at write time — either someone else's write landed
+// first, or the row didn't exist yet. `name`/`code` let a caller
+// distinguish this from an ordinary Supabase/network error without
+// string-matching the message.
+export class StaleWriteError extends Error {
+  constructor(key) {
+    super(`storage.set: stale write rejected for key: ${key}`);
+    this.name = "StaleWriteError";
+    this.code = "STALE_WRITE";
+  }
+}
+
+// `ifMatch` (optional) — the `updatedAt` token from a PRIOR `get()` of this
+// exact row. When given, this performs a conditional UPDATE
+// (`WHERE key=? AND shared=? AND updated_at=?`) instead of a blind upsert:
+// a single UPDATE statement is atomic at the database row level, so of two
+// concurrent writers racing on the same row, at most one's WHERE clause can
+// still match (Postgres serializes the two UPDATEs; the loser's `updated_at`
+// predicate is re-evaluated against the row the winner just changed, and no
+// longer matches) — a real compare-and-swap, not a client-side timestamp
+// comparison. Omitting `ifMatch` keeps every existing caller's original
+// "just upsert it" behavior byte-for-byte unchanged — this is additive, not
+// a behavior change for the 25+ other call sites that never pass it.
+async function set(key, value, shared = false, { ifMatch } = {}) {
+  if (ifMatch !== undefined && ifMatch !== null) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({ value, updated_at: new Date().toISOString() })
+      .eq("key", key)
+      .eq("shared", shared)
+      .eq("updated_at", ifMatch)
+      .select("updated_at");
+    if (error) throw error;
+    if (!data || data.length === 0) throw new StaleWriteError(key);
+    return { key, value, shared, updatedAt: data[0].updated_at };
+  }
+  const { data, error } = await supabase
     .from(TABLE)
-    .upsert({ key, shared, value, updated_at: new Date().toISOString() }, { onConflict: "key,shared" });
+    .upsert({ key, shared, value, updated_at: new Date().toISOString() }, { onConflict: "key,shared" })
+    .select("updated_at");
   if (error) throw error;
-  return { key, value, shared };
+  return { key, value, shared, updatedAt: data?.[0]?.updated_at };
 }
 
 async function del(key, shared = false) {
