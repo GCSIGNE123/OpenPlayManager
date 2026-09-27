@@ -4602,6 +4602,41 @@ export const styles = {
     color: active ? "var(--t-live)" : "var(--t-muted)",
     border: active ? "1px solid var(--t-live)" : "1px solid var(--t-border)",
   }),
+  // Serving-team name highlight — a tasteful yellow/gold box around ONLY the
+  // serving team's name (both players, since a Participant's label is
+  // already "Player A / Player B" — see tTeamName), plus small solid-dot
+  // serve-number indicators beside it (1 dot = 1st serve, 2 = 2nd serve).
+  // Presentation only: reads the exact same match.serve.{team,number}
+  // tTeamCard/tServeStatePill already read below, never touches serve
+  // state. Transparent/no-border when not serving, so the receiving
+  // team's name sits flush exactly as before this change — no layout
+  // shift between the two states. flexWrap + minWidth: 0 let a long name
+  // wrap onto its own line under the dots instead of overflowing the card.
+  tServeNameBox: (active) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    minWidth: 0,
+    padding: active ? "3px 9px" : "3px 0",
+    borderRadius: 8,
+    background: active ? "rgba(217,164,65,0.16)" : "transparent",
+    border: active ? "1.5px solid var(--gold, #d9a441)" : "1.5px solid transparent",
+  }),
+  tServeBallRow: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    flexShrink: 0,
+  },
+  tServeBallDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--t-live)",
+    boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+    flexShrink: 0,
+  },
   tTeamScoreRow: {
     display: "flex",
     alignItems: "center",

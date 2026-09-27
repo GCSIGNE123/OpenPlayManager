@@ -123,7 +123,16 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
               <div style={styles.tTeamCards}>
                 <div style={styles.tTeamCard(servingTeam === "teamA")}>
                   <div style={styles.tTeamCardHead}>
-                    <span style={styles.tTeamName}>{current.teamA.label}</span>
+                    <span style={styles.tServeNameBox(servingTeam === "teamA")}>
+                      <span style={styles.tTeamName}>{current.teamA.label}</span>
+                      {servingTeam === "teamA" && (
+                        <span style={styles.tServeBallRow} aria-label={`${serveNumber === 1 ? "1st" : "2nd"} serve`}>
+                          {Array.from({ length: serveNumber }).map((_, i) => (
+                            <span key={i} style={styles.tServeBallDot} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
                     <span style={styles.tServeStatePill(servingTeam === "teamA")}>{servingTeam === "teamA" ? "SERVING" : "RECEIVING"}</span>
                   </div>
                   <div style={styles.tTeamScoreRow}>
@@ -140,7 +149,16 @@ function CourtCard({ court, availableCourts, queue, onAssign, onRelease, onReass
                 </div>
                 <div style={styles.tTeamCard(servingTeam === "teamB")}>
                   <div style={styles.tTeamCardHead}>
-                    <span style={styles.tTeamName}>{current.teamB.label}</span>
+                    <span style={styles.tServeNameBox(servingTeam === "teamB")}>
+                      <span style={styles.tTeamName}>{current.teamB.label}</span>
+                      {servingTeam === "teamB" && (
+                        <span style={styles.tServeBallRow} aria-label={`${serveNumber === 1 ? "1st" : "2nd"} serve`}>
+                          {Array.from({ length: serveNumber }).map((_, i) => (
+                            <span key={i} style={styles.tServeBallDot} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
                     <span style={styles.tServeStatePill(servingTeam === "teamB")}>{servingTeam === "teamB" ? "SERVING" : "RECEIVING"}</span>
                   </div>
                   <div style={styles.tTeamScoreRow}>

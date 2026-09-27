@@ -168,5 +168,26 @@ console.log("\n10. Scope: source-level guards");
   assert('no invented "second-server handoff" wording in the UI itself', !/second-server handoff/i.test(read("src/components/TournamentCourtsView.jsx")));
 }
 
+console.log("\n11. Serving-indicator visual enhancement — yellow name box + green serve-count dots (presentation only)");
+{
+  const courts = read("src/components/TournamentCourtsView.jsx");
+  const stripped = strip(courts);
+  // teamA and teamB each get their own tServeNameBox(...) wrapping tTeamName,
+  // keyed off the exact same servingTeam comparison the pre-existing
+  // tTeamCard(...)/tServeStatePill(...) calls already use — never a new
+  // serve-state read.
+  assert("Team A's name is wrapped in tServeNameBox(servingTeam === \"teamA\")", /tServeNameBox\(servingTeam === "teamA"\)/.test(stripped));
+  assert("Team B's name is wrapped in tServeNameBox(servingTeam === \"teamB\")", /tServeNameBox\(servingTeam === "teamB"\)/.test(stripped));
+  assert("dots render Array.from({ length: serveNumber }) — exactly 1 dot for 1st serve, 2 for 2nd, straight off the existing serveNumber variable", (stripped.match(/Array\.from\(\{ length: serveNumber \}\)/g) || []).length === 2);
+  assert("dots only render on the serving side (gated by the same servingTeam === \"teamA\"/\"teamB\" check as the box itself)", /servingTeam === "teamA" && \(/.test(stripped) && /servingTeam === "teamB" && \(/.test(stripped));
+  assert("existing SERVING/RECEIVING pill (tServeStatePill) is untouched, still rendered for both teams", (stripped.match(/tServeStatePill\(servingTeam === "team[AB]"\)/g) || []).length === 2);
+  assert("no serve-state logic touched: onSetServeNumber/onChangeServe/onSideOut call sites are unchanged", /onSetServeNumber\(current\.id, 1\)/.test(stripped) && /onSetServeNumber\(current\.id, 2\)/.test(stripped) && /onSideOut\(current\.id\)/.test(stripped) && /onChangeServe\(current\.id\)/.test(stripped));
+
+  const styles = read("src/styles.js");
+  assert("tServeNameBox is transparent/borderless when NOT serving (no layout shift between states)", /tServeNameBox: \(active\) => \(\{[\s\S]{0,400}?border: active \? "1\.5px solid var\(--gold, #d9a441\)" : "1\.5px solid transparent"/.test(styles));
+  assert("tServeBallDot is a small solid circle (real DOM element, not relying on emoji font rendering)", /tServeBallDot: \{[\s\S]{0,200}?borderRadius: "50%"/.test(styles));
+  assert("the receiving team's tTeamCard border logic (green when serving) is unchanged — this feature only adds the name-box + dots, doesn't replace the existing card-level indicator", /tTeamCard: \(serving\) => \(\{[\s\S]{0,200}?border: `1\.5px solid \$\{serving \? "var\(--t-live\)" : "var\(--t-border\)"\}`/.test(styles));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
