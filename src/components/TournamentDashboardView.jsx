@@ -626,6 +626,55 @@ export default function TournamentDashboardView({
     };
   }, [tournamentId]);
 
+  // Stale-Write Recovery — see lib/tournamentModel.js's saveTournament and
+  // storage.js's optimistic-concurrency comments for the actual guarantee
+  // (opl_kv.updated_at as a compare-and-swap token, `e.code ===
+  // "STALE_WRITE"` on conflict). This is the single place every Tournament
+  // save handler in this file funnels through — before this, each handler
+  // hand-rolled the identical `setXError(""); try { setTournament(await
+  // save...) } catch (e) { setXError(e.message) }` shape; centralizing it
+  // here means the one new behavior below applies uniformly, with zero risk
+  // of a handler being missed or drifting from the others.
+  //
+  // On an ordinary successful save: behaves exactly as every handler always
+  // did — clear the error, apply the returned tournament, done. No extra
+  // fetch.
+  //
+  // On STALE_WRITE specifically: the error message is still shown (the
+  // operator needs to know their attempted change did NOT apply — see
+  // saveTournament's own message), and the tournament is re-fetched fresh
+  // from storage and used to replace local state — but the rejected action
+  // itself is never retried or silently re-applied; the operator's own
+  // intended change is simply gone, exactly as it should be (they must
+  // explicitly redo it against the now-current state, if it's still valid).
+  // `tab`/`selectedPool`/`scheduleMode`/every other piece of local UI
+  // context is untouched — only the `tournament` object itself is replaced.
+  //
+  // On any OTHER error (network failure, validation, a locked field, etc.):
+  // identical to before — the error is shown, nothing is re-fetched, no
+  // retry loop of any kind.
+  const runTournamentSave = async (setError, saveFn) => {
+    setError("");
+    try {
+      const updated = await saveFn();
+      setTournament(updated);
+      return updated;
+    } catch (e) {
+      setError(e.message);
+      if (e?.code === "STALE_WRITE" && tournament?.id) {
+        try {
+          const fresh = await fetchTournament(tournament.id);
+          if (fresh) setTournament(fresh);
+        } catch {
+          // The refetch itself failed (e.g. network down) — leave the
+          // existing local state as-is; the STALE_WRITE message is already
+          // shown, and there is nothing safe to reconcile without it.
+        }
+      }
+      return null;
+    }
+  };
+
   const handleGenerate = async (mode, poolCount, advancesPerPool, seedingMethod, poolAssignments) => {
     setMatchError("");
     if (tournament?.status === "completed") {
@@ -638,24 +687,12 @@ export default function TournamentDashboardView({
 
   const handleStartMatch = async (matchId, scorerName) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      const updated = await saveMatchStart(tournament, matchId, scorerName);
-      setTournament(updated);
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveMatchStart(tournament, matchId, scorerName));
   };
 
   const handleSaveResult = async (matchId, result) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      const updated = await saveMatchResult(tournament, matchId, result);
-      setTournament(updated);
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveMatchResult(tournament, matchId, result));
   };
 
   // Next Match (facilitator announcement) — Round Robin. Same
@@ -664,12 +701,7 @@ export default function TournamentDashboardView({
   // record, so it persists/refreshes the same way pools/courts already do.
   const handleSetNextMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveSetNextMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveSetNextMatch(tournament, matchId));
   };
 
   // Guards against rapid repeated clicks firing overlapping speech: while
@@ -702,56 +734,29 @@ export default function TournamentDashboardView({
   // `tournament` object already flows down to the Bracket tab.
   const handlePlayoffStartMatch = async (matchId, scorerName) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      const updated = await savePlayoffMatchStart(tournament, matchId, scorerName);
-      setTournament(updated);
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => savePlayoffMatchStart(tournament, matchId, scorerName));
   };
 
   const handlePlayoffSaveResult = async (matchId, result) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      const updated = await savePlayoffMatchResult(tournament, matchId, result);
-      setTournament(updated);
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => savePlayoffMatchResult(tournament, matchId, result));
   };
 
   // Live Playoff Bracket & Match Operations — see PROJECT.md. Same shape
   // as every other playoff handler here.
   const handlePauseMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await savePauseMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => savePauseMatch(tournament, matchId));
   };
 
   const handleResumeMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveResumeMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveResumeMatch(tournament, matchId));
   };
 
   const handleWalkover = async (matchId, winnerId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveWalkover(tournament, matchId, winnerId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveWalkover(tournament, matchId, winnerId));
   };
 
   // Winners Bracket Progression — see PROJECT.md. Same "call the lib
@@ -762,148 +767,77 @@ export default function TournamentDashboardView({
   // new error slot, same as every other match-lifecycle handler here.
   const handleDoubleEliminationStartMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationMatchStart(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationMatchStart(tournament, matchId));
   };
 
   const handleDoubleEliminationSaveResult = async (matchId, result) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationMatchResult(tournament, matchId, result));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationMatchResult(tournament, matchId, result));
   };
 
   const handleDoubleEliminationPauseMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationPauseMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationPauseMatch(tournament, matchId));
   };
 
   const handleDoubleEliminationResumeMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationResumeMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationResumeMatch(tournament, matchId));
   };
 
   const handleDoubleEliminationWalkover = async (matchId, winnerId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationWalkover(tournament, matchId, winnerId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationWalkover(tournament, matchId, winnerId));
   };
 
   // Losers Bracket Progression — same "call the lib function,
   // setTournament(updated)" shape as every Winners Bracket handler above.
   const handleDoubleEliminationLosersStartMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationLosersMatchStart(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationLosersMatchStart(tournament, matchId));
   };
 
   const handleDoubleEliminationLosersSaveResult = async (matchId, result) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationLosersMatchResult(tournament, matchId, result));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationLosersMatchResult(tournament, matchId, result));
   };
 
   const handleDoubleEliminationLosersPauseMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationLosersPauseMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationLosersPauseMatch(tournament, matchId));
   };
 
   const handleDoubleEliminationLosersResumeMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationLosersResumeMatch(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationLosersResumeMatch(tournament, matchId));
   };
 
   const handleDoubleEliminationLosersWalkover = async (matchId, winnerId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveDoubleEliminationLosersWalkover(tournament, matchId, winnerId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveDoubleEliminationLosersWalkover(tournament, matchId, winnerId));
   };
 
   // Grand Final (including Grand Final Reset) — same shape again.
   const handleGrandFinalStartMatch = async (matchId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveGrandFinalMatchStart(tournament, matchId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveGrandFinalMatchStart(tournament, matchId));
   };
 
   const handleGrandFinalSaveResult = async (matchId, result) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveGrandFinalMatchResult(tournament, matchId, result));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveGrandFinalMatchResult(tournament, matchId, result));
   };
 
   const handleGrandFinalWalkover = async (matchId, winnerId) => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      setTournament(await saveGrandFinalWalkover(tournament, matchId, winnerId));
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveGrandFinalWalkover(tournament, matchId, winnerId));
   };
 
   // Round Robin Playoff Engine — see PROJECT.md. Same shape as every other
   // handler here; PlayoffEngine.reopenBracket does the actual unlocking.
   const handleReopenBracket = async () => {
     if (!tournament) return;
-    setMatchError("");
-    try {
-      const updated = await saveReopenBracket(tournament);
-      setTournament(updated);
-    } catch (e) {
-      setMatchError(e.message);
-    }
+    await runTournamentSave(setMatchError, () => saveReopenBracket(tournament));
   };
 
   // Tournament Court Assignment & Match Queue — same "call the lib
@@ -929,34 +863,18 @@ export default function TournamentDashboardView({
 
   const handleSetNextOnCourt = async (matchId, courtNumber) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveSetNextOnCourt(tournament, matchId, courtNumber));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveSetNextOnCourt(tournament, matchId, courtNumber));
   };
 
   const handleClearNextOnCourt = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveClearNextOnCourt(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveClearNextOnCourt(tournament, matchId));
   };
 
   const handleAssignMatch = async (matchId, courtNumber) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveCourtAssignment(tournament, matchId, courtNumber);
-      setTournament(updated);
-      announceCourtMatch(updated, matchId, courtNumber);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    const updated = await runTournamentSave(setCourtError, () => saveCourtAssignment(tournament, matchId, courtNumber));
+    if (updated) announceCourtMatch(updated, matchId, courtNumber);
   };
 
   // Re-announce — available on any occupied court, same "recompute from the
@@ -971,55 +889,30 @@ export default function TournamentDashboardView({
   // setTournament(updated)" shape as every other court handler here.
   const handleAdjustScore = async (matchId, side, delta) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveAdjustMatchScore(tournament, matchId, side, delta));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveAdjustMatchScore(tournament, matchId, side, delta));
   };
 
   // Court Board "Won" — same shape as handleAdjustScore above.
   const handleDeclareWinner = async (matchId, side) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveDeclareCourtWinner(tournament, matchId, side));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveDeclareCourtWinner(tournament, matchId, side));
   };
 
   // Tournament Scorer — 1st Serve / 2nd Serve. Same shape as
   // handleAdjustScore/handleDeclareWinner above.
   const handleSetServeNumber = async (matchId, number) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveSetServeNumber(tournament, matchId, number));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveSetServeNumber(tournament, matchId, number));
   };
 
   const handleChangeServe = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveChangeServe(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveChangeServe(tournament, matchId));
   };
 
   const handleSideOut = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveSideOut(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveSideOut(tournament, matchId));
   };
 
   // End Match — finalizes whatever match currently occupies a court, using
@@ -1046,140 +939,75 @@ export default function TournamentDashboardView({
     }
     const winnerId = scoreA > scoreB ? match.teamA.id ?? match.teamA.participantId : match.teamB.id ?? match.teamB.participantId;
     const result = { scoreA, scoreB, winnerId };
-    try {
-      let updated;
+    await runTournamentSave(setCourtError, () => {
       switch (source) {
         case "pool":
-          updated = await saveMatchResult(tournament, matchId, result);
-          break;
+          return saveMatchResult(tournament, matchId, result);
         case "bracket":
         case "consolationBracket":
-          updated = await savePlayoffMatchResult(tournament, matchId, result);
-          break;
+          return savePlayoffMatchResult(tournament, matchId, result);
         case "winnersBracket":
-          updated = await saveDoubleEliminationMatchResult(tournament, matchId, result);
-          break;
+          return saveDoubleEliminationMatchResult(tournament, matchId, result);
         case "losersBracket":
-          updated = await saveDoubleEliminationLosersMatchResult(tournament, matchId, result);
-          break;
+          return saveDoubleEliminationLosersMatchResult(tournament, matchId, result);
         case "grandFinal":
-          updated = await saveGrandFinalMatchResult(tournament, matchId, result);
-          break;
+          return saveGrandFinalMatchResult(tournament, matchId, result);
         default:
           throw new Error("Unknown match type — can't end this match.");
       }
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    });
   };
 
   const handleReleaseCourt = async (courtNumber) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveCourtRelease(tournament, courtNumber);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveCourtRelease(tournament, courtNumber));
   };
 
   const handleReassignMatch = async (matchId, fromCourtNumber, toCourtNumber) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveCourtReassignment(tournament, matchId, fromCourtNumber, toCourtNumber);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveCourtReassignment(tournament, matchId, fromCourtNumber, toCourtNumber));
   };
 
   // Court Assignment & Match Queue Engine — same "call the lib function,
   // setTournament(updated)" shape as every other court handler here.
   const handleSwapCourts = async (courtNumberA, courtNumberB) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveSwapCourts(tournament, courtNumberA, courtNumberB);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveSwapCourts(tournament, courtNumberA, courtNumberB));
   };
 
   const handleDelayMatch = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveDelayMatch(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveDelayMatch(tournament, matchId));
   };
 
   const handleUndelayMatch = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveUndelayMatch(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveUndelayMatch(tournament, matchId));
   };
 
   const handlePinMatch = async (matchId, courtNumber) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await savePinMatch(tournament, matchId, courtNumber));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => savePinMatch(tournament, matchId, courtNumber));
   };
 
   const handleUnpinMatch = async (matchId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      setTournament(await saveUnpinMatch(tournament, matchId));
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveUnpinMatch(tournament, matchId));
   };
 
   const handleAddCourt = async (name) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveAddCourt(tournament, name);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveAddCourt(tournament, name));
   };
 
   const handleRemoveCourt = async (courtId) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveRemoveCourt(tournament, courtId);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveRemoveCourt(tournament, courtId));
   };
 
   const handleSetCourtStatus = async (courtId, status) => {
     if (!tournament) return;
-    setCourtError("");
-    try {
-      const updated = await saveSetCourtStatus(tournament, courtId, status);
-      setTournament(updated);
-    } catch (e) {
-      setCourtError(e.message);
-    }
+    await runTournamentSave(setCourtError, () => saveSetCourtStatus(tournament, courtId, status));
   };
 
   // Tournament Settings — same "call the lib function, setTournament
@@ -1189,13 +1017,7 @@ export default function TournamentDashboardView({
   // saveTournamentSettings, which throws on any currently-locked field.
   const handleSaveSettings = async (changes) => {
     if (!tournament) return;
-    setSettingsError("");
-    try {
-      const updated = await saveTournamentSettings(tournament, changes);
-      setTournament(updated);
-    } catch (e) {
-      setSettingsError(e.message);
-    }
+    await runTournamentSave(setSettingsError, () => saveTournamentSettings(tournament, changes));
   };
 
   // PKR Ranking classification — deliberately NOT routed through
@@ -1206,46 +1028,24 @@ export default function TournamentDashboardView({
   const [rankingTierError, setRankingTierError] = useState("");
   const handleSetRankingTier = async (rankingTier) => {
     if (!tournament) return;
-    setRankingTierError("");
-    try {
-      const updated = await saveRankingTier(tournament, rankingTier);
-      setTournament(updated);
-    } catch (e) {
-      setRankingTierError(e.message);
-    }
+    await runTournamentSave(setRankingTierError, () => saveRankingTier(tournament, rankingTier));
   };
 
   const handleRenameCourt = async (courtId, name) => {
     if (!tournament) return;
-    setSettingsError("");
-    try {
-      const updated = await saveRenameCourt(tournament, courtId, name);
-      setTournament(updated);
-    } catch (e) {
-      setSettingsError(e.message);
-    }
+    await runTournamentSave(setSettingsError, () => saveRenameCourt(tournament, courtId, name));
   };
 
   // Manual & Advanced Seeding — same "call the lib function, setTournament
   // (updated)" shape every other tab's handlers already use.
   const handleSaveManualSeeds = async (manualSeeds) => {
     if (!tournament) return;
-    setSeedError("");
-    try {
-      setTournament(await saveManualSeeds(tournament, manualSeeds));
-    } catch (e) {
-      setSeedError(e.message);
-    }
+    await runTournamentSave(setSeedError, () => saveManualSeeds(tournament, manualSeeds));
   };
 
   const handleGenerateBracket = async () => {
     if (!tournament) return;
-    setSeedError("");
-    try {
-      setTournament(await saveGenerateBracket(tournament));
-    } catch (e) {
-      setSeedError(e.message);
-    }
+    await runTournamentSave(setSeedError, () => saveGenerateBracket(tournament));
   };
 
   // Double Elimination Foundation — same "call the lib function,
@@ -1255,12 +1055,7 @@ export default function TournamentDashboardView({
   // are mutually exclusive (bracketFormat picks exactly one).
   const handleGenerateDoubleEliminationBracket = async () => {
     if (!tournament) return;
-    setSeedError("");
-    try {
-      setTournament(await saveGenerateDoubleEliminationBracket(tournament));
-    } catch (e) {
-      setSeedError(e.message);
-    }
+    await runTournamentSave(setSeedError, () => saveGenerateDoubleEliminationBracket(tournament));
   };
 
   // Manual Qualification Override — same "call the lib function,
@@ -1313,12 +1108,7 @@ export default function TournamentDashboardView({
 
   const handleLockQualification = async () => {
     if (!tournament) return;
-    setQualificationError("");
-    try {
-      setTournament(await saveLockQualification(tournament));
-    } catch (e) {
-      setQualificationError(e.message);
-    }
+    await runTournamentSave(setQualificationError, () => saveLockQualification(tournament));
   };
 
   const pools = tournament?.pools ?? [];
