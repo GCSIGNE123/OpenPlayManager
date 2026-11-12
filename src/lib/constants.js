@@ -131,7 +131,7 @@ export function rotationModeLabelFor(value) {
 export const ROTATION_MODE_DESCRIPTIONS = {
   adaptiveSkill: "Balances players by skill division, games played, and wait time.",
   adaptiveRanking: "Matches players within nearby Open Play Points while balancing recent play and wait time.",
-  pointsAdaptive: "Organizer builds Rounds 1 and 2 by hand; from Round 3 the system matches players from ONE waiting pool by Open Play Points, fairness (rest, wait, games) and variety — no Beginner/Intermediate split.",
+  pointsAdaptive: "Organizer builds Round 1 by hand; from Round 2 the system matches players from ONE waiting pool by Open Play Points, fairness (rest, wait, games) and variety — no Beginner/Intermediate split.",
 };
 
 // Session Matchmaking Priority — see PROJECT.md/FEATURES.md. NOT a rotation

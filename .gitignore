@@ -4,3 +4,8 @@ dist/
 *.log
 .env
 .env.local
+
+# local scratch / tooling output — never source
+.scratch_vercel/
+supabase/.temp/
+pr1-review.diff

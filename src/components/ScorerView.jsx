@@ -114,7 +114,7 @@ export default function ScorerView({
   clearManualCourtPlayer,
   lockManualCourt,
   unlockManualCourt,
-  advanceCalibration,
+  startAdaptiveMatchmaking,
   setCalibrationStrengthOrder,
   clearCalibrationStrengthOrder,
   generateRemainingCourts,
@@ -348,13 +348,19 @@ export default function ScorerView({
           <span>{roundLockStatus(state)?.label}</span>
           <div>
             {isCalibrationPhase(state)
-              ? "You build every match by hand for the calibration rounds (use Manual assignment on each court, pick 2 + 2, then Lock court). Players who check in after a round is locked wait for the next round. Adaptive matchmaking starts automatically once Round 2 is finished."
+              ? "You build the opening matches (Round 1) by hand: use Manual assignment on each court, pick 2 + 2, then Lock court. When Round 1 finishes the system takes over automatically and generates Round 2 onward. Players who check in after the round is locked wait for the system. You can hand over sooner with the button below."
               : "The system now fills courts from ONE waiting pool using Open Play Points, wait time, games played and variety. Players who check in later join the queue by arrival time."}
           </div>
           <CalibrationStrengthOrder state={state} locked={!isCalibrationPhase(state)} onApply={setCalibrationStrengthOrder} onClear={clearCalibrationStrengthOrder} />
           {isCalibrationPhase(state) && (
-            <button type="button" style={styles.secondaryBtn} onClick={advanceCalibration} title="Close this calibration round early (only when no calibration match is running)">
-              Finish this round
+            <button
+              type="button"
+              style={{ ...styles.primaryBtn, marginRight: 8 }}
+              onClick={() => { if (window.confirm("Switch to automatic matchmaking now? Matches already on court keep playing; the system will fill open courts and everyone waiting from now on.")) startAdaptiveMatchmaking(); }}
+              title="Stop building matches by hand and let the system take over now — you can do this at any time, even while manual matches are still on court"
+              data-testid="start-automatic"
+            >
+              Start automatic matchmaking now
             </button>
           )}
         </div>

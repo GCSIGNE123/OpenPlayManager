@@ -9,7 +9,7 @@ import { uploadPlayerPhoto } from "./lib/photoStorage.js";
 import { resolveRealtimeUpdate } from "./lib/realtimeStorageEvents.js";
 import { applyRankingDelta, applyProvisionalRankingDelta, playersNeedingRankingSnapshot, snapshotSessionRankings } from "./lib/rankingSnapshot.js";
 import { applyCalibrationProfile, calibrationEngineContext, recordCalibrationEvidence, setStrengthOrder } from "./lib/calibrationProfile.js";
-import { createPhaseFields, applyPhaseGate, isCalibrationPhase, noteCalibrationMatchStarted, noteCalibrationMatchUnlocked, noteMatchEnded, validateManualAssignment, forceAdvanceCalibration } from "./lib/openPlayPhases.js";
+import { createPhaseFields, applyPhaseGate, isCalibrationPhase, noteCalibrationMatchStarted, noteCalibrationMatchUnlocked, noteMatchEnded, validateManualAssignment, startAdaptiveNow } from "./lib/openPlayPhases.js";
 import { createShadowRuntime } from "./lib/rankingShadowRuntime.js";
 import ShareLiveDialog from "./components/ShareLiveDialog.jsx";
 import { installShadowDevTools } from "./lib/rankingShadowLog.js";
@@ -1718,7 +1718,12 @@ export default function PickleballOpenPlay() {
 
   // Points-Based Adaptive Matchmaking: organizer override to close a calibration
   // round early (only when no calibration match is still running).
-  const advanceCalibration = () => save(forceAdvanceCalibration(state));
+
+  // Organizer switches from manual to automatic matchmaking whenever they choose.
+  const startAdaptiveMatchmaking = () => {
+    const next = startAdaptiveNow(state);
+    if (next !== state) save(applyCalibrationProfile(next));
+  };
 
   // Calibration strength (optional, session-local): the organizer orders the
   // calibration match GROUPS of a round strongest -> weakest. Court numbers mean
@@ -2996,7 +3001,7 @@ export default function PickleballOpenPlay() {
                   setManualCourtPlayer={setManualCourtPlayer}
                   clearManualCourtPlayer={clearManualCourtPlayer}
                   lockManualCourt={lockManualCourt}
-                  advanceCalibration={advanceCalibration}
+                  startAdaptiveMatchmaking={startAdaptiveMatchmaking}
                   setCalibrationStrengthOrder={setCalibrationStrengthOrder}
                   clearCalibrationStrengthOrder={clearCalibrationStrengthOrder}
                   unlockManualCourt={unlockManualCourt}

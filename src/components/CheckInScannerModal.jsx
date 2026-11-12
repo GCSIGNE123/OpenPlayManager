@@ -51,7 +51,7 @@ import jsQR from "jsqr";
 import { Camera, Check, ScanLine } from "lucide-react";
 import { styles } from "../styles.js";
 import { checkinPlayerViaQr, createScanChallenge } from "../lib/checkinQrApi.js";
-import { normalizeUsbScanPayload } from "../lib/usbScanner.js";
+import { normalizeUsbScanPayload, looksLikeScanToken } from "../lib/usbScanner.js";
 import { SCAN_MODE_STORAGE_KEY, resolveScanMode } from "../lib/scanModePreference.js";
 import {
   CAMERA_IDLE,
@@ -111,7 +111,6 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
   // USB mode's own state — deliberately separate from the camera state
   // above (see file header).
   const [usbBusy, setUsbBusy] = useState(false);
-  const [usbValue, setUsbValue] = useState("");
   const [usbResult, setUsbResult] = useState(null); // { status, player } | { error } | null
   const [usbStartError, setUsbStartError] = useState("");
   const usbInputRef = useRef(null);
@@ -301,7 +300,7 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     dispatchCamera({ type: "RESET" });
     setResult(null);
     setUsbResult(null);
-    setUsbValue("");
+    if (usbInputRef.current) usbInputRef.current.value = ""; // uncontrolled now — clear the DOM value directly, see handleUsbKeyDown's header
     setUsbStartError("");
     scanningLockRef.current = false;
     usbProcessingRef.current = false;
@@ -330,15 +329,49 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
     }
   };
 
+  // Reads straight from the DOM element (e.currentTarget.value), never from
+  // React state. This input used to be controlled (value={usbValue}, kept
+  // in sync via onChange -> setUsbValue), and this handler used to read
+  // that `usbValue` state on Enter. A physical-hardware test surfaced why
+  // that's unsafe for this specific input: a USB HID scanner "types" its
+  // whole payload as a burst of synthetic keystrokes, fast enough that on
+  // some machines React's onChange->setState->re-render cycle can't fully
+  // keep up before Enter's keydown fires — a sanitized capture from the
+  // affected laptop showed a 30-character result where the real token is
+  // always exactly 32 characters (24 random bytes, base64url-encoded, see
+  // pickleking-player's _shared/checkinLogic.js), i.e. 2 real characters
+  // silently dropped from the STATE closure, not corrupted/substituted
+  // (ruling out a keyboard-layout theory, which would change characters
+  // without shortening the string). The DOM input element's own .value,
+  // by contrast, is written synchronously by the browser for every native
+  // keystroke and can never lag behind — reading it directly here removes
+  // this entire class of race regardless of how fast the scanner types or
+  // how loaded the machine is.
   const handleUsbKeyDown = (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    const trimmed = normalizeUsbScanPayload(usbValue);
-    setUsbValue(""); // clear immediately — also what stops a duplicate Enter
+    const trimmed = normalizeUsbScanPayload(e.currentTarget.value);
+    e.currentTarget.value = ""; // clear immediately, at the DOM level — also what stops a duplicate Enter
     // (e.g. a scanner sending both CR and LF) from re-submitting: by the
     // time the second Enter event fires, the input is already empty and
     // this guard below returns early.
     if (!trimmed || usbProcessingRef.current || usbBusy) return;
+    // Diagnostic-only shape check (see usbScanner.js's looksLikeScanToken
+    // header) — never a substitute for checkin-player's own validation,
+    // which still runs unchanged for anything that passes this. Shown
+    // inline exactly like a real scan result, and the input is left ready
+    // for another attempt (no busy state, no challenge burned) rather than
+    // spending a network round trip on a scan that couldn't possibly
+    // resolve to a real token. Catches an obviously-wrong-charset scan
+    // (e.g. a scanner/OS keyboard-layout mismatch); a same-length,
+    // same-charset-but-wrong token still passes this and is still safely
+    // rejected server-side, unchanged.
+    if (!looksLikeScanToken(trimmed)) {
+      setUsbResult({
+        error: "This scan doesn't look like a valid QR token. Try scanning again — if it keeps happening, check the USB scanner's connection and configuration.",
+      });
+      return;
+    }
     usbProcessingRef.current = true;
     handleUsbScanned(trimmed);
   };
@@ -441,6 +474,10 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
               <p style={styles.pinError}>{result.error}</p>
             ) : result.status === "already_checked_in" ? (
               <p style={styles.confirmMsg}>Player already checked in.</p>
+            ) : result.status === "re_checked_in" ? (
+              <p style={styles.confirmMsg}>
+                <Check size={14} strokeWidth={3} /> {result.player?.displayName} re-checked in
+              </p>
             ) : (
               <p style={styles.confirmMsg}>
                 <Check size={14} strokeWidth={3} /> {result.player?.displayName} checked in
@@ -464,12 +501,15 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
             <p style={styles.editHint}>
               Connect the USB QR scanner, click the input field, then scan the player's QR code.
             </p>
+            {/* Uncontrolled by design — see handleUsbKeyDown's header. No
+                value/onChange here on purpose: the DOM element buffers
+                every native keystroke itself, immune to a React state
+                update lagging behind a very fast scanner burst. */}
             <input
               ref={usbInputRef}
               style={styles.input}
               placeholder="Scan QR code here"
-              value={usbValue}
-              onChange={(e) => setUsbValue(e.target.value)}
+              defaultValue=""
               onKeyDown={handleUsbKeyDown}
               autoFocus
               disabled={usbBusy}
@@ -490,6 +530,10 @@ export default function CheckInScannerModal({ sessionCode, onClose }) {
                 <p style={styles.pinError}>{usbResult.error}</p>
               ) : usbResult.status === "already_checked_in" ? (
                 <p style={styles.confirmMsg}>Player already checked in.</p>
+              ) : usbResult.status === "re_checked_in" ? (
+                <p style={styles.confirmMsg}>
+                  <Check size={14} strokeWidth={3} /> {usbResult.player?.displayName} re-checked in
+                </p>
               ) : (
                 <p style={styles.confirmMsg}>
                   <Check size={14} strokeWidth={3} /> {usbResult.player?.displayName} checked in

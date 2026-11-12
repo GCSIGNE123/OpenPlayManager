@@ -34,7 +34,14 @@ export const GAMES_GAP_THRESHOLD = 2;
 export const CALIBRATION_AFFINITY_WEIGHT = 1;
 export const CALIBRATION_DECAY_GAMES = 6;
 
+// TOP-8 CANDIDATE WINDOW: after eligibility + fairness ordering, every legal quartet
+// among the top 8 waiting players is scored (see AdaptiveRankingRotationEngine's
+// candidateWindow). W/L is a weak, fading match-quality signal.
+export const TOP8_CANDIDATE_WINDOW = 8;
+
 export const POINTS_ADAPTIVE_CONFIG = {
+  candidateWindow: TOP8_CANDIDATE_WINDOW,
+  useWinLoss: true,
   useSkillLabels: false,
   teamBalanceBand: TEAM_BALANCE_BAND_POINTS,
   restOnlyAfterPlay: true, // a fresh check-in is not "resting": latecomers are judged by normal fairness

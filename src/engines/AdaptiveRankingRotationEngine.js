@@ -157,6 +157,10 @@ export const REASONS = {
   WAIT_GUARD_APPLIED: "WAIT_GUARD_APPLIED",
   REPEAT_QUARTET_AVOIDED: "REPEAT_QUARTET_AVOIDED",
   GAMES_GAP_GUARD_APPLIED: "GAMES_GAP_GUARD_APPLIED",
+  TOP8_WINDOW: "TOP8_WINDOW",
+  ANCHOR_INCLUDED: "ANCHOR_INCLUDED",
+  ANCHOR_SKIPPED: "ANCHOR_SKIPPED",
+  WL_CHANGED_SELECTION: "WL_CHANGED_SELECTION",
 };
 
 // Every knob above, as one overridable object. generateMatchups reads
@@ -193,6 +197,35 @@ export const DEFAULT_CONFIG = {
   // between the four players from the organizer's calibration rounds. 0 = off.
   calibrationAffinityWeight: 0,
   calibrationDecayGames: 6,
+  // TOP-8 CANDIDATE WINDOW (Points-Based Adaptive Matchmaking): 0 = the original
+  // anchor + Points-window search. N > 0 = after the usual eligibility (rest
+  // protection) and fairness ordering, take the top N waiting players, enumerate
+  // EVERY legal 2+2 quartet among them (the fairness anchor need not be in it, but
+  // is strongly preferred), and let match quality choose. See searchQuartets.
+  candidateWindow: 0,
+  // A quartet whose Points spread exceeds this is "unreasonable": any reasonable
+  // quartet beats it, so the anchor is never forced into a terrible matchup, but
+  // a reasonable quartet WITH the anchor always beats one that leaves them out.
+  reasonableSpread: 300,
+  // W/L performance as a WEAK, early-evidence match-quality signal (banded, ranked
+  // below the Points neighbourhood). perf = (wins - losses) / (games + shrink):
+  // shrunk toward 0 so 1W-0L is a whisper, not a verdict. Its weight fades to 0 as
+  // games accumulate (Points take over) and halves for players with a stored rating.
+  useWinLoss: false,
+  wlShrinkGames: 4,
+  wlFadeGames: 12,
+  wlRatedFactor: 0.5,
+  wlBandScale: 4,
+  // GAMES-SPREAD REFINEMENT inside the window (max - min games of the chosen four):
+  //   "off"      - no games-spread signal (the original Top-8)
+  //   "tiebreak" - raw spread breaks ties late, after Points/balance
+  //   "penalty"  - spread above maxPreferredGamesSpread ranks ABOVE the anchor preference
+  //                (NB: also penalises pulling a 0-game player into a veteran four)
+  //   "gapfirst" - the games-gap guard (left-out player has >= gamesGapThreshold fewer
+  //                games than a chosen member) ranks ABOVE the anchor preference: a
+  //                fresher/under-served player is not passed over just to include the anchor
+  gamesSpreadMode: "off",
+  maxPreferredGamesSpread: 1,
   teamBalanceBand: TEAM_BALANCE_BAND_POINTS,
   // false = the Beginner/Intermediate label is never read (Points-Based Adaptive
   // Matchmaking): no skill team-balance term, no mixed-skill preference.
@@ -401,10 +434,23 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
     const anchorFixed = fixedOf.get(anchor.id) || null;
 
     let accepted = null;
+    let windowMeta = null;
     let bestSoFar = null;
     let bestWindow = cfg.windowStart;
     let bestWidened = false;
-    outer: for (const arena of [cfg.candidateArena, Infinity]) {
+    if (cfg.candidateWindow > 0) {
+      // TOP-N window: fairness order decides WHO is in the window, quality decides the quartet
+      let base = ordered.slice(1, cfg.candidateWindow);
+      const have = new Set(base.map((p) => p.id));
+      for (const p of [anchor, ...base]) {
+        const fp = fixedOf.get(p.id);
+        if (fp && fp !== anchor.id && !have.has(fp)) { const pp = ordered.find((x) => x.id === fp); if (pp) { base = [...base, pp]; have.add(fp); } }
+      }
+      if (base.length >= 3) {
+        const res = this.searchQuartets(base, new Set(), ctx);
+        if (res) { accepted = res; bestWindow = cfg.windowMax; bestWidened = false; windowMeta = { size: 1 + base.length, ids: [anchor.id, ...base.map((p) => p.id)] }; }
+      }
+    } else outer: for (const arena of [cfg.candidateArena, Infinity]) {
       const base = arenaBase(arena);
       if (base.length < 3) continue;
       const forced = base.filter((p) => info.get(p.id).rescued || p.id === anchorFixed).slice(0, 3);
@@ -441,6 +487,11 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
     if (!chosen) return null;
 
     if (chosen.forcedCount > 0 && !reasons.includes(REASONS.LONG_WAIT_PRIORITY)) reasons.push(REASONS.LONG_WAIT_PRIORITY);
+    if (windowMeta) {
+      reasons.push(REASONS.TOP8_WINDOW);
+      reasons.push(chosen.quartet.includes(anchor.id) ? REASONS.ANCHOR_INCLUDED : REASONS.ANCHOR_SKIPPED);
+      if (chosen.wlChanged) reasons.push(REASONS.WL_CHANGED_SELECTION);
+    }
     const quartet = chosen.quartet.map((id) => players[id]);
     // Points neighbourhood: tight when every member is inside the anchor's window
     // at its starting width; widened when the window had to grow OR fairness /
@@ -482,6 +533,7 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
         provisionalIds,
         skills: cfg.useSkillLabels === false ? quartet.map(() => null) : quartet.map((p) => skillOf(p)),
         forcedRepeatPartner: chosen.violations > 0,
+        ...(windowMeta ? { top8: { ...windowMeta, anchorIncluded: chosen.quartet.includes(anchor.id), anchorHadReasonable: Boolean(chosen.anchorHadReasonable), orderedFirstFour: ordered.slice(0, 4).map((p) => p.id), wlChanged: Boolean(chosen.wlChanged), gamesSpread: chosen.gamesSpread, unreasonable: chosen.unreasonable === 1 } } : {}),
       },
       fairness: {
         waitMinutesRange: [Math.round(Math.min(...waits)), Math.round(Math.max(...waits))],
@@ -506,27 +558,35 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
     const { players, ratings, recentMatchups, cfg, rankOf, fixedOf, anchor, stats, info, recentFours } = ctx;
     const n = candList.length;
     let best = null;
+    let anchorHadReasonable = false; // did ANY quartet that includes the anchor stay within the reasonable Points spread?
+    let bestNoWl = null; // best quartet when W/L is ignored (to report whether W/L changed the pick)
     const forcedList = candList.filter((p) => forcedIds.has(p.id));
-    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
-      const trio = [candList[i], candList[j], candList[k]];
-      if (forcedList.some((f) => !trio.includes(f))) continue;
-      const ids = [anchor.id, trio[0].id, trio[1].id, trio[2].id];
+    // quartets to score: original = anchor + every trio of the candidates; TOP-N window = EVERY 4-combination of anchor + candidates
+    const quartets = [];
+    if (cfg.candidateWindow > 0) {
+      const pool = [anchor, ...candList];
+      for (let a = 0; a < pool.length; a++) for (let b = a + 1; b < pool.length; b++) for (let c = b + 1; c < pool.length; c++) for (let d = c + 1; d < pool.length; d++) quartets.push([pool[a], pool[b], pool[c], pool[d]]);
+    } else {
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) quartets.push([anchor, candList[i], candList[j], candList[k]]);
+    }
+    for (const members of quartets) {
+      if (forcedList.some((f) => !members.includes(f))) continue;
+      const ids = members.map((p) => p.id);
       // a fixed pair must be in the quartet together or not at all
       let okFixed = true;
       for (const id of ids) { const f = fixedOf.get(id); if (f && !ids.includes(f)) { okFixed = false; break; } }
       if (!okFixed) continue;
-      const rankSum = trio.reduce((s, p) => s + rankOf.get(p.id), 0);
+      const rankSum = members.reduce((s, p) => s + rankOf.get(p.id), 0);
       // Points neighbourhood: how wide are the four Points values? (banded)
-      const pts4 = [anchor, ...trio].map((p) => pointsFor(p, ratings, cfg));
+      const pts4 = members.map((p) => pointsFor(p, ratings, cfg));
       const spread = Math.max(...pts4) - Math.min(...pts4);
       const spreadBand = Math.max(0, Math.ceil(spread / cfg.pointsSpreadBand) - 1);
-      const members = [anchor, ...trio];
       // games-gap guard: pairs (left-out candidate u, chosen member m) with m.games - u.games >= threshold
       let gamesSkips = 0;
       if (cfg.gamesGapThreshold > 0) {
-        for (const u of candList) {
-          if (trio.includes(u)) continue;
-          for (const m of [anchor, ...trio]) if ((m.games || 0) - (u.games || 0) >= cfg.gamesGapThreshold) gamesSkips++;
+        for (const u of [anchor, ...candList]) {
+          if (members.includes(u)) continue;
+          for (const m of members) if ((m.games || 0) - (u.games || 0) >= cfg.gamesGapThreshold) gamesSkips++;
         }
         if (gamesSkips > 0) stats.sawGamesSkip = true;
       }
@@ -534,7 +594,7 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
       // in coarse steps, only while the quartet's calibration confidence is still meaningful
       let affinityPenalty = 0;
       if (cfg.calibrationAffinityWeight > 0 && ctx.calibration) {
-        const q4 = [anchor, ...trio];
+        const q4 = members;
         const avgGames = q4.reduce((s, p) => s + (p.games || 0), 0) / 4;
         const conf = Math.max(0, 1 - avgGames / cfg.calibrationDecayGames);
         if (conf >= 0.25) {
@@ -542,19 +602,34 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
           affinityPenalty = Math.round((1 - aff) * 4 * Math.min(1, conf * cfg.calibrationAffinityWeight));
         }
       }
-      const sameFour = recentFours.size > 0 && recentFours.has([anchor.id, trio[0].id, trio[1].id, trio[2].id].sort().join(",")) ? 1 : 0;
+      const sameFour = recentFours.size > 0 && recentFours.has([...ids].sort().join(",")) ? 1 : 0;
       if (sameFour) stats.sawSameFour = true;
       // wait-time guard: pairs (left-out legal candidate u, chosen member m)
       // where u has waited >= the guard gap longer than m
       let waitSkips = 0;
       if (cfg.waitGuardGapMinutes > 0) {
-        for (const u of candList) {
-          if (trio.includes(u)) continue;
+        for (const u of [anchor, ...candList]) {
+          if (members.includes(u)) continue;
           const uw = info.get(u.id).wait;
           for (const m of members) if (uw - info.get(m.id).wait >= cfg.waitGuardGapMinutes) waitSkips++;
         }
         if (waitSkips > 0) stats.sawWaitSkip = true;
       }
+      // TOP-N window slots (constant 0 in the original mode)
+      const windowMode = cfg.candidateWindow > 0;
+      const unreasonable = windowMode && spread > cfg.reasonableSpread ? 1 : 0;
+      const anchorMissing = windowMode && !members.includes(anchor) ? 1 : 0;
+      if (windowMode && !anchorMissing && !unreasonable) anchorHadReasonable = true;
+      let wlBand = 0;
+      if (cfg.useWinLoss) {
+        const perf = members.map((p) => ((p.wins || 0) - (p.losses || 0)) / ((p.games || 0) + cfg.wlShrinkGames));
+        const weight = members.reduce((s, p) => s + Math.max(0, 1 - (p.games || 0) / cfg.wlFadeGames) * (p.rankingSource === "rated" ? cfg.wlRatedFactor : 1), 0) / 4;
+        wlBand = Math.round((Math.max(...perf) - Math.min(...perf)) * weight * cfg.wlBandScale);
+      }
+      const gms = members.map((p) => p.games || 0);
+      const gamesSpread = Math.max(...gms) - Math.min(...gms);
+      const gamesPen = !windowMode ? 0 : cfg.gamesSpreadMode === "penalty" ? Math.max(0, gamesSpread - cfg.maxPreferredGamesSpread) : cfg.gamesSpreadMode === "gapfirst" ? gamesSkips : 0;
+      const gamesTie = windowMode && cfg.gamesSpreadMode === "tiebreak" ? gamesSpread : 0;
       const skills = cfg.useSkillLabels === false ? members.map(() => null) : members.map(skillOf);
       const skillKnown = skills.every((s) => s !== null);
       const homogeneous = skillKnown && new Set(skills).size === 1;
@@ -595,14 +670,20 @@ export class AdaptiveRankingRotationEngine extends RotationEngine {
         // fairness closeness. (widenWindowForSkill swaps band and skill.)
         const head = cfg.widenWindowForSkill ? [skillPenalty, spreadBand] : [spreadBand, skillPenalty];
         const balanceBand = cfg.teamBalanceBand > 0 ? Math.floor(imbalance / cfg.teamBalanceBand) : 0;
-        const tuple = [violations, waitSkips, gamesSkips, sameFour, affinityPenalty, ...head, balanceBand, freshness, immediate, recentOpp * 1 + exact * 4, cfg.teamBalanceWeight * imbalance, rankSum];
+        const tuple = [violations, unreasonable, gamesPen, anchorMissing, waitSkips, gamesSkips, sameFour, affinityPenalty, ...head.slice(0, 1), wlBand, ...head.slice(1), balanceBand, gamesTie, freshness, immediate, recentOpp * 1 + exact * 4, cfg.teamBalanceWeight * imbalance, rankSum];
+        if (cfg.useWinLoss && cfg.candidateWindow > 0) {
+          const t2 = [...tuple]; t2[9] = 0; // wlBand slot (after violations, unreasonable, anchorMissing, waitSkips, gamesSkips, sameFour, affinity, band)
+          if (!bestNoWl || compareTuples(t2, bestNoWl.tuple) < 0) bestNoWl = { tuple: t2, quartet: [...ids].sort().join(",") };
+        }
         let fixedTeams = [];
         for (const t of [teamA, teamB]) if (fixedOf.get(t[0]) === t[1]) fixedTeams.push([...t]);
         if (!best || compareTuples(tuple, best.tuple) < 0) {
-          best = { tuple, waitSkips, gamesSkips, sameFour, affinityPenalty, quartet: ids, teamA, teamB, violations, skillPenalty, skillKnown, bothMixed, immediateOpponents: immediate, imbalance, forcedCount: forcedList.length, spread, fixedPairs: fixedTeams.length, fixedTeams };
+          best = { tuple, gamesSpread, unreasonable, anchorMissing, wlBand, waitSkips, gamesSkips, sameFour, affinityPenalty, quartet: ids, teamA, teamB, violations, skillPenalty, skillKnown, bothMixed, immediateOpponents: immediate, imbalance, forcedCount: forcedList.length, spread, fixedPairs: fixedTeams.length, fixedTeams };
         }
       }
     }
+    if (best) best.anchorHadReasonable = anchorHadReasonable;
+    if (best && bestNoWl) best.wlChanged = [...best.quartet].sort().join(",") !== bestNoWl.quartet;
     return best;
   }
 

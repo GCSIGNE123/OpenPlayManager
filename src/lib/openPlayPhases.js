@@ -35,7 +35,11 @@ export const SESSION_PHASES = {
   ADAPTIVE: "adaptive",
 };
 
-export const CALIBRATION_ROUNDS = 2;
+// ONE organizer-built calibration round. Round 2 onward is system-generated.
+// (SESSION_PHASES.CALIBRATION_2 is kept only so a session saved by an earlier
+// build that was already in "Round 2 — Calibration" still opens and finishes:
+// it hands over to the system as soon as its next calibration match ends.)
+export const CALIBRATION_ROUNDS = 1;
 
 export const usesPhases = (state) => state?.rotationMode === POINTS_ADAPTIVE_MODE;
 
@@ -122,13 +126,17 @@ export function noteMatchEnded(state) {
   const cal = state.calibration;
   if (!cal || currentPhase(state) === SESSION_PHASES.CHECK_IN) return state;
   const completed = cal.completed + 1;
-  const roundDone = state.roundLock?.locked && completed >= cal.started;
+  // A round is done when its `target` matches have finished. (Comparing against
+  // `started` broke real sessions: an organizer who keeps starting manual matches
+  // as courts free up always has a newer match still running, so the round never
+  // completed.) Matches started beyond the target carry into the next round.
+  const roundDone = Boolean(state.roundLock?.locked) && cal.target != null && completed >= cal.target;
   if (!roundDone) return { ...state, calibration: { ...cal, completed } };
   if (cal.round >= CALIBRATION_ROUNDS) return enterAdaptive({ ...state, calibration: { ...cal, completed } });
   return {
     ...state,
     sessionPhase: SESSION_PHASES.CALIBRATION_2,
-    calibration: { round: cal.round + 1, target: null, started: 0, completed: 0 },
+    calibration: { round: cal.round + 1, target: null, started: Math.max(0, cal.started - cal.target), completed: Math.max(0, completed - cal.target) },
     roundLock: { round: cal.round + 1, locked: false, playerIds: [] },
   };
 }
@@ -141,6 +149,16 @@ export function enterAdaptive(state) {
     c.status === "open" && c.assignmentMode === "manual" ? { ...c, assignmentMode: "automatic", teamA: [], teamB: [] } : c
   );
   return { ...state, courts, queueingStarted: true, sessionPhase: SESSION_PHASES.ADAPTIVE, adaptiveStartedAtMatch: (state.matchHistory || []).length, roundLock: { round: (state.calibration?.round || CALIBRATION_ROUNDS) + 1, locked: false, playerIds: [] } };
+}
+
+// ORGANIZER DECIDES: switch from manual matchups to automatic matchmaking NOW,
+// whatever round the calibration is in and whether or not manual matches are
+// still on court. Live courts keep playing (their players are not in the pool);
+// open courts and everyone waiting go to the system immediately. Only valid
+// during calibration; a no-op afterwards.
+export function startAdaptiveNow(state) {
+  if (!isCalibrationPhase(state)) return state;
+  return enterAdaptive(state);
 }
 
 // "Unlock court" during calibration: the match never happened, so give the
@@ -208,7 +226,7 @@ export function phaseLabel(state) {
     case null: return null;
     case SESSION_PHASES.CHECK_IN: return "Check-in";
     case SESSION_PHASES.CALIBRATION_1: return "Calibration — Round 1";
-    case SESSION_PHASES.CALIBRATION_2: return "Round 2 — Calibration";
+    case SESSION_PHASES.CALIBRATION_2: return "Calibration — Round 2 (legacy session)";
     default: return `Adaptive Matchmaking — Round ${currentRoundNumber(state)}`;
   }
 }

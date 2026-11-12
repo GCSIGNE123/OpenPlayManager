@@ -94,25 +94,24 @@ let r1 = runRound(s0, Object.keys(s0.players).slice(0, 12));
 let r2;
 {
   const done1 = finishRound(r1);
-  assert("3. Round 1 completed -> ROUND 2 (still organizer-controlled, courts manual, no auto matchups)", done1.sessionPhase === "calibrationRound2" && done1.courts.every((c) => c.assignmentMode === "manual") && P.phaseLabel(done1) === "Round 2 — Calibration");
-  assert("   the round lock resets (open) for Round 2", !done1.roundLock.locked && done1.roundLock.round === 2 && done1.calibration.started === 0);
-  r2 = runRound(done1, Object.keys(done1.players).slice(12, 24));
-  const done2 = finishRound(r2);
-  assert("4. Round 2 completed -> ADAPTIVE MATCHMAKING becomes active automatically", done2.sessionPhase === "adaptive" && P.isAdaptivePhase(done2) && P.rotationBanner(done2) === "ADAPTIVE MATCHMAKING ACTIVE");
-  assert("   courts are handed back to automatic dispatch; queueing started", done2.courts.every((c) => c.assignmentMode === "automatic") && done2.queueingStarted === true);
-  assert("   label is 'Adaptive Matchmaking — Round 3'", P.phaseLabel(done2) === "Adaptive Matchmaking — Round 3");
-  const after = gate(done2);
+  assert("3. Round 1 completes -> the system takes over AUTOMATICALLY (there is no manual Round 2)", done1.sessionPhase === "adaptive" && P.isAdaptivePhase(done1) && !P.isCalibrationPhase(done1) && P.rotationBanner(done1) === "ADAPTIVE MATCHMAKING ACTIVE");
+  assert("   the organizer is never asked to build Round 2: courts are automatic, queueing is on, no 'Round 2 — Calibration' anywhere", done1.courts.every((c) => c.assignmentMode === "automatic") && done1.queueingStarted === true && P.phaseLabel(done1) === "Adaptive Matchmaking — Round 2" && !/Calibration/.test(P.phaseLabel(done1)));
+  assert("   the calibration is ONE round: check-in -> Round 1 -> adaptive", P.CALIBRATION_ROUNDS === 1);
+  const after = gate(done1);
   const refreshed = refreshNextMatchups(after.queueIds, after.players, [], getRotationEngine(after.rotationMode), null, 3, null, after.recentMatchups);
   const dd = dispatchAvailableCourts({ courts: after.courts, nextMatchups: refreshed, queueIds: after.queueIds, players: after.players, autoFillCourts: true });
-  assert("   Round 3 is system-generated: the engine builds matchups and dispatch fills all 3 courts", refreshed.length === 3 && dd.dispatched.length === 3);
-  assert("5. the phase persists through a save/load JSON round trip", (() => { const rt = JSON.parse(JSON.stringify(done2)); return rt.sessionPhase === "adaptive" && rt.calibration && P.currentPhase(rt) === "adaptive"; })());
+  assert("4. Round 2 is SYSTEM-generated: the engine builds matchups and dispatch fills all 3 courts with no organizer action", refreshed.length === 3 && dd.dispatched.length === 3);
+  assert("   ...and Round 2 goes to players who have NOT played yet ahead of the 12 who just finished (no monopoly by Round 1 players)", dd.dispatched.every((d) => [...d.teamA, ...d.teamB].every((id) => after.players[id].games === 0)));
+  assert("5. the phase persists through a save/load JSON round trip", (() => { const rt = JSON.parse(JSON.stringify(done1)); return rt.sessionPhase === "adaptive" && rt.calibration && P.currentPhase(rt) === "adaptive"; })());
   const rt1 = JSON.parse(JSON.stringify(r1));
   assert("   ...including the calibration round bookkeeping and lock", rt1.calibration.started === 3 && rt1.roundLock.locked === true);
   assert("   the mode is selectable, labelled 'Adaptive Matchmaking', never the default", SELECTABLE_ROTATION_MODES.some((m) => m.value === "pointsAdaptive") && defaultState.rotationMode === "continuous");
   assert("   getRotationEngine('pointsAdaptive') is the new engine", getRotationEngine("pointsAdaptive") instanceof PointsAdaptiveMatchmakingEngine);
-  const done2b = done2;
-  r2 = done2b;
+  const sv = read("src/components/ScorerView.jsx");
+  assert("   the Scorer no longer offers 'Finish this round' (Round 1 hands over automatically); 'Start automatic matchmaking now' remains", !/Finish this round/.test(sv) && /Start automatic matchmaking now/.test(sv));
+  r2 = done1;
 }
+
 
 console.log("\nB0. Manual picker shows each player's previous result (W/L) for winner-vs-winner / loser-vs-loser Round 2");
 {
@@ -134,7 +133,7 @@ console.log("\nB. Organizer calibration");
   assert("   ...nor the same player twice in one match", !P.validateManualAssignment(s, 1, ["p9", "p9"], ["p10", "p11"]).ok);
   assert("8. incomplete assignments (1 or 3 players) are rejected", !P.validateManualAssignment(s, 1, ["p9"], ["p10", "p11"]).ok && !P.validateManualAssignment(s, 1, ["p9", "p10"], ["p11"]).ok);
   const cal = finishRound(runRound(gate(session(36)), Object.keys(session(36).players).slice(0, 12)));
-  assert("9. recording the three Round-1 results advances the session (Round 2)", cal.sessionPhase === "calibrationRound2");
+  assert("9. recording the three Round-1 results hands the session to the system (adaptive)", cal.sessionPhase === "adaptive");
   const undo = P.noteCalibrationMatchUnlocked(runRound(gate(session(36)), Object.keys(session(36).players).slice(0, 12)));
   assert("   unlocking a court gives the round its slot back and reopens the lock", undo.calibration.started === 2 && !undo.roundLock.locked);
   const force = P.forceAdvanceCalibration(gate(session(36)));
@@ -251,13 +250,12 @@ console.log("\nH. Cold start");
 {
   const s = session(36);
   const cal1 = finishRound(runRound(gate(s), Object.keys(s.players).slice(0, 12)));
-  assert("29. brand-new players with no Points (everyone at 1000) complete Round 1", cal1.sessionPhase === "calibrationRound2" && Object.values(cal1.players).filter((p) => p.games === 1).length === 12);
-  const cal2 = finishRound(runRound(cal1, Object.keys(cal1.players).slice(12, 24)));
-  assert("30. ...and Round 2, after which the system takes over", cal2.sessionPhase === "adaptive");
-  const pts = Object.values(cal2.players).filter((p) => p.games > 0).map((p) => p.rankingPoints);
+  assert("29. brand-new players with no Points (everyone at 1000) complete Round 1, after which the system takes over", cal1.sessionPhase === "adaptive" && Object.values(cal1.players).filter((p) => p.games === 1).length === 12);
+  const pts = Object.values(cal1.players).filter((p) => p.games > 0).map((p) => p.rankingPoints);
   assert("31. early results start separating relative strength (winners above 1000, losers below)", Math.max(...pts) > DEFAULT_RANKING_POINTS && Math.min(...pts) < DEFAULT_RANKING_POINTS);
-  const untouched = Object.values(cal2.players).filter((p) => p.games === 0);
-  assert("   ...while players who have not played yet stay at the 1000 baseline (provisional)", untouched.length === 12 && untouched.every((p) => p.rankingPoints === 1000 && p.rankingSource === "provisional"));
+  const untouched = Object.values(cal1.players).filter((p) => p.games === 0);
+  assert("   ...while the 24 players who have not played yet stay at the 1000 baseline (provisional) and are treated fairly (zero history handled)", untouched.length === 24 && untouched.every((p) => p.rankingPoints === 1000 && p.rankingSource === "provisional" && Number.isFinite(p.calibratedPoints ?? 1000)));
+
   const p1 = { a: mk("a", { games: 1 }), b: mk("b", { games: 1 }) };
   const one = applyProvisionalRankingDelta(p1, ["a"], ["b"]);
   assert("32. ONE result moves a provisional player only a little (±" + ratingKFor(p1.a) + " Points) — well inside the 100-Point neighbourhood, never a permanent verdict", one.a.rankingPoints === 1024 && one.b.rankingPoints === 976 && Math.abs(one.a.rankingPoints - 1000) < 100);
@@ -276,6 +274,42 @@ console.log("\nH. Cold start");
   const prov = applyProvisionalRankingDelta({ a: mk("a", { games: 5 }), b: mk("b", { games: 5 }) }, ["a"], ["b"]);
   assert("   after the provisional period it equals the Club Rating Engine's mirror exactly", std.a.rankingPoints === prov.a.rankingPoints && std.b.rankingPoints === prov.b.rankingPoints);
   assert("   the Points modes share the snapshot loader (RANKING_POINTS_MODES)", RANKING_POINTS_MODES.includes("pointsAdaptive") && /RANKING_POINTS_MODES\.includes\(state\.rotationMode\)/.test(read("src/PickleballOpenPlay.jsx")));
+}
+
+console.log("\nI. Organizer-controlled switch to automatic matchmaking (field report: session got stuck in Round 1)");
+{
+  // continuous manual play: courts are re-locked as they free up, so a newer match is always still running
+  let s = gate(session(24));
+  const ids = Object.keys(s.players);
+  for (let i = 0; i < 3; i++) s = gate(lock(s, i, ids.slice(i * 4, i * 4 + 4)).state);
+  assert("   3 courts locked -> Round 1 locked", s.roundLock.locked && s.calibration.target === 3 && s.sessionPhase === "calibrationRound1");
+  s = gate(end(s, 0));
+  s = gate(lock(s, 0, ids.slice(12, 16)).state);           // organizer immediately starts another manual match on the freed court
+  s = gate(end(s, 1));
+  s = gate(lock(s, 1, ids.slice(16, 20)).state);
+  assert("   organizer keeps courts busy: 4th and 5th manual matches are running while Round 1 is unfinished", s.courts.every((c) => c.status === "live") && s.sessionPhase === "calibrationRound1");
+  const mid = s; // Round 1 not finished, every court busy with manual matches
+  const live = mid.courts.map((c) => [c.status, ...c.teamA, ...c.teamB]);
+  s = gate(end(s, 2));
+  assert("I1. Round 1 completes when its 3 target matches have finished even though newer manual matches are still on court (previously stuck forever) -> automatic takeover", s.sessionPhase === "adaptive" && s.courts.filter((c) => c.status === "live").length === 2);
+  const auto = P.startAdaptiveNow(mid);
+  assert("I2. EARLY HANDOFF: the organizer can switch to automatic matchmaking at ANY time, even with manual matches on court", auto.sessionPhase === "adaptive" && P.isAdaptivePhase(auto) && P.rotationBanner(auto) === "ADAPTIVE MATCHMAKING ACTIVE");
+  assert("   live manual courts are untouched and keep playing", JSON.stringify(auto.courts.map((c) => [c.status, ...c.teamA, ...c.teamB])) === JSON.stringify(live));
+  const draftState = gate(session(12));
+  const withDraft = { ...draftState, courts: draftState.courts.map((c, i) => (i === 0 ? { ...c, teamA: ["p1", "p2"], teamB: ["p3"] } : c)) };
+  const handed = P.startAdaptiveNow(withDraft);
+  assert("   only incomplete manual DRAFT courts are released back to the system (draft cleared, court automatic)", handed.courts[0].assignmentMode === "automatic" && handed.courts[0].teamA.length === 0 && handed.courts[0].teamB.length === 0);
+  assert("   both ways of starting Adaptive Matchmaking end in the same state (phase, banner, automatic courts, queueing on)", s.sessionPhase === auto.sessionPhase && P.rotationBanner(s) === P.rotationBanner(auto) && handed.queueingStarted === true && handed.courts.every((c) => c.assignmentMode === "automatic"));
+
+  const fromR1 = P.startAdaptiveNow(gate(session(12)));
+  assert("I3. it also works straight from check-in / Round 1 (no calibration match needed) and hands open manual courts back to the system", fromR1.sessionPhase === "adaptive" && fromR1.courts.every((c) => c.assignmentMode === "automatic") && fromR1.queueingStarted === true);
+  const dispatched = (() => { const g = gate(fromR1); const refreshed = refreshNextMatchups(g.queueIds, g.players, [], getRotationEngine(g.rotationMode), null, 3, null, []); return dispatchAvailableCourts({ courts: g.courts, nextMatchups: refreshed, queueIds: g.queueIds, players: g.players, autoFillCourts: true }).dispatched.length; })();
+  assert("   ...and the system then fills the open courts automatically", dispatched === 3);
+  assert("I4. once adaptive it is a no-op (same object) — the switch cannot be pressed twice or move backwards", P.startAdaptiveNow(auto) === auto);
+  const app = read("src/PickleballOpenPlay.jsx"), sv = read("src/components/ScorerView.jsx");
+  assert("I5. the app and Scorer expose it: a 'Start automatic matchmaking now' button shown throughout calibration, enabled even while courts are live", /const startAdaptiveMatchmaking = \(\) =>/.test(app) && /Start automatic matchmaking now/.test(sv) && /data-testid="start-automatic"/.test(sv) && !/start-automatic[\s\S]{0,400}disabled/.test(sv));
+  const strength = P.startAdaptiveNow({ ...s, calibrationStrengthOrder: { 1: [2, 1, 3] } });
+  assert("   the strength order is kept (and frozen) through the manual switch", strength.calibrationStrengthOrder[1].join() === "2,1,3" && strength.sessionPhase === "adaptive");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
