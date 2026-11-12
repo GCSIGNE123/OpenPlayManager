@@ -91,12 +91,29 @@ export function resetCourtForNextMatch(court) {
 // rotation setting on load, and would require touching every rotation
 // engine call site for a purely cosmetic rename. See PROJECT.md's Session
 // Type Architecture section for the full reasoning.
+//
+// Labels are ORGANIZER-facing names (what an organizer picks at Create
+// Session and what the Scorer tab / Session Report / TV Mode display). The
+// stored `value`s are unchanged — every rotation engine, verify script, and
+// already-stored session record keys off `value`, never the label.
+// `recommended: true` marks the mode Create Session preselects and tags
+// "— Recommended" in its dropdown (see DEFAULT_ROTATION_MODE below); it is
+// listed first so the default is also the first option an organizer sees.
 export const ROTATION_MODES = [
-  { value: "continuous", label: "Continuous queue" },
-  { value: "winnerPool", label: "Winner Pool Rotation" },
-  { value: "progressiveSkill", label: "Progressive Skill Rotation" },
-  { value: "adaptiveSkill", label: "Adaptive Skill Rotation" },
+  { value: "adaptiveSkill", label: "Skill Divisions (Beginner / Intermediate)", recommended: true },
+  { value: "continuous", label: "Continuous Queue (mixed levels)" },
+  { value: "winnerPool", label: "Winner Pool Rotation (paired courts)" },
+  { value: "progressiveSkill", label: "Progressive Skill Rotation (mixed → separated)" },
 ];
+
+// The rotation a brand-new Open Play session starts with unless the
+// organizer picks something else at Create Session — the single source of
+// truth for defaultState.rotationMode and CreateSessionScreen's preselected
+// option. Skill Divisions (Adaptive Skill Rotation): players only ever face
+// their own skill division, longest-waiting/fewest-games players go first,
+// automatic promotion/relegation — the mode real sessions asked for by
+// default. Experimental modes below are never the default.
+export const DEFAULT_ROTATION_MODE = "adaptiveSkill";
 
 // Adaptive Ranking Rotation (engines/AdaptiveRankingRotationEngine.js) —
 // registered in lib/utils.js's getRotationEngine under this value, but
@@ -105,9 +122,12 @@ export const ROTATION_MODES = [
 // (not the default, not selectable) until it has passed a real-session
 // shadow test. Moving this entry into ROTATION_MODES is the one-line switch
 // that would expose it.
+// `experimental: true` is what Create Session's dropdown reads to render
+// these under their own "Experimental (opt-in)" group, visually separated
+// from the four standard modes above — nothing else reads the flag.
 export const EXPERIMENTAL_ROTATION_MODES = [
-  { value: "adaptiveRanking", label: "Adaptive Ranking Rotation (experimental)" },
-  { value: "pointsAdaptive", label: "Adaptive Matchmaking (Points-based, organizer calibration)" },
+  { value: "adaptiveRanking", label: "Adaptive Ranking Rotation (experimental)", experimental: true },
+  { value: "pointsAdaptive", label: "Adaptive Matchmaking (Points-based, organizer calibration)", experimental: true },
 ];
 
 // Modes whose engine reads the session PickleKing Points snapshot
@@ -127,9 +147,18 @@ export function rotationModeLabelFor(value) {
   return SELECTABLE_ROTATION_MODES.find((m) => m.value === value)?.label || value;
 }
 
-// One-line organizer explanations shown under the Rotation selector.
+// One-line organizer explanations shown under the Rotation selector — plain
+// "what happens on court / use this when" language, one entry per
+// selectable mode so the hint always renders whichever option is picked.
 export const ROTATION_MODE_DESCRIPTIONS = {
-  adaptiveSkill: "Balances players by skill division, games played, and wait time.",
+  adaptiveSkill:
+    "Beginners only play Beginners, Intermediates only play Intermediates (separate skill divisions). Whoever has waited longest and played fewest games goes on court next; 3 straight wins promotes a player, 3 straight losses relegates. Use this when players want level games and an equal share of court time.",
+  continuous:
+    "One shared queue for everyone, mixed skill levels, balanced teams. Use this for casual social play where mixing Beginners and Intermediates on the same court is fine.",
+  winnerPool:
+    "Courts work in pairs (1 & 2, 3 & 4 …). When both courts finish, the two winning teams meet on the lower court and the two losing teams on the higher court. Teams always mix one Beginner with one Intermediate. Use this for a king-of-the-court feel with an even number of courts.",
+  progressiveSkill:
+    "Starts everyone mixed together (mentorship), then gradually separates Beginners from Intermediates as the session progresses. Use this for clinics or sessions that begin social and end competitive.",
   adaptiveRanking: "Matches players within nearby Open Play Points while balancing recent play and wait time.",
   pointsAdaptive: "Organizer builds Rounds 1 and 2 by hand; from Round 3 the system matches players from ONE waiting pool by Open Play Points, fairness (rest, wait, games) and variety — no Beginner/Intermediate split.",
 };
@@ -250,7 +279,7 @@ export const defaultState = {
   // any tournament session created via "Start From Scratch".
   pendingTournamentTemplate: null,
   sessionStartedAt: null, // Session Analytics Engine — set once at session creation (startSession), never touched again; the Session Summary's Duration is computed from this vs. the report's generatedAt
-  rotationMode: "continuous", // see ROTATION_MODES — Open Play only; labeled "Rotation Strategy" in the UI
+  rotationMode: DEFAULT_ROTATION_MODE, // see ROTATION_MODES / DEFAULT_ROTATION_MODE — Open Play only; labeled "Rotation Strategy" in the UI. Skill Divisions (adaptiveSkill) since 2026-11-12; was "continuous" before that — already-stored sessions keep whatever they were created with
   expectedGamesPerPlayer: 6, // Open Play only — organizer-configurable, drives Progressive Skill Rotation's session-progress/phase calc, see lib/progressiveSkillPhase.js
   progressiveSkillThresholds: { mentorshipMax: 30, transitionMax: 60 }, // Progressive Skill Rotation only — organizer-configurable phase boundaries (%), see lib/progressiveSkillPhase.js
   adaptiveSkillThresholds: { promotionWins: 3, relegationLosses: 3 }, // Adaptive Skill Rotation only — organizer-configurable consecutive win/loss counts that trigger automatic promotion/relegation, see PickleballOpenPlay.jsx's endMatch

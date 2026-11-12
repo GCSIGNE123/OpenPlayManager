@@ -183,7 +183,7 @@ export default function SessionSettingsDialog({
 
         {showAdaptiveThresholds && (
           <div style={styles.dialogField}>
-            <label style={styles.dialogLabel}>Adaptive Skill Rotation thresholds</label>
+            <label style={styles.dialogLabel}>Skill Divisions — promotion / relegation thresholds</label>
             <div style={styles.dialogThresholdRow}>
               <label style={styles.settingsField}>
                 Promote after (consecutive wins)

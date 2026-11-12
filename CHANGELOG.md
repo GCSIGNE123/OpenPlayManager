@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-11-12
+
+### Changed
+- **Skill Divisions is the default rotation for new Open Play sessions** — `defaultState.rotationMode` is now `adaptiveSkill` (new `DEFAULT_ROTATION_MODE` constant, `lib/constants.js`), and Create Session preselects it. Already-stored sessions keep whatever rotation they were created with; no engine, scoring, fairness, dispatch, or queue logic changed.
+- **Plain-language rotation names** — Create Session, the Scorer tab's Rotation Mode row, Session Reports and TV Mode now show organizer-facing labels: "Skill Divisions (Beginner / Intermediate)" (was "Adaptive Skill Rotation"), "Continuous Queue (mixed levels)", "Winner Pool Rotation (paired courts)", "Progressive Skill Rotation (mixed → separated)". Stored `rotationMode` values are unchanged (`adaptiveSkill`, `continuous`, `winnerPool`, `progressiveSkill`), so every engine, verify script and existing session record is unaffected. Session Settings' threshold label follows suit ("Skill Divisions — promotion / relegation thresholds").
+- **Every rotation mode now has a one-line "what happens on court / use this when" explanation** under the Create Session selector (`ROTATION_MODE_DESCRIPTIONS` gained `continuous`, `winnerPool`, `progressiveSkill` entries; the hint previously rendered for only three of the six modes).
+- **Experimental modes are visually separated** — Create Session's dropdown lists the four standard modes first (the recommended one tagged "— Recommended") and puts Adaptive Ranking Rotation / Adaptive Matchmaking (Points-based) under their own "Experimental (opt-in)" group, via a new `experimental: true` flag on `EXPERIMENTAL_ROTATION_MODES`. Both remain selectable exactly as before.
+- Regression scripts that asserted the old default (`verify-rotation-engine-selection.mjs`, `verify-points-adaptive-matchmaking.mjs`, `verify-adaptive-ranking-rotation.mjs`) now assert the new one; full suite green.
+- `.gitignore` now covers `.scratch_vercel/` and `supabase/.temp/` (local tooling output, never source).
+
 ## 2026-08-10
 
 ### Added

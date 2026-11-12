@@ -24,6 +24,15 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-12 — Skill Divisions is the default rotation; plain-language
+  mode names** — Adaptive Skill Rotation (now labelled "Skill Divisions
+  (Beginner / Intermediate)") is what a new Open Play session starts with,
+  every mode has a one-line "use this when" explanation, and the two
+  experimental modes sit under their own opt-in group in Create Session.
+  Defaults and labels only — no Stable algorithm touched. First step of the
+  Nov 2026 direction: level matchups, winners-vs-winners courts inside each
+  division (next: Result Grouping), equal games and waiting time for
+  everyone (next: Live Fairness panel). See `FEATURES.md`.
 - **2026-08-10 — Latecomer Priority + Undo (Adaptive Skill Rotation)** — a
   facilitator-control override layer around the existing `nextMatchups`
   system, explicitly not a change to `AdaptiveSkillRotationEngine` itself

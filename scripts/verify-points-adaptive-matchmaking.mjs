@@ -108,7 +108,7 @@ let r2;
   assert("5. the phase persists through a save/load JSON round trip", (() => { const rt = JSON.parse(JSON.stringify(done2)); return rt.sessionPhase === "adaptive" && rt.calibration && P.currentPhase(rt) === "adaptive"; })());
   const rt1 = JSON.parse(JSON.stringify(r1));
   assert("   ...including the calibration round bookkeeping and lock", rt1.calibration.started === 3 && rt1.roundLock.locked === true);
-  assert("   the mode is selectable, labelled 'Adaptive Matchmaking', never the default", SELECTABLE_ROTATION_MODES.some((m) => m.value === "pointsAdaptive") && defaultState.rotationMode === "continuous");
+  assert("   the mode is selectable, labelled 'Adaptive Matchmaking', never the default", SELECTABLE_ROTATION_MODES.some((m) => m.value === "pointsAdaptive") && defaultState.rotationMode !== "pointsAdaptive" && defaultState.rotationMode === "adaptiveSkill");
   assert("   getRotationEngine('pointsAdaptive') is the new engine", getRotationEngine("pointsAdaptive") instanceof PointsAdaptiveMatchmakingEngine);
   const done2b = done2;
   r2 = done2b;
