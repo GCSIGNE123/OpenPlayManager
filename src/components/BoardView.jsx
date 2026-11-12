@@ -1,7 +1,10 @@
 import { Info } from "lucide-react";
 import { styles } from "../styles.js";
 import { shouldUseRandomFirstRound } from "../engines/ProgressiveSkillRotationStrategy.js";
+import { computePodium } from "../lib/podium.js";
+import { useNow } from "../lib/useNow.js";
 import CourtCard from "./CourtCard.jsx";
+import PodiumPanel from "./PodiumPanel.jsx";
 import QueueList from "./QueueList.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -19,8 +22,13 @@ function showsRandomFirstRoundNotice(state) {
 }
 
 export default function BoardView({ state }) {
+  // Running Podium — see lib/podium.js — sits above the courts on the
+  // public Live Board so spectators and players see it first.
+  const now = useNow(30000);
+  const podium = computePodium(state, now);
   return (
     <div>
+      <PodiumPanel podium={podium} />
       {showsRandomFirstRoundNotice(state) && (
         <div style={styles.infoBanner}>
           <Info size={15} strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 1 }} />

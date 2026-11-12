@@ -4,6 +4,9 @@ import { STORAGE_PREFIX } from "../lib/constants.js";
 import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { fetchVenue } from "../lib/venueModel.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
+import { computePodium } from "../lib/podium.js";
+import MedalIcon from "./MedalIcon.jsx";
+import PodiumPanel from "./PodiumPanel.jsx";
 import { APP_NAME } from "../lib/brand.js";
 import { courtDisplayName } from "../lib/utils.js";
 import { tvStyles as ts, tvKeyframes, courtGridDimensions, courtSizeTier, upNextSizeTier, TV_LAYOUT_PRESETS } from "../tvOpenPlayStyles.js";
@@ -312,12 +315,16 @@ function UpNextColumn({ nextMatchups, players, courts }) {
 // Mode Scoreboard Redesign sized everything up (avatar 30->40px, every
 // font size increased) for a cleaner, more readable-from-a-distance
 // scoreboard feel — visual only, unrelated to which columns are shown.
-const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
-
-function StandingsColumn({ players }) {
+// Running Podium (see lib/podium.js) sits at the top of this column —
+// `now` is the page's own 1-second clock, so the countdown stays live.
+// Medals are the hand-drawn MedalIcon rather than emoji (which render
+// differently on every TV and can't be styled).
+function StandingsColumn({ players, session, now }) {
   const rows = buildStandingsRows(players);
+  const podium = computePodium(session, now instanceof Date ? now.getTime() : now);
   return (
     <div style={ts.column}>
+      <PodiumPanel podium={podium} dark />
       <h2 style={ts.columnTitle}>Standings</h2>
       {rows.length === 0 ? (
         <EmptyState title="Standings" body="Standings will appear after the first completed match." />
@@ -338,7 +345,7 @@ function StandingsColumn({ players }) {
               const rtg = row.performance.rating ?? "—";
               return (
                 <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
-                  <span style={ts.standingsRank}>{MEDALS[rank] ?? rank}</span>
+                  <span style={ts.standingsRank}>{rank <= 3 ? <MedalIcon rank={rank} size={20} title={`${rank}`} /> : rank}</span>
                   <div style={ts.standingsPhotoRing(rank)}>
                     <Avatar player={row} size={40} />
                   </div>
@@ -496,7 +503,7 @@ export default function OpenPlayTVModePage({ sessionCode, onExit }) {
       <div style={ts.body(TV_LAYOUT_PRESETS.standard)}>
         <LiveCourtsColumn courts={session.courts} players={session.players} />
         <UpNextColumn nextMatchups={session.nextMatchups} players={session.players} courts={session.courts} />
-        <StandingsColumn players={session.players} />
+        <StandingsColumn players={session.players} session={session} now={now} />
       </div>
       <div style={ts.footer} />
     </div>

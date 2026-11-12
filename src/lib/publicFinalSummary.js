@@ -23,6 +23,7 @@
 // object.
 import { PUBLIC_FINAL_PREFIX } from "./constants.js";
 import { buildStandingsRows } from "./performanceRating.js";
+import { finalPodium, publicPodium } from "./podium.js";
 import { RoundRobinStandingsService } from "../engines/RoundRobinStandingsService.js";
 import { fetchTournament } from "./tournamentModel.js";
 
@@ -48,6 +49,10 @@ export function buildOpenPlayFinalSummary(state, { sessionCode = null, endedAt =
     endedAt,
     playerCount: Object.values(players).filter((p) => p.checkedIn).length,
     matchCount: arr(state?.matchHistory).length,
+    // Final podium (lib/podium.js) — display names + results only, same
+    // allow-list discipline as `standings` above. Additive: a viewer that
+    // predates this field simply ignores it.
+    podium: publicPodium(finalPodium(state)),
     standings,
   };
 }
