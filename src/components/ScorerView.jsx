@@ -746,6 +746,8 @@ export default function ScorerView({
           matchmakingPriority={matchmakingPriority}
           resultGrouping={state.resultGrouping}
           showResultGrouping={rotationMode === "adaptiveSkill"}
+          podiumUnlockMinutes={state.podiumUnlockMinutes}
+          podiumMinGames={state.podiumMinGames}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

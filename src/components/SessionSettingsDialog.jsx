@@ -30,6 +30,8 @@ export default function SessionSettingsDialog({
   matchmakingPriority,
   resultGrouping,
   showResultGrouping,
+  podiumUnlockMinutes,
+  podiumMinGames,
   onSave,
   onClose,
 }) {
@@ -65,6 +67,10 @@ export default function SessionSettingsDialog({
   // Result Grouping — Skill Divisions only (see RESULT_GROUPING_OPTIONS).
   // A session saved before the field existed shows as "off" here, which is
   // exactly how the engine already treats a missing value.
+  // Running Podium — see lib/podium.js. Rotation-mode-agnostic, always shown.
+  const [podiumUnlockDraft, setPodiumUnlockDraft] = useState(podiumUnlockMinutes ?? 60);
+  const [podiumMinGamesDraft, setPodiumMinGamesDraft] = useState(podiumMinGames ?? 2);
+
   const [resultGroupingDraft, setResultGroupingDraft] = useState(RESULT_GROUPING_OPTIONS.some((o) => o.value === resultGrouping) ? resultGrouping : "off");
 
   // Voice list — window.speechSynthesis.getVoices() is frequently empty
@@ -117,6 +123,8 @@ export default function SessionSettingsDialog({
         repeatIntervalMinutes: Math.max(1, Number(heldRepeatIntervalDraft) || 10),
       },
       matchmakingPriority: matchmakingPriorityDraft || null,
+      podiumUnlockMinutes: Math.max(1, Number(podiumUnlockDraft) || 60),
+      podiumMinGames: Math.max(1, Number(podiumMinGamesDraft) || 2),
       // only written for Skill Divisions sessions — other modes keep whatever
       // value the session already had (the engine ignores it anyway)
       ...(showResultGrouping ? { resultGrouping: resultGroupingDraft } : {}),
@@ -279,6 +287,37 @@ export default function SessionSettingsDialog({
             <p style={styles.editHint}>{RESULT_GROUPING_OPTIONS.find((o) => o.value === resultGroupingDraft)?.description}</p>
           </div>
         )}
+
+        <div style={styles.dialogField}>
+          <label style={styles.dialogLabel}>Running Podium</label>
+          <p style={styles.dialogReadOnlyValue}>
+            Champion, Runner-up and 3rd Place appear on the Live Board, Standings, TV Mode and the spectator page once the session has run this long, and update after every result. Players who check out keep their place (tagged "out").
+          </p>
+          <div style={styles.dialogThresholdRow}>
+            <label style={styles.settingsField}>
+              Unlock after (minutes of play)
+              <input
+                type="number"
+                min={1}
+                style={styles.expectedGamesInput}
+                value={podiumUnlockDraft}
+                onChange={(e) => setPodiumUnlockDraft(e.target.value)}
+                aria-label="Podium unlock minutes"
+              />
+            </label>
+            <label style={styles.settingsField}>
+              Minimum games to qualify
+              <input
+                type="number"
+                min={1}
+                style={styles.expectedGamesInput}
+                value={podiumMinGamesDraft}
+                onChange={(e) => setPodiumMinGamesDraft(e.target.value)}
+                aria-label="Podium minimum games"
+              />
+            </label>
+          </div>
+        </div>
 
         <div style={styles.dialogField}>
           <label style={styles.dialogLabel}>Matchmaking Priority</label>

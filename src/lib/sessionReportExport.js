@@ -42,6 +42,9 @@ export function buildSessionReportExportTable(report) {
     );
   }
   rows.push(["Session Grade", `${grade.score} / 100 (${grade.label})`]);
+  for (const p of report.finalPodium || []) {
+    rows.push([`Podium: ${p.label}`, `${p.name} — ${p.wins}-${p.losses} (${Math.round((p.winPct || 0) * 100)}%, ${p.games} games)${p.out ? " — checked out early" : ""}`]);
+  }
   playersNeedingAttention.forEach((p) => {
     rows.push([`Player Needing Attention: ${p.playerName}`, p.reasons.join("; ")]);
   });

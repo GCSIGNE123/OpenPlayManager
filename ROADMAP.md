@@ -27,6 +27,12 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-12 — Running Podium** — Champion / Runner-up / 3rd Place with
+  hand-drawn medals on the Live Board, Standings, TV Mode and the session
+  report; unlocks 60 min into play (configurable), orders exactly like the
+  Standings table, 2-game minimum, early leavers keep their place. The
+  public final summary now carries the podium for the spectator page
+  (Player app follow-up). See `FEATURES.md`.
 - **2026-11-12 — Result Grouping (winners' / losers' courts inside each
   skill division)** — Off / Prefer (default) / Strict, a third tier inside
   Skill Divisions' existing fairness window: a pure same-result quartet may

@@ -320,6 +320,8 @@ export const defaultState = {
     voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
     announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
   },
+  podiumUnlockMinutes: 60, // Running Podium — minutes of play (from sessionStartedAt) before Champion / Runner-up / 3rd appear on the Live Board, Standings, TV Mode and the spectator page; see lib/podium.js
+  podiumMinGames: 2, // Running Podium — completed games a player needs before they can stand on the podium (keeps a 1-0 latecomer off the top spot); see lib/podium.js
   resultGrouping: DEFAULT_RESULT_GROUPING, // Result Grouping (Skill Divisions only) — see RESULT_GROUPING_OPTIONS above. "prefer" for every new session; sessions created before this field existed have no value and run as "off"
   matchmakingPriority: null, // Session Matchmaking Priority — see MATCHMAKING_PRIORITIES above. null = no explicit priority (existing behavior, unaffected)
   queueingStopped: false, // Stop Queueing — see PROJECT.md/FEATURES.md. While true: save() skips generating any NEW matchups and skips automatic dispatch; existing live matches and existing nextMatchups entries are completely unaffected, and the facilitator can still manually dispatch (Assign match / Fill all open courts) from whatever's already queued. Resume Queueing (flip back to false) restores normal automatic behavior instantly, next save().
