@@ -10,7 +10,7 @@ import {
   disambiguateDuplicateNames,
   savePlayerRecord,
 } from "../lib/playerDatabase.js";
-import { ROTATION_MODE_DESCRIPTIONS } from "../lib/constants.js";
+import { DEFAULT_ROTATION_MODE, ROTATION_MODE_DESCRIPTIONS } from "../lib/constants.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { uploadPlayerPhoto } from "../lib/photoStorage.js";
@@ -43,7 +43,13 @@ export default function CreateSessionScreen({
   const [venue, setVenue] = useState("Ormoc City Pickleball — Open Play");
   const [courts, setCourts] = useState(4);
   const [sessionType, setSessionType] = useState(sessionTypes?.[0]?.value ?? "openPlay");
-  const [rotationMode, setRotationMode] = useState(rotationModes?.[0]?.value ?? "continuous");
+  // Preselect DEFAULT_ROTATION_MODE (Skill Divisions) whenever the offered
+  // list contains it, regardless of list order; otherwise the first option.
+  const [rotationMode, setRotationMode] = useState(
+    rotationModes?.some((m) => m.value === DEFAULT_ROTATION_MODE)
+      ? DEFAULT_ROTATION_MODE
+      : rotationModes?.[0]?.value ?? DEFAULT_ROTATION_MODE
+  );
   const [tournamentFormat, setTournamentFormat] = useState(tournamentFormats?.[0]?.value ?? "roundRobin");
   // Expected Playing Opportunities — see PROJECT.md. Session Duration is
   // the organizer-facing input now; expectedGamesPerPlayer itself is
@@ -291,16 +297,35 @@ export default function CreateSessionScreen({
       {sessionType !== "tournament" && rotationModes && rotationModes.length > 0 && (
         <>
           <SectionLabel>4. Rotation strategy</SectionLabel>
+          {/* Standard modes first (recommended one tagged), experimental
+              modes in their own labelled group so an organizer can't pick
+              one by accident — see EXPERIMENTAL_ROTATION_MODES in
+              lib/constants.js. Option text only: the stored value and the
+              label shown in Scorer/reports are untouched. */}
           <select
             style={styles.rotationSelect}
             value={rotationMode}
             onChange={(e) => setRotationMode(e.target.value)}
           >
-            {rotationModes.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
+            {rotationModes
+              .filter((m) => !m.experimental)
+              .map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                  {m.recommended ? " — Recommended" : ""}
+                </option>
+              ))}
+            {rotationModes.some((m) => m.experimental) && (
+              <optgroup label="Experimental (opt-in)">
+                {rotationModes
+                  .filter((m) => m.experimental)
+                  .map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
           </select>
           {ROTATION_MODE_DESCRIPTIONS[rotationMode] && (
             <p style={styles.editHint}>
