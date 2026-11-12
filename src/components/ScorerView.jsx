@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Megaphone, Minus, Pause, Play, Plus, RefreshCw, Settings, Shuffle, Undo2, Wand2, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { MATCHMAKING_PRIORITIES, rotationModeLabelFor } from "../lib/constants.js";
+import { MATCHMAKING_PRIORITIES, rotationModeLabelFor, RESULT_GROUPING_OPTIONS } from "../lib/constants.js";
 import CalibrationStrengthOrder from "./CalibrationStrengthOrder.jsx";
 import { currentRoundNumber, isCalibrationPhase, phaseLabel, rotationBanner, roundLockStatus, usesPhases } from "../lib/openPlayPhases.js";
 import { reservedMatchupIds, buildReplacementCandidates, manuallyReservedIds, countInCourtPlayers } from "../lib/utils.js";
@@ -251,6 +251,13 @@ export default function ScorerView({
   const matchmakingPriorityLabel = state.matchmakingPriority
     ? MATCHMAKING_PRIORITIES.find((p) => p.value === state.matchmakingPriority)?.label || state.matchmakingPriority
     : null;
+  // Result Grouping indicator — Skill Divisions only, same visibility
+  // rationale as the Matchmaking Priority indicator above. Shows the short
+  // label ("Prefer…"/"Strict…"); a missing/"off" value shows nothing.
+  const resultGroupingLabel =
+    rotationMode === "adaptiveSkill" && state.resultGrouping && state.resultGrouping !== "off"
+      ? RESULT_GROUPING_OPTIONS.find((o) => o.value === state.resultGrouping)?.label?.replace(" (recommended)", "") || state.resultGrouping
+      : null;
   const totalPlayers = Object.keys(state.players || {}).length;
   // matches matchHistory's own round numbering (see endMatch: `round:
   // (state.matchHistory || []).length + 1`) — the round the next completed
@@ -276,6 +283,14 @@ export default function ScorerView({
           <span style={styles.sessionInfoLabel}>Rotation Mode</span>
           <span style={styles.sessionInfoValue}>{rotationModeLabel}</span>
         </div>
+        {resultGroupingLabel && (
+          <div style={styles.sessionInfoItem}>
+            <span style={styles.sessionInfoLabel}>Result Grouping</span>
+            <span style={styles.sessionInfoValue} title="Winners' / losers' courts inside each skill division — set in Session Settings">
+              {resultGroupingLabel}
+            </span>
+          </div>
+        )}
         {matchmakingPriorityLabel && (
           <div style={styles.sessionInfoItem}>
             <span style={styles.sessionInfoLabel}>Priority</span>
@@ -729,6 +744,8 @@ export default function ScorerView({
           courtDispatchSettings={courtDispatchSettings}
           heldPlayerReminderSettings={state.heldPlayerReminderSettings}
           matchmakingPriority={matchmakingPriority}
+          resultGrouping={state.resultGrouping}
+          showResultGrouping={rotationMode === "adaptiveSkill"}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />

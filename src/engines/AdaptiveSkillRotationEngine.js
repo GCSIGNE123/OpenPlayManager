@@ -117,6 +117,79 @@ export const REST_GUARD_GAP_MINUTES = 8;
 // documented, not unlimited search for a "better" matchup.
 export const LOOKAHEAD_MAX_UNITS = 6;
 
+// ---------------------------------------------------------------------
+// RESULT GROUPING (winners' court / losers' court) — Skill Divisions only.
+// Organizer request (Nov 2026): inside each division, players coming off a
+// win should play other winners next, and players coming off a loss other
+// losers — at the COURT level (4 winners together), not just as the
+// existing Winner-vs-Winner split preference inside an already-chosen 4.
+//
+// Built as a third tier INSIDE Stage 1's existing bounded window, never
+// outside it — "fairness first, competition second" is unchanged:
+//   - the front-of-stack unit is still mandatory (the single longest-waiting
+//     player in a division is never skipped);
+//   - the hard rest guard (REST_GUARD_*) still filters candidates first;
+//   - among the guard-compliant candidates, a PURE quartet (4 winners, or
+//     4 losers — resultMixPenalty 0; players with no result yet are
+//     neutral) may now displace the strict front-of-window group when that
+//     group is mixed. A merely "less mixed" quartet (3+1 instead of 2+2)
+//     never does: it isn't a winners' court either, so people aren't
+//     shuffled for a partial gain. In "prefer" mode the displacement is
+//     also only allowed when it skips nobody who has waited
+//     GROUPING_SKIP_WAIT_GAP_MINUTES+ longer, or played
+//     GROUPING_SKIP_GAMES_GAP+ fewer games, than someone it brings in
+//     (satisfiesGroupingSkipGuard). "strict" drops that extra skip guard
+//     (rest guard + front protection remain). "off" is exactly the
+//     pre-feature behaviour.
+// Players with no result yet (first match this session) are neutral: they
+// mix with either group without penalty. Stage 2 (who partners/faces whom
+// within the 4) is completely untouched — its Winner-vs-Winner bonus
+// (WINNER_MATCH_BONUS) still decides the split exactly as before.
+// ---------------------------------------------------------------------
+export const RESULT_GROUPING_MODES = ["off", "prefer", "strict"];
+export const GROUPING_SKIP_WAIT_GAP_MINUTES = 8; // same scale as REST_GUARD_GAP_MINUTES, deliberately a separate knob
+export const GROUPING_SKIP_GAMES_GAP = 2;
+
+// Anything that isn't a known mode (undefined on sessions saved before this
+// field existed, a typo, null) means "off" — an already-running session
+// never changes behaviour just because the app was redeployed.
+export function normalizeResultGrouping(value) {
+  return RESULT_GROUPING_MODES.includes(value) ? value : "off";
+}
+
+// How many result-mismatched players a quartet forces together: the size of
+// the smaller of its "last result = win" / "last result = loss" groups.
+// 0 = a pure winners' or losers' court (players with no result yet don't
+// count either way); 2 = an even 2W+2L mix; 1 = a 3+1 mix.
+export function resultMixPenalty(ids, players) {
+  let wins = 0;
+  let losses = 0;
+  for (const id of ids) {
+    const r = players[id]?.lastResult;
+    if (r === "win") wins++;
+    else if (r === "loss") losses++;
+  }
+  return Math.min(wins, losses);
+}
+
+// Descriptive label for a quartet's result make-up (UI only — see
+// describeFairness): "winners" / "losers" when every player WITH a result
+// shares it (and at least one has a result), "fresh" when nobody has a
+// result yet, otherwise "mixed".
+export function describeResultGroup(ids, players) {
+  let wins = 0;
+  let losses = 0;
+  for (const id of ids) {
+    const r = players[id]?.lastResult;
+    if (r === "win") wins++;
+    else if (r === "loss") losses++;
+  }
+  if (wins === 0 && losses === 0) return "fresh";
+  if (losses === 0) return "winners";
+  if (wins === 0) return "losers";
+  return "mixed";
+}
+
 // Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Beginners only ever
 // play Beginners, Intermediates only ever play Intermediates — this engine
 // never builds a mixed-skill team. Do NOT replace or duplicate the existing
@@ -157,6 +230,10 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // games-first-ranked one.
   generateMatchups(context) {
     const { waitingIds, players, existingMatchups, recentMatchups = null } = context;
+    // Result Grouping — see the header comment. Read once per call from the
+    // session setting (state.resultGrouping, forwarded by refreshNextMatchups'
+    // extraContext); anything unrecognised is "off".
+    const resultGrouping = normalizeResultGrouping(context.resultGrouping);
     const reserved = new Set((existingMatchups || []).flatMap((m) => [...m.teamA, ...m.teamB]));
     const pool = waitingIds.filter((id) => !reserved.has(id) && players[id]);
 
@@ -169,8 +246,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     // spanning Beginner and Intermediate is never force-paired — Adaptive
     // Skill Rotation's Beginner/Intermediate separation is structurally
     // untouched by this option.
-    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players, recentMatchups);
-    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players, recentMatchups);
+    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players, recentMatchups, resultGrouping);
+    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players, recentMatchups, resultGrouping);
 
     const merged = [...beginnerMatchups, ...intermediateMatchups].map((m) => {
       const ids = [...m.teamA, ...m.teamB];
@@ -215,8 +292,8 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // Adaptive Skill Rotation ONLY; BalancedRotationEngine itself is
   // untouched, so every other rotation mode still goes through its
   // original buildTeams/pairLeftovers path exactly as before.
-  generateDivisionMatchups(pool, players, recentMatchups = null) {
-    const { groups, groupNotes } = this.selectFairnessGroups(pool, players);
+  generateDivisionMatchups(pool, players, recentMatchups = null, resultGrouping = "off") {
+    const { groups, groupNotes } = this.selectFairnessGroups(pool, players, resultGrouping);
 
     const matchups = [];
     groups.forEach((quartet, i) => {
@@ -314,7 +391,7 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // — never modified) are treated as a single 2-player "unit" that always
   // moves through the stack together, so a partner request can never be
   // split across two different groups by the fairness ordering.
-  selectFairnessGroups(pool, players) {
+  selectFairnessGroups(pool, players, resultGrouping = "off") {
     const { teams: fixedPairs, remaining: soloIds } = this.divisionEngine.extractFixedPartnerTeams(pool, players);
     const now = Date.now();
 
@@ -342,12 +419,12 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
 
     while (stack.reduce((n, u) => n + u.ids.length, 0) >= 4) {
       const window = stack.slice(0, 1 + LOOKAHEAD_MAX_UNITS);
-      const { quartetUnitIndexes, usedLookahead, guardRelaxed } = this.selectQuartetFromWindow(window, players, now);
+      const { quartetUnitIndexes, usedLookahead, guardRelaxed, usedResultGrouping } = this.selectQuartetFromWindow(window, players, now, resultGrouping);
       if (!quartetUnitIndexes) break; // window can't assemble a full 4 (e.g. a single leftover unit of 2) — stop, leave it waiting
       const chosenUnits = quartetUnitIndexes.map((i) => window[i]);
       const quartet = chosenUnits.flatMap((u) => u.ids);
       groups.push(quartet);
-      groupNotes.push({ usedLookahead, guardRelaxed });
+      groupNotes.push({ usedLookahead, guardRelaxed, usedResultGrouping, resultGrouping });
       const chosenSet = new Set(quartetUnitIndexes.map((i) => window[i]));
       stack = stack.filter((u) => !chosenSet.has(u));
     }
@@ -373,7 +450,7 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // dropped and the strict front-of-window combination is used instead —
   // "the guard should gracefully relax only when there are not enough
   // eligible alternatives," never the other way around.
-  selectQuartetFromWindow(window, players, now) {
+  selectQuartetFromWindow(window, players, now, resultGrouping = "off") {
     if (window.length === 0) return { quartetUnitIndexes: null };
     const totalIds = window.reduce((n, u) => n + u.ids.length, 0);
     if (totalIds < 4) return { quartetUnitIndexes: null };
@@ -400,13 +477,61 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     const guardCompliant = candidates.filter((c) => this.satisfiesRestGuard(c.quartetUnitIndexes, window, players, now));
     const pool = guardCompliant.length > 0 ? guardCompliant : candidates;
     pool.sort((a, b) => a.indexSum - b.indexSum);
-    const chosen = pool[0];
+    let chosen = pool[0];
+    let usedResultGrouping = false;
+
+    // Result Grouping tier — see the RESULT GROUPING header comment. Only
+    // ever picks from `pool` (already rest-guard-filtered, front unit always
+    // included), so it can never reach past the rest guard or skip the
+    // longest-waiting player. It may displace the strict front-of-window
+    // choice only with a PURE quartet (all winners or all losers), and (in
+    // "prefer") only when that skips nobody who's clearly ahead on wait or
+    // games. Ties among pure candidates go to the one closest to the front.
+    const grouping = normalizeResultGrouping(resultGrouping);
+    if (grouping !== "off" && pool.length > 1) {
+      const penaltyOf = (c) => resultMixPenalty(c.quartetUnitIndexes.flatMap((i) => window[i].ids), players);
+      if (penaltyOf(chosen) > 0) {
+        const pure = pool
+          .filter((c) => c !== chosen && penaltyOf(c) === 0)
+          .filter((c) => grouping === "strict" || this.satisfiesGroupingSkipGuard(c.quartetUnitIndexes, window))
+          .sort((a, b) => a.indexSum - b.indexSum);
+        if (pure.length > 0) {
+          chosen = pure[0];
+          usedResultGrouping = true;
+        }
+      }
+    }
+
     const strictFront = window.length >= 4 ? [0, 1, 2, 3].every((i) => chosen.quartetUnitIndexes.includes(i)) : false;
     return {
       quartetUnitIndexes: chosen.quartetUnitIndexes,
       usedLookahead: !strictFront,
       guardRelaxed: guardCompliant.length === 0,
+      usedResultGrouping,
     };
+  }
+
+  // Result Grouping's own skip guard ("prefer" mode only): a grouping-driven
+  // quartet may not leave out any unit in the window that has waited
+  // GROUPING_SKIP_WAIT_GAP_MINUTES or more LONGER than a unit it includes,
+  // nor one that has played GROUPING_SKIP_GAMES_GAP or more FEWER games than
+  // a unit it includes. This is what keeps "same waiting time, same number
+  // of games" true even while courts are being grouped by result — the
+  // grouping only ever reorders players who are already roughly level on
+  // both. Per-unit, like satisfiesRestGuard (a fixed-partner pair is judged
+  // by its longest-waiting / fewest-games member, same as everywhere else).
+  satisfiesGroupingSkipGuard(quartetUnitIndexes, window) {
+    const chosenSet = new Set(quartetUnitIndexes);
+    for (const i of quartetUnitIndexes) {
+      const inUnit = window[i];
+      for (let j = 0; j < window.length; j++) {
+        if (chosenSet.has(j)) continue;
+        const outUnit = window[j];
+        if (outUnit.wait - inUnit.wait >= GROUPING_SKIP_WAIT_GAP_MINUTES) return false;
+        if (inUnit.games - outUnit.games >= GROUPING_SKIP_GAMES_GAP) return false;
+      }
+    }
+    return true;
   }
 
   // Hard rest guard check for one candidate quartet (given as unit indexes
@@ -439,17 +564,30 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     const now = Date.now();
     const waits = quartet.map((id) => this.waitMinutesFor(id, players, now));
     const games = quartet.map((id) => players[id]?.games || 0);
+    const resultGroup = describeResultGroup(quartet, players);
+    const groupingOn = normalizeResultGrouping(note?.resultGrouping) !== "off";
+    const courtLabel = resultGroup === "winners" ? "Winners' court" : resultGroup === "losers" ? "Losers' court" : null;
     let reason = "Fairness priority: these are the longest-waiting eligible players.";
     if (note?.guardRelaxed) {
       reason = "Fairness note: the rest guard was relaxed because there weren't enough eligible alternatives waiting substantially longer.";
+    } else if (note?.usedResultGrouping) {
+      // Result Grouping reordered inside the fairness window — say so, and
+      // name the court type, so the organizer can see WHY the strict front
+      // four weren't taken (never silently).
+      reason = `${courtLabel || "Result grouping"}: players coming off the same result were grouped together, within the fairness window (nobody clearly ahead on wait or games was skipped).`;
     } else if (note?.usedLookahead) {
       reason = "Fairness note: limited queue lookahead was used because the first four waiting players could not form a valid matchup.";
+    } else if (groupingOn && courtLabel) {
+      // the strict front four already happened to share a result
+      reason = `${courtLabel} — the longest-waiting eligible players all came off the same result.`;
     }
     return {
       waitMinutesRange: [Math.round(Math.min(...waits)), Math.round(Math.max(...waits))],
       gamesRange: [Math.min(...games), Math.max(...games)],
       usedLookahead: Boolean(note?.usedLookahead),
       guardRelaxed: Boolean(note?.guardRelaxed),
+      usedResultGrouping: Boolean(note?.usedResultGrouping),
+      resultGroup, // "winners" | "losers" | "mixed" | "fresh" — descriptive only
       reason,
     };
   }

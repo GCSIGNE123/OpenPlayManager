@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { MATCHMAKING_PRIORITIES } from "../lib/constants.js";
+import { MATCHMAKING_PRIORITIES, RESULT_GROUPING_OPTIONS } from "../lib/constants.js";
 
 // Announcement Delay — see PROJECT.md/FEATURES.md. Immediate / 2s
 // (default) / 5s / 10s, stored as milliseconds.
@@ -28,6 +28,8 @@ export default function SessionSettingsDialog({
   courtDispatchSettings,
   heldPlayerReminderSettings,
   matchmakingPriority,
+  resultGrouping,
+  showResultGrouping,
   onSave,
   onClose,
 }) {
@@ -59,6 +61,11 @@ export default function SessionSettingsDialog({
   // mode-agnostic, always shown — a reusable candidate-ordering policy, not
   // a rotation mode itself, so it applies no matter which one is active.
   const [matchmakingPriorityDraft, setMatchmakingPriorityDraft] = useState(matchmakingPriority || "");
+
+  // Result Grouping — Skill Divisions only (see RESULT_GROUPING_OPTIONS).
+  // A session saved before the field existed shows as "off" here, which is
+  // exactly how the engine already treats a missing value.
+  const [resultGroupingDraft, setResultGroupingDraft] = useState(RESULT_GROUPING_OPTIONS.some((o) => o.value === resultGrouping) ? resultGrouping : "off");
 
   // Voice list — window.speechSynthesis.getVoices() is frequently empty
   // until the browser fires 'voiceschanged' (a well-known quirk), so this
@@ -110,6 +117,9 @@ export default function SessionSettingsDialog({
         repeatIntervalMinutes: Math.max(1, Number(heldRepeatIntervalDraft) || 10),
       },
       matchmakingPriority: matchmakingPriorityDraft || null,
+      // only written for Skill Divisions sessions — other modes keep whatever
+      // value the session already had (the engine ignores it anyway)
+      ...(showResultGrouping ? { resultGrouping: resultGroupingDraft } : {}),
     });
     onClose();
   };
@@ -247,6 +257,28 @@ export default function SessionSettingsDialog({
             </label>
           </div>
         </div>
+
+        {showResultGrouping && (
+          <div style={styles.dialogField}>
+            <label style={styles.dialogLabel}>Winners' / losers' courts (Result Grouping)</label>
+            <p style={styles.dialogReadOnlyValue}>
+              Inside each skill division, group players coming off a win onto one court and players coming off a loss onto another. Fairness stays first: the longest-waiting player is never skipped and the rest guard always applies. Changes apply from the next matchup generated.
+            </p>
+            <select
+              style={styles.input}
+              value={resultGroupingDraft}
+              onChange={(e) => setResultGroupingDraft(e.target.value)}
+              aria-label="Result Grouping"
+            >
+              {RESULT_GROUPING_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p style={styles.editHint}>{RESULT_GROUPING_OPTIONS.find((o) => o.value === resultGroupingDraft)?.description}</p>
+          </div>
+        )}
 
         <div style={styles.dialogField}>
           <label style={styles.dialogLabel}>Matchmaking Priority</label>

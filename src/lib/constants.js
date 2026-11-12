@@ -179,6 +179,19 @@ export const MATCHMAKING_PRIORITIES = [
   { value: "leastGamesPlayed", label: "Least Games Played" },
 ];
 
+// Result Grouping — Skill Divisions (adaptiveSkill) only; see
+// engines/AdaptiveSkillRotationEngine.js's RESULT GROUPING header. Stored
+// as state.resultGrouping, editable mid-session in Session Settings (takes
+// effect from the next matchup generated). Any other rotation mode ignores
+// it entirely. Sessions saved before this field existed have no value and
+// run as "off" — see normalizeResultGrouping.
+export const RESULT_GROUPING_OPTIONS = [
+  { value: "off", label: "Off", description: "Longest wait and fewest games decide the next four, exactly as before. Winners and losers mix freely." },
+  { value: "prefer", label: "Prefer winners' / losers' courts (recommended)", description: "Inside the fairness window, players coming off a win are grouped with other winners and losers with losers — but never by skipping anyone who has waited 8+ minutes longer or played 2+ fewer games." },
+  { value: "strict", label: "Strict winners' / losers' courts", description: "Same-result courts win over wait-and-games order inside the window. The longest-waiting player is still never skipped and the rest guard still applies, but waiting times get less even." },
+];
+export const DEFAULT_RESULT_GROUPING = "prefer";
+
 // chosen once at Create Session — see CreateSessionScreen.jsx. Gates which
 // selector shows next: "openPlay" shows Rotation Strategy (ROTATION_MODES,
 // stored as rotationMode); "tournament" hides it and shows Tournament
@@ -307,6 +320,7 @@ export const defaultState = {
     voiceURI: null, // null = browser default voice; otherwise matched against window.speechSynthesis.getVoices() at announce time
     announcementDelayMs: 2000, // Immediate=0 / 2s (default) / 5s / 10s — delay before the announcement starts speaking, and also the fallback wait before auto-starting the match when voice is muted
   },
+  resultGrouping: DEFAULT_RESULT_GROUPING, // Result Grouping (Skill Divisions only) — see RESULT_GROUPING_OPTIONS above. "prefer" for every new session; sessions created before this field existed have no value and run as "off"
   matchmakingPriority: null, // Session Matchmaking Priority — see MATCHMAKING_PRIORITIES above. null = no explicit priority (existing behavior, unaffected)
   queueingStopped: false, // Stop Queueing — see PROJECT.md/FEATURES.md. While true: save() skips generating any NEW matchups and skips automatic dispatch; existing live matches and existing nextMatchups entries are completely unaffected, and the facilitator can still manually dispatch (Assign match / Fill all open courts) from whatever's already queued. Resume Queueing (flip back to false) restores normal automatic behavior instantly, next save().
   // Start Queuing — see PROJECT.md/FEATURES.md. A ONE-WAY gate, distinct
