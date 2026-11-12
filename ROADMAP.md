@@ -11,7 +11,10 @@ These are considered production-stable, validated against real Open Play
 sessions and simulation. Facilitator feedback should extend or complement
 them, not replace their core algorithms:
 
-- Adaptive Skill Rotation (division separation, promotion/relegation)
+- Adaptive Skill Rotation (division separation, promotion/relegation) —
+  Result Grouping (2026-11-12) was added to its Stage 1 selection as an
+  opt-in tier under explicit organizer direction; `off` is byte-for-byte
+  the previous behaviour and is what every pre-existing session runs
 - Games-played fairness algorithm (the lexicographic avg/max-games tuple)
 - Winner-vs-Winner preference
 - Smart Queue Management (Hold/Resume/Skip Player, Hold/Resume/Cancel Match)
@@ -24,6 +27,13 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-12 — Result Grouping (winners' / losers' courts inside each
+  skill division)** — Off / Prefer (default) / Strict, a third tier inside
+  Skill Divisions' existing fairness window: a pure same-result quartet may
+  take the court ahead of a mixed front-four, never past the rest guard,
+  never skipping the longest-waiting player, and (Prefer) never skipping
+  anyone 8+ minutes or 2+ games ahead. Simulation: pure courts 6% → 45%
+  with games spread and waits unchanged. See `FEATURES.md`.
 - **2026-11-12 — Skill Divisions is the default rotation; plain-language
   mode names** — Adaptive Skill Rotation (now labelled "Skill Divisions
   (Beginner / Intermediate)") is what a new Open Play session starts with,

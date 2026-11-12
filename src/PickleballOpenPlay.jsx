@@ -128,6 +128,16 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
     .catch(() => {}); // best-effort — never surfaces an error into the live match flow
 }
 
+// Extra engine context forwarded through refreshNextMatchups /
+// regenerateNextMatchups (lib/utils.js) — the ONE place session settings
+// that an engine reads directly are gathered:
+//   - calibration: Points-Based Adaptive Matchmaking only (null otherwise)
+//   - resultGrouping: Result Grouping (Skill Divisions only — every other
+//     engine ignores the field, same as an engine that doesn't read `phase`)
+function rotationEngineContext(s) {
+  return { ...(calibrationEngineContext(s) || {}), resultGrouping: s.resultGrouping };
+}
+
 export default function PickleballOpenPlay() {
   const { activeVenueId } = useActiveVenue();
   const [screen, setScreen] = useState("landing"); // landing | access | create | admin | developer | app | display | templates | portal | users | leagues | playerManagement | venueManagement | courtBooking | ratings
@@ -516,7 +526,7 @@ export default function PickleballOpenPlay() {
               maxUpcomingMatchups(next.courts),
               next.matchmakingPriority,
               next.recentMatchups,
-              calibrationEngineContext(next) // Points-Based Adaptive Matchmaking only: session-local calibration affinity (null for every other mode)
+              rotationEngineContext(next)
             ),
       };
       // Smart Court Dispatch — see PROJECT.md/FEATURES.md. A reusable
@@ -1773,7 +1783,7 @@ export default function PickleballOpenPlay() {
           maxUpcomingMatchups(state.courts),
           state.matchmakingPriority,
           state.recentMatchups,
-          calibrationEngineContext(state)
+          rotationEngineContext(state)
         );
 
     let remainingIds = [...state.queueIds];
