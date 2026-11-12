@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronRight, Lock, Pause, Play, Shuffle, Star, Unlock, X } from "lucide-react";
 import { styles } from "../styles.js";
-import PlayerChip from "./PlayerChip.jsx";
+import PlayerChip, { scorerInfoFor } from "./PlayerChip.jsx";
 import PlayerPicker from "./PlayerPicker.jsx";
 
 // A pre-built upcoming matchup, editable before it's assigned to a court —
@@ -216,6 +216,7 @@ export default function NextMatchupCard({
                   hideAvatar
                   hidePayment
                   index={i}
+                  info={scorerInfoFor(players[id], players)}
                 />
               ))}
             </div>
@@ -230,6 +231,7 @@ export default function NextMatchupCard({
                   hideAvatar
                   hidePayment
                   index={matchup.teamA.length + i}
+                  info={scorerInfoFor(players[id], players)}
                 />
               ))}
             </div>

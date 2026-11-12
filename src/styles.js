@@ -287,6 +287,121 @@ export const styles = {
     width: "100%",
     boxSizing: "border-box",
   },
+  // Scorer Player Info (see WaitingPlayersPanel.jsx) — the Active Players
+  // row restructured into a two-line card: line 1 = identity (number, name,
+  // skill / pair / status tags) with the action buttons grouped at the
+  // right; line 2 = the numbers a facilitator scans (waiting time, games
+  // played, rating). Replaces the single wrapping line where tags, timer,
+  // dropdown and five buttons all competed for the same row.
+  rosterCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: "10px 0",
+    borderBottom: "1px solid var(--line)",
+    fontSize: 13.5,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  rosterTopRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    rowGap: 6,
+    flexWrap: "wrap",
+    width: "100%",
+    minWidth: 0,
+  },
+  rosterIdentity: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    rowGap: 4,
+    flexWrap: "wrap",
+    flex: "1 1 240px",
+    minWidth: 0,
+  },
+  rosterActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    rowGap: 6,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    marginLeft: "auto",
+    maxWidth: "100%", // phones: the group wraps onto its own line(s) instead of clipping
+  },
+  rosterExitGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  rosterStatsRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    rowGap: 4,
+    flexWrap: "wrap",
+    paddingLeft: 21, // = index minWidth (14) + identity gap (7): lines up under the name
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+  },
+  rosterStat: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    whiteSpace: "nowrap",
+  },
+  rosterStatLabel: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 9.5,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "var(--color-text-faint)",
+  },
+  rosterStatValue: {
+    fontWeight: 700,
+    color: "var(--color-text)",
+    fontVariantNumeric: "tabular-nums",
+  },
+  // Games-played badge — shown beside every player in the Scorer tab (court
+  // cards, next matchups, Active Players) so "who has played most" is
+  // readable without opening Standings.
+  gpBadge: {
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+    background: "var(--chalk)",
+    border: "1px solid var(--line)",
+    borderRadius: 4,
+    padding: "2px 5px",
+    flexShrink: 0,
+    whiteSpace: "nowrap",
+    letterSpacing: "0.02em",
+  },
+  // Fixed-pair tag — "🔗 Name" beside a player whose Partner Request is set,
+  // so a pair reads as a pair at a glance everywhere in the Scorer tab (the
+  // "+ Partner" dropdown remains the control for changing it).
+  pairTag: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 10,
+    fontWeight: 700,
+    color: "var(--color-secondary-text)",
+    background: "rgba(247,148,29,0.14)",
+    border: "1px solid rgba(247,148,29,0.45)",
+    borderRadius: 4,
+    padding: "2px 6px",
+    flexShrink: 0,
+    whiteSpace: "nowrap",
+    maxWidth: 140,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
   rosterRemoveBtn: {
     width: 20,
     height: 20,

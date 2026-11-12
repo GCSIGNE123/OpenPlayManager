@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Pause, Play, SkipForward, Zap, X } from "lucide-react";
+import { Link2, LogOut, Pause, Play, SkipForward, Zap, X } from "lucide-react";
 import { styles } from "../styles.js";
 import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
@@ -51,105 +51,143 @@ export default function WaitingPlayersPanel({
             {players.map((p, i) => {
               const performance = calculatePerformanceRating(p);
               const queueStatus = getPlayerQueueStatus(p, state);
+              // Scorer Player Info — see PROJECT.md/FEATURES.md. Two-line
+              // card: identity + tags with the actions grouped on the right,
+              // then the numbers (waiting time, games played, rating). Every
+              // control below is the same handler as before — only the
+              // arrangement changed, plus the GP badge and fixed-pair tag.
+              const partnerName = p.partnerId ? state?.players?.[p.partnerId]?.name || null : null;
               return (
-                <li key={p.id} style={styles.rosterItem}>
-                  <span style={styles.playerChipIndex}>{i + 1}</span>
-                  <span style={{ ...styles.queueName, ...styles.teamNameProminent }}>{p.name}</span>
-                  {showLatecomerPriority && p.games === 0 && <span style={styles.courtBadge}>NEW</span>}
-                  <span style={styles.queueStatusTag(queueStatus)}>{queueStatus}</span>
-                  <span style={styles.waitingTimerText}>
-                    <WaitingTimer player={p} />
-                  </span>
-                  {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
-                  {/* Open Play Availability / Queue Confirmation — read-only,
-                      set by the player in PickleKing Player, never by Pro.
-                      Hidden for the default "available" (or missing) case so
-                      an ordinary waiting player looks exactly as before. */}
-                  {p.playStatus && p.playStatus !== "available" && (
-                    <span style={styles.playStatusTag(p.playStatus)} title="Set by the player in PickleKing Player">
-                      {p.playStatus === "on_break" ? "ON BREAK" : p.playStatus === "confirmation_required" ? "CONFIRM?" : "LEFT"}
+                <li key={p.id} style={styles.rosterCard} data-testid="active-player-row">
+                  <div style={styles.rosterTopRow}>
+                    <div style={styles.rosterIdentity}>
+                      <span style={styles.playerChipIndex}>{i + 1}</span>
+                      <span style={{ ...styles.queueName, ...styles.teamNameProminent, flex: "0 1 auto" }}>{p.name}</span>
+                      {p.skill && <span style={styles.skillTag(p.skill)}>{p.skill === "intermediate" ? "INT" : "BEG"}</span>}
+                      {partnerName && (
+                        <span style={styles.pairTag} title={`Fixed partner — always teamed with ${partnerName}`}>
+                          <Link2 size={10} strokeWidth={2.5} />
+                          {partnerName}
+                        </span>
+                      )}
+                      {showLatecomerPriority && p.games === 0 && <span style={styles.courtBadge}>NEW</span>}
+                      <span style={styles.queueStatusTag(queueStatus)}>{queueStatus}</span>
+                      {/* Open Play Availability / Queue Confirmation — read-only,
+                          set by the player in PickleKing Player, never by Pro.
+                          Hidden for the default "available" (or missing) case so
+                          an ordinary waiting player looks exactly as before. */}
+                      {p.playStatus && p.playStatus !== "available" && (
+                        <span style={styles.playStatusTag(p.playStatus)} title="Set by the player in PickleKing Player">
+                          {p.playStatus === "on_break" ? "ON BREAK" : p.playStatus === "confirmation_required" ? "CONFIRM?" : "LEFT"}
+                        </span>
+                      )}
+                    </div>
+                    <div style={styles.rosterActions}>
+                      {onChangeSkill && (
+                        <button
+                          style={styles.skillOverrideBtn}
+                          onClick={() => onChangeSkill(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")}
+                          title={`Move ${p.name} to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"}`}
+                        >
+                          {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
+                        </button>
+                      )}
+                      {onSetPartner && (
+                        // Partner Requests — see PROJECT.md/FEATURES.md. Always
+                        // available, per-pair; no session-wide setting gates it.
+                        // Options are every OTHER currently-waiting player — picking one who
+                        // already has a different partner cleanly reassigns
+                        // both sides (see setFixedPartner, lib/queueManagement.js).
+                        <select
+                          style={styles.partnerSelect}
+                          value={p.partnerId || ""}
+                          onChange={(e) => (e.target.value ? onSetPartner(p.id, e.target.value) : onClearPartner(p.id))}
+                          title="Fixed partner — always teamed together for this pair"
+                        >
+                          <option value="">+ Partner</option>
+                          {players
+                            .filter((other) => other.id !== p.id)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.name}
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                      {onSkipPlayer && (
+                        <button
+                          style={styles.skipToggleBtn(false)}
+                          onClick={() => onSkipPlayer(p.id)}
+                          title="Skip — move to the back of the waiting queue (restroom, water, brief absence); still fully eligible to be matched"
+                        >
+                          <SkipForward size={11} strokeWidth={2.5} />
+                          Skip
+                        </button>
+                      )}
+                      {showLatecomerPriority && p.games === 0 && onPrioritizeLatecomer && !p.held && (
+                        <button
+                          style={styles.skipToggleBtn(false)}
+                          onClick={() => onPrioritizeLatecomer(p.id)}
+                          title="Prioritize this newly checked-in player for the next available matchup — shows a preview to confirm before anything changes"
+                        >
+                          <Zap size={11} strokeWidth={2.5} />
+                          Prioritize Next Match
+                        </button>
+                      )}
+                      <button
+                        style={styles.skipToggleBtn(p.held)}
+                        onClick={() => (p.held ? onResumePlayer(p.id) : onHoldPlayer(p.id))}
+                        title={
+                          p.held
+                            ? "Resume — return this player to the waiting queue"
+                            : "Hold — temporarily exclude this player from matchmaking (stats/streaks/payment status preserved)"
+                        }
+                      >
+                        {p.held ? <Play size={11} strokeWidth={2.5} /> : <Pause size={11} strokeWidth={2.5} />}
+                        {p.held ? "Held" : "Hold"}
+                      </button>
+                      {/* Check Out + remove always wrap as one unit on narrow screens */}
+                      <span style={styles.rosterExitGroup}>
+                        {onCheckout && (
+                          <button style={{ ...styles.checkInTapBtn, marginLeft: 0 }} onClick={() => setConfirmingPlayer(p)}>
+                            <LogOut size={11} strokeWidth={2.5} />
+                            Check Out
+                          </button>
+                        )}
+                        <button style={{ ...styles.rosterRemoveBtn, marginLeft: 0 }} onClick={() => onRemove(p.id)} aria-label={`remove ${p.name}`}>
+                          <X size={11} strokeWidth={3} />
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                  <div style={styles.rosterStatsRow}>
+                    <span style={{ ...styles.rosterStat, ...styles.waitingTimerText }}>
+                      <WaitingTimer player={p} />
                     </span>
-                  )}
-                  {onChangeSkill && (
-                    <button
-                      style={styles.skillOverrideBtn}
-                      onClick={() => onChangeSkill(p.id, p.skill === "intermediate" ? "beginner" : "intermediate")}
-                      title={`Move ${p.name} to ${p.skill === "intermediate" ? "Beginner" : "Intermediate"}`}
-                    >
-                      {p.skill === "intermediate" ? "→ BEG" : "→ INT"}
-                    </button>
-                  )}
-                  {onSetPartner && (
-                    // Partner Requests — see PROJECT.md/FEATURES.md. Always
-                    // available, per-pair; no session-wide setting gates it.
-                    // Options are every OTHER currently-waiting player — picking one who
-                    // already has a different partner cleanly reassigns
-                    // both sides (see setFixedPartner, lib/queueManagement.js).
-                    <select
-                      style={styles.partnerSelect}
-                      value={p.partnerId || ""}
-                      onChange={(e) => (e.target.value ? onSetPartner(p.id, e.target.value) : onClearPartner(p.id))}
-                      title="Fixed partner — always teamed together for this pair"
-                    >
-                      <option value="">+ Partner</option>
-                      {players
-                        .filter((other) => other.id !== p.id)
-                        .map((other) => (
-                          <option key={other.id} value={other.id}>
-                            {other.name}
-                          </option>
-                        ))}
-                    </select>
-                  )}
-                  {performance.rating !== null && (
-                    <span
-                      style={styles.ratingBadge(performance.rating)}
-                      title={`${Math.round(performance.winPct * 100)}% win rate this session`}
-                    >
-                      {performance.rating}
+                    <span style={styles.rosterStat}>
+                      <span style={styles.rosterStatLabel}>GP</span>
+                      <span style={styles.rosterStatValue}>{p.games || 0}</span>
                     </span>
-                  )}
-                  {onSkipPlayer && (
-                    <button
-                      style={styles.skipToggleBtn(false)}
-                      onClick={() => onSkipPlayer(p.id)}
-                      title="Skip — move to the back of the waiting queue (restroom, water, brief absence); still fully eligible to be matched"
-                    >
-                      <SkipForward size={11} strokeWidth={2.5} />
-                      Skip
-                    </button>
-                  )}
-                  {showLatecomerPriority && p.games === 0 && onPrioritizeLatecomer && !p.held && (
-                    <button
-                      style={styles.skipToggleBtn(false)}
-                      onClick={() => onPrioritizeLatecomer(p.id)}
-                      title="Prioritize this newly checked-in player for the next available matchup — shows a preview to confirm before anything changes"
-                    >
-                      <Zap size={11} strokeWidth={2.5} />
-                      Prioritize Next Match
-                    </button>
-                  )}
-                  <button
-                    style={styles.skipToggleBtn(p.held)}
-                    onClick={() => (p.held ? onResumePlayer(p.id) : onHoldPlayer(p.id))}
-                    title={
-                      p.held
-                        ? "Resume — return this player to the waiting queue"
-                        : "Hold — temporarily exclude this player from matchmaking (stats/streaks/payment status preserved)"
-                    }
-                  >
-                    {p.held ? <Play size={11} strokeWidth={2.5} /> : <Pause size={11} strokeWidth={2.5} />}
-                    {p.held ? "Held" : "Hold"}
-                  </button>
-                  {onCheckout && (
-                    <button style={styles.checkInTapBtn} onClick={() => setConfirmingPlayer(p)}>
-                      <LogOut size={11} strokeWidth={2.5} />
-                      Check Out
-                    </button>
-                  )}
-                  <button style={styles.rosterRemoveBtn} onClick={() => onRemove(p.id)} aria-label={`remove ${p.name}`}>
-                    <X size={11} strokeWidth={3} />
-                  </button>
+                    <span style={styles.rosterStat}>
+                      <span style={styles.rosterStatLabel}>W–L</span>
+                      <span style={styles.rosterStatValue}>
+                        {p.wins || 0}–{p.losses || 0}
+                      </span>
+                    </span>
+                    <span style={styles.rosterStat}>
+                      <span style={styles.rosterStatLabel}>RTG</span>
+                      {performance.rating === null ? (
+                        <span style={{ ...styles.rosterStatValue, color: "var(--color-text-faint)" }}>—</span>
+                      ) : (
+                        <span
+                          style={styles.ratingBadge(performance.rating)}
+                          title={`${Math.round(performance.winPct * 100)}% win rate this session`}
+                        >
+                          {performance.rating}
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </li>
               );
             })}

@@ -1,3 +1,4 @@
+import { Link2 } from "lucide-react";
 import { styles } from "../styles.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import SectionLabel from "./SectionLabel.jsx";
@@ -38,6 +39,12 @@ export default function FixedPartnerPanel({ players, state, onSetPartner, onClea
           return (
             <li key={p.id} style={styles.rosterItem}>
               <span style={{ ...styles.queueName, ...styles.teamNameProminent }}>{p.name}</span>
+              {p.partnerId && players?.[p.partnerId] && (
+                <span style={styles.pairTag} title={`Fixed partner — always teamed with ${players[p.partnerId].name}`}>
+                  <Link2 size={10} strokeWidth={2.5} />
+                  {players[p.partnerId].name}
+                </span>
+              )}
               <span style={styles.queueStatusTag(queueStatus)}>{queueStatus}</span>
               <select
                 style={styles.partnerSelect}
