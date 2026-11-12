@@ -1,8 +1,11 @@
 import { Minus, Plus, Trophy } from "lucide-react";
 import { styles } from "../styles.js";
-import PlayerChip from "./PlayerChip.jsx";
+import PlayerChip, { scorerInfoFor } from "./PlayerChip.jsx";
 
-export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout, hideAvatar, hidePayment, startIndex }) {
+// `showInfo` (Scorer tab only — CourtCard passes it alongside hideAvatar)
+// adds the games-played badge and fixed-pair tag to each chip; every other
+// caller leaves it unset and renders exactly as before.
+export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly, leading, onRequestSub, onDeclareWinner, onRequestCheckout, hideAvatar, hidePayment, startIndex, showInfo }) {
   return (
     <div style={styles.teamRow}>
       <div style={styles.teamPlayers}>
@@ -16,6 +19,7 @@ export default function TeamRow({ ids, players, score, onMinus, onPlus, readOnly
             hideAvatar={hideAvatar}
             hidePayment={hidePayment}
             index={typeof startIndex === "number" ? startIndex + i : undefined}
+            info={showInfo ? scorerInfoFor(players[id], players) : undefined}
           />
         ))}
       </div>

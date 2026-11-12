@@ -27,6 +27,12 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-12 — Scorer Player Info** — every player row in the Scorer
+  tab now shows level (BEG/INT), games played, waiting time, W–L, rating
+  and a fixed-pair tag naming the partner, laid out as a two-line card
+  with the actions grouped on the right; court and Up Next chips carry
+  the GP badge + pair tag too. Scorer-only — Live Board, TV Mode and the
+  spectator page are unchanged. See `FEATURES.md`.
 - **2026-11-12 — Running Podium** — Champion / Runner-up / 3rd Place with
   hand-drawn medals on the Live Board, Standings, TV Mode and the session
   report; unlocks 60 min into play (configurable), orders exactly like the
