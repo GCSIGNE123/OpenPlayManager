@@ -64,10 +64,20 @@ export function isCheckedOut(player) {
 // One podium per division in Skill Divisions sessions, otherwise one.
 export const podiumIsDivided = (state) => sessionHasDivisions(state);
 
+// ORGANIZERS ARE NOT PODIUM-ELIGIBLE (organizer direction, 13 Nov 2026): a
+// player marked "Organizer" in the Payment tab (paymentStatus "paid" +
+// paymentMethod "organizer" — lib/queueManagement.js's setPlayerPayment) is
+// left off every podium, Beginner, Intermediate and the single overall one,
+// live and final. They still play, still appear in the Standings table with
+// their real record, and the next eligible player takes the place. Unmarking
+// them in the Payment tab makes them eligible again immediately.
+export const isOrganizerPlayer = (player) => player?.paymentStatus === "paid" && player?.paymentMethod === "organizer";
+
 const rowsFor = (state, division) => {
-  const rows = buildStandingsRows(state?.players || {});
+  const players = state?.players || {};
+  const rows = buildStandingsRows(players).filter((r) => !isOrganizerPlayer(players[r.id]));
   if (!division) return rows;
-  return rows.filter((r) => divisionOf(state?.players?.[r.id] || r) === division);
+  return rows.filter((r) => divisionOf(players[r.id] || r) === division);
 };
 
 function placesFrom(rows, minGames) {
