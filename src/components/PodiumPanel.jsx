@@ -10,22 +10,27 @@ import MedalIcon from "./MedalIcon.jsx";
 // component never ranks anyone itself.
 //
 // `podium` shape: { final, unlocked, unlockMinutes, minGames, minutesToGo,
+// division?, divisionLabel?,
 // places: [{ rank, label, name, photo?, wins, losses, games, winPct, out }] }
 // `dark` selects the TV Mode palette (podiumStyles.js).
-export default function PodiumPanel({ podium, dark = false, title, hideHeader = false, medalSize }) {
+// `nested` — one division's podium inside a PodiumBoard: the heading is the
+// division name, and the board (not this panel) owns the status line and
+// the "Congratulations!".
+export default function PodiumPanel({ podium, dark = false, title, hideHeader = false, nested = false, medalSize }) {
   if (!podium) return null;
   const s = podiumStyles(dark);
   const medal = medalSize || (dark ? 74 : 58);
   const status = podiumStatusText(podium);
-  const heading = title || (podium.final ? "Final Podium" : "Running Podium");
+  const heading = title || (podium.divisionLabel ? `${podium.divisionLabel}${nested ? "" : " Podium"}` : podium.final ? "Final Podium" : "Running Podium");
+  const titleStyle = nested ? s.divisionTitle : s.title;
 
   // ---- locked (time gate not reached yet) or nobody qualified yet ----
   if (!podium.unlocked || podium.places.length === 0) {
     return (
-      <div style={s.wrap} data-testid="podium-locked">
+      <div style={s.wrap} data-testid="podium-locked" data-division={podium.division || undefined}>
         {!hideHeader && (
           <div style={s.headRow}>
-            <h3 style={s.title}>{heading}</h3>
+            <h3 style={titleStyle}>{heading}</h3>
           </div>
         )}
         <div style={s.lockedBanner}>
@@ -46,14 +51,14 @@ export default function PodiumPanel({ podium, dark = false, title, hideHeader = 
   const order = [2, 1, 3];
 
   return (
-    <div style={s.wrap} data-testid="podium">
+    <div style={s.wrap} data-testid="podium" data-division={podium.division || undefined}>
       {!hideHeader && (
         <div style={s.headRow}>
-          <h3 style={s.title}>{heading}</h3>
-          <p style={s.status}>{status}</p>
+          <h3 style={titleStyle}>{heading}</h3>
+          {!nested && <p style={s.status}>{status}</p>}
         </div>
       )}
-      {podium.final && <p style={s.congrats}>Congratulations!</p>}
+      {podium.final && !nested && <p style={s.congrats}>Congratulations!</p>}
       <div style={s.cards}>
         {order.map((rank) => {
           const place = byRank[rank];

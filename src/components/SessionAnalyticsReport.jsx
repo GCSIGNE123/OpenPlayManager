@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check, FileJson, FileSpreadsheet, Printer, X } from "lucide-react";
 import { styles } from "../styles.js";
-import PodiumPanel from "./PodiumPanel.jsx";
+import PodiumBoard from "./PodiumBoard.jsx";
+import { finalPodiumsForDisplay } from "../lib/podium.js";
 import SectionLabel from "./SectionLabel.jsx";
 import { ExportService } from "../engines/ExportService.js";
 import { buildSessionReportExportTable } from "../lib/sessionReportExport.js";
@@ -40,7 +41,10 @@ const exportService = new ExportService();
 // see what went wrong and retry without losing their place.
 export default function SessionAnalyticsReport({ report, onConfirm, onCancel, onClose, confirmBusy = false, confirmError = null }) {
   if (!report) return null;
-  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, finalPodium, grade, sessionType, tournamentId } = report;
+  const { sessionSummary, participation, waiting, diversity, adaptive, playersNeedingAttention, payment, paymentDetails, finalStandings, finalPodium, finalPodiums, grade, sessionType, tournamentId } = report;
+  // Division Podiums: reports saved with `finalPodiums` show one podium per
+  // division; older reports only have `finalPodium` (overall) and render as before.
+  const podiums = finalPodiumsForDisplay(finalPodiums || finalPodium);
   const isReopened = Boolean(onClose);
   const exportTitle = report.sessionSummary.venue
     ? `${report.sessionSummary.venue} — Session Analytics Report`
@@ -189,9 +193,9 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
           </div>
         )}
 
-        {finalPodium && finalPodium.length > 0 && (
+        {podiums.some((p) => p.places.length > 0) && (
           <div style={styles.analyticsSection}>
-            <PodiumPanel podium={{ final: true, unlocked: true, places: finalPodium }} />
+            <PodiumBoard podiums={podiums} />
           </div>
         )}
 

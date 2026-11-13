@@ -131,7 +131,8 @@ console.log("\n--- wiring ---");
     const src = strip(read(f));
     assert(`${f}: other division's names are disabled with the reason, not hidden`, /const blocked = Boolean\(fixedPairBlockReason\(state, p, other\)\);/.test(src) && /disabled=\{blocked\}/.test(src) && /other division/.test(src));
   }
-  assert("lib/fixedPairRules.js has no imports (no cycle with utils/queueManagement)", !/^import /m.test(read("src/lib/fixedPairRules.js")));
+  const ruleImports = read("src/lib/fixedPairRules.js").match(/^import .*$/gm) || [];
+  assert("lib/fixedPairRules.js imports only lib/divisions.js (no cycle with utils/queueManagement)", ruleImports.length === 1 && /from "\.\/divisions\.js"/.test(ruleImports[0]));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

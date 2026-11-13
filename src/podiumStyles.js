@@ -45,6 +45,27 @@ export function podiumStyles(dark = false) {
       color: muted,
       margin: 0,
     },
+    // Division podiums (PodiumBoard): Beginner | Intermediate side by side
+    // when there is room, stacked on narrow screens / TV Mode's 30% column.
+    boardGrid: {
+      display: "grid",
+      gridTemplateColumns: `repeat(auto-fit, minmax(${dark ? 380 : 300}px, 1fr))`,
+      gap: 14 * scale,
+      alignItems: "start",
+    },
+    divisionTitle: {
+      fontFamily: "'Anton', sans-serif",
+      fontWeight: 400,
+      textTransform: "uppercase",
+      letterSpacing: "0.1em",
+      fontSize: 13 * scale,
+      color: text,
+      margin: 0,
+      padding: `${2 * scale}px ${10 * scale}px`,
+      borderLeft: `3px solid ${dark ? "#F7941D" : "var(--color-secondary)"}`,
+      background: dark ? "rgba(255,255,255,0.04)" : "var(--color-bg)",
+      borderRadius: "0 8px 8px 0",
+    },
     // locked / empty state — a slim banner with three faded medals
     lockedBanner: {
       display: "flex",

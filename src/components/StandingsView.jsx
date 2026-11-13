@@ -3,11 +3,11 @@ import { styles } from "../styles.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
-import { computePodium } from "../lib/podium.js";
+import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
 import { useNow } from "../lib/useNow.js";
 import Avatar from "./Avatar.jsx";
 import MedalIcon from "./MedalIcon.jsx";
-import PodiumPanel from "./PodiumPanel.jsx";
+import PodiumBoard from "./PodiumBoard.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
 // sortable columns: click cycles ascending -> descending -> back to the
@@ -47,8 +47,13 @@ export default function StandingsView({ players, state }) {
   const [standingsMode, setStandingsMode] = useState("overall"); // "overall" | "live"
   // Running Podium — see lib/podium.js. Ticks every 30s so the "N min to
   // go" countdown moves even when no session event triggers a render.
+  // Division Podiums: in a Skill Divisions session the Beginner and
+  // Intermediate podiums replace the single one, and the medals on the
+  // rows below follow the podiums (so a Beginner champion wears gold even
+  // if an Intermediate is above them in the overall table).
   const now = useNow(30000);
-  const podium = computePodium(state, now);
+  const podiums = computePodiums(state, now);
+  const medalRanks = podiumMedalRanks(podiums);
 
   const handleSort = (key) => {
     if (sortKey !== key) {
@@ -97,7 +102,7 @@ export default function StandingsView({ players, state }) {
 
   return (
     <div>
-      <PodiumPanel podium={podium} />
+      <PodiumBoard podiums={podiums} />
       <SectionLabel>Standings</SectionLabel>
       <div style={styles.skillToggle}>
         {STANDINGS_MODES.map((m) => (
@@ -144,7 +149,7 @@ export default function StandingsView({ players, state }) {
           {rows.map((p, i) => (
             <div key={p.id} style={styles.standingsRow}>
               <span style={styles.standingsRankCol}>
-                {showMedals && i < 3 ? <MedalIcon rank={i + 1} size={16} title={`${i + 1}`} /> : i + 1}
+                {showMedals && medalRanks[p.id] ? <MedalIcon rank={medalRanks[p.id]} size={16} title={`${medalRanks[p.id]}`} /> : i + 1}
               </span>
               <span style={styles.standingsNameCol}>
                 <Avatar player={p} size={24} />

@@ -117,8 +117,13 @@ console.log("\n4. Final podium (End Session) and the public allow-list");
   assert("Session Analytics report carries finalPodium (3 places)", Array.isArray(report.finalPodium) && report.finalPodium.length === 3 && report.finalPodium[0].name === "Victor");
   assert("...and the report's finalStandings order still matches it", report.finalStandings.filter((r) => r.gp >= 2).slice(0, 3).map((r) => r.playerName).join("|") === report.finalPodium.map((x) => x.name).join("|"));
   const table = buildSessionReportExportTable(report);
-  assert("CSV export has a Podium: Champion row naming Victor", table.rows.some((r) => r[0] === "Podium: Champion" && /Victor — 6-0/.test(r[1])));
-  assert("...and marks the early leaver", table.rows.some((r) => r[0] === "Podium: 3rd Place" && /checked out early/.test(r[1])));
+  // `base` is a Skill Divisions session (the default rotation), so the CSV
+  // writes one block per division — "Beginner Podium: …"; the overall
+  // wording is kept for every other mode (checked just below).
+  assert("CSV export has a Beginner Podium: Champion row naming Victor (Skill Divisions session)", table.rows.some((r) => r[0] === "Beginner Podium: Champion" && /Victor — 6-0/.test(r[1])));
+  assert("...and marks the early leaver", table.rows.some((r) => r[0] === "Beginner Podium: 3rd Place" && /checked out early/.test(r[1])));
+  const flatTable = buildSessionReportExportTable(computeSessionAnalyticsReport({ ...base, rotationMode: "continuous", sessionStartedAt: NOW - 90 * 60000 }, NOW));
+  assert("CSV export keeps the plain Podium: Champion row for a non-division session", flatTable.rows.some((r) => r[0] === "Podium: Champion" && /Victor — 6-0/.test(r[1])));
   const summary = buildOpenPlayFinalSummary(base, { sessionCode: "ABC123", endedAt: NOW });
   assert("public final summary (spectator /live page after close) carries `podium`", Array.isArray(summary.podium) && summary.podium.length === 3 && summary.podium[0].name === "Victor" && summary.podium[2].out === true);
   assert("...through buildPublicFinalSummary too (Open Play path)", buildPublicFinalSummary(base, null, { sessionCode: "ABC123", endedAt: NOW }).podium.length === 3);
@@ -135,10 +140,13 @@ console.log("\n5. Wiring — every surface uses the one shared component/engine"
   const dlg = read("src/components/SessionSettingsDialog.jsx");
   const scorer = read("src/components/ScorerView.jsx");
   const panel = read("src/components/PodiumPanel.jsx");
-  assert("Standings tab renders PodiumPanel from computePodium", /computePodium\(state, now\)/.test(standings) && /<PodiumPanel podium=\{podium\}/.test(standings));
-  assert("Standings top-3 rows use MedalIcon (default order only)", /showMedals && i < 3 \? <MedalIcon/.test(standings));
-  assert("Live Board renders PodiumPanel above the courts", /<PodiumPanel podium=\{podium\}/.test(board) && board.indexOf("<PodiumPanel") < board.indexOf("styles.courtGrid"));
-  assert("TV Mode renders the dark PodiumPanel in the Standings column and MedalIcon rows", /<PodiumPanel podium=\{podium\} dark/.test(tv) && /<MedalIcon rank=\{rank\}/.test(tv));
+  // Division Podiums (2026-11-13): every surface renders the list from
+  // computePodiums through PodiumBoard (one podium = the old PodiumPanel
+  // look, two = Beginner + Intermediate); row medals follow the podium(s).
+  assert("Standings tab renders PodiumBoard from computePodiums", /computePodiums\(state, now\)/.test(standings) && /<PodiumBoard podiums=\{podiums\}/.test(standings));
+  assert("Standings rows wear the medal their podium gives them (default order only)", /showMedals && medalRanks\[p\.id\] \? <MedalIcon rank=\{medalRanks\[p\.id\]\}/.test(standings) && /podiumMedalRanks\(podiums\)/.test(standings));
+  assert("Live Board renders PodiumBoard above the courts", /<PodiumBoard podiums=\{podiums\}/.test(board) && board.indexOf("<PodiumBoard") < board.indexOf("styles.courtGrid"));
+  assert("TV Mode renders the dark PodiumBoard in the Standings column and medal rows follow it", /<PodiumBoard podiums=\{podiums\} dark/.test(tv) && /medalRanks\[row\.id\] \? <MedalIcon rank=\{medalRanks\[row\.id\]\}/.test(tv));
   assert("TV Mode no longer uses emoji medals", !/🥇|🥈|🥉/.test(tv));
   assert("Session report shows the final podium before Final Standings", /finalPodium/.test(report) && report.indexOf("<PodiumPanel") < report.indexOf("Final Standings"));
   assert("Session Settings exposes unlock minutes + min games and saves both", /aria-label="Podium unlock minutes"/.test(dlg) && /aria-label="Podium minimum games"/.test(dlg) && /podiumUnlockMinutes: Math\.max\(1/.test(dlg) && /podiumMinGames: Math\.max\(1/.test(dlg));
