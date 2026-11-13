@@ -16,6 +16,7 @@ import {
   podiumMedalRanks,
   podiumIsDivided,
   podiumStatusText,
+  isOrganizerPlayer,
 } from "../src/lib/podium.js";
 import { DIVISIONS, DIVISION_MODES, divisionOf, divisionLabel, sessionHasDivisions } from "../src/lib/divisions.js";
 import { buildStandingsRows } from "../src/lib/performanceRating.js";
@@ -119,6 +120,23 @@ console.log("\n4. Edge cases");
   assert("a promoted player stands in the division they are in NOW (leaves the Beginner podium, counted among Intermediate eligibles)", !beg.places.some((p) => p.name === "Guil") && beg.places[0].name === "Anjo" && int.eligibleCount === 4);
   assert("podiumMedalRanks maps every podium's places to playerId -> rank", JSON.stringify(podiumMedalRanks(computePodiums(base, NOW))) === JSON.stringify({ b1: 1, b2: 2, b3: 3, i1: 1, i2: 2, i3: 3 }));
   assert("podiumMedalRanks tolerates empty input", JSON.stringify(podiumMedalRanks([])) === "{}" && JSON.stringify(podiumMedalRanks(undefined)) === "{}");
+}
+
+console.log("\n4b. Organizers (Payment tab → Organizer) are not podium-eligible");
+{
+  const org = (p) => ({ ...p, paymentStatus: "paid", paymentMethod: "organizer" });
+  const withOrgs = { ...base, players: { ...players, b1: org(players.b1), i1: org(players.i1) } };
+  assert("isOrganizerPlayer: paid + organizer only", isOrganizerPlayer(org(players.b1)) && !isOrganizerPlayer({ paymentStatus: "paid", paymentMethod: "cash" }) && !isOrganizerPlayer({ paymentStatus: "unpaid", paymentMethod: "organizer" }) && !isOrganizerPlayer(players.b1) && !isOrganizerPlayer(undefined));
+  const [beg, int] = computePodiums(withOrgs, NOW);
+  assert("Beginner podium skips the organizer (Guil) — next eligible moves up", beg.places.map((p) => p.name).join("|") === "Anjo|Maria" && beg.places[0].label === "Champion");
+  assert("Intermediate podium skips the organizer (Rina) — Paolo is Champion", int.places.map((p) => p.name).join("|") === "Paolo|Ken" && int.places[0].rank === 1);
+  assert("eligibleCount excludes organizers", beg.eligibleCount === 2 && int.eligibleCount === 2);
+  assert("single (non-division) podium excludes them too", computePodium({ ...withOrgs, rotationMode: "continuous" }, NOW).places.every((p) => p.name !== "Rina" && p.name !== "Guil"));
+  assert("final podiums, report and public summary exclude them", finalPodiums(withOrgs).every((g) => g.places.every((p) => p.name !== "Rina" && p.name !== "Guil")) && !JSON.stringify(buildOpenPlayFinalSummary(withOrgs, { sessionCode: "ABC123", endedAt: NOW }).podiums).includes("Rina"));
+  assert("row medals follow: organizers get none", !("b1" in podiumMedalRanks(computePodiums(withOrgs, NOW))) && !("i1" in podiumMedalRanks(computePodiums(withOrgs, NOW))));
+  assert("they still appear in the Standings table with their record", buildStandingsRows(withOrgs.players).some((r) => r.name === "Rina" && r.wins === 7));
+  const unmarked = { ...withOrgs, players: { ...withOrgs.players, i1: { ...withOrgs.players.i1, paymentStatus: "unpaid", paymentMethod: null } } };
+  assert("unmarking in the Payment tab restores eligibility", computePodiums(unmarked, NOW)[1].places[0].name === "Rina");
 }
 
 console.log("\n5. Final snapshot, report, CSV, public summary");
