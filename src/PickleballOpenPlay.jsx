@@ -1076,7 +1076,8 @@ export default function PickleballOpenPlay() {
     expectedGamesPerPlayer = 6,
     sessionType = "openPlay",
     tournamentFormat = null,
-    templateConfig = null
+    templateConfig = null,
+    sessionOptions = null // mode-specific choices from Create Session — today only { roulette: { totalRounds, roundMinutes } }
   ) => {
     setCreating(true);
     setCreateError("");
@@ -1148,7 +1149,7 @@ export default function PickleballOpenPlay() {
         tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
         ...createPhaseFields(rotationMode), // Points-Based Adaptive Matchmaking only: session phase / calibration / round lock ({} for every other mode)
-        ...createRouletteFields(rotationMode), // Roulette only: rounds / round timer / round state ({} for every other mode) — see lib/roulette.js
+        ...createRouletteFields(rotationMode, sessionOptions?.roulette), // Roulette only: rounds / round timer / round state ({} for every other mode) — see lib/roulette.js
         expectedGamesPerPlayer,
         adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
         skillChangeLog: [],

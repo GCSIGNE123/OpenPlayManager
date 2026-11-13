@@ -11,6 +11,7 @@ import {
   savePlayerRecord,
 } from "../lib/playerDatabase.js";
 import { DEFAULT_ROTATION_MODE, ROTATION_MODE_DESCRIPTIONS } from "../lib/constants.js";
+import { ROULETTE_DEFAULTS, ROULETTE_MODE, rouletteForecast } from "../lib/roulette.js";
 import { TournamentTemplateService } from "../engines/TournamentTemplateService.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { uploadPlayerPhoto } from "../lib/photoStorage.js";
@@ -60,6 +61,16 @@ export default function CreateSessionScreen({
   // working exactly as before, since it only ever sees a plain number.
   const [sessionDurationHours, setSessionDurationHours] = useState(2);
   const [avgMatchDurationMinutes, setAvgMatchDurationMinutes] = useState(15);
+  // Create Session review (14 Nov 2026) — Session Duration only matters to
+  // Progressive Skill Rotation (its mentorship -> separated phases are a
+  // percentage of the expected games); every other mode ignores it, so the
+  // section is shown for that mode alone. Roulette instead asks for what it
+  // actually runs on: the number of rounds and the round timer.
+  const isTournament = sessionType === "tournament";
+  const isRoulette = !isTournament && rotationMode === ROULETTE_MODE;
+  const needsDuration = !isTournament && rotationMode === "progressiveSkill";
+  const [rouletteRounds, setRouletteRounds] = useState(ROULETTE_DEFAULTS.totalRounds);
+  const [rouletteMinutes, setRouletteMinutes] = useState(ROULETTE_DEFAULTS.roundMinutes);
   const [roster, setRoster] = useState([]);
 
   // ---- Tournament Templates — see engines/TournamentTemplateService.js ----
@@ -169,7 +180,27 @@ export default function CreateSessionScreen({
     venue.trim().length > 0 &&
     courts >= 1 &&
     !creating &&
-    (sessionType === "tournament" || Number(sessionDurationHours) > 0);
+    (!needsDuration || Number(sessionDurationHours) > 0) &&
+    (!isRoulette || (Number(rouletteRounds) >= 1 && Number(rouletteMinutes) >= 1));
+  const startBlockedReason = creating
+    ? ""
+    : venue.trim().length === 0
+      ? "Give the session a name to start."
+      : needsDuration && !(Number(sessionDurationHours) > 0)
+        ? "Enter how many hours the session will run."
+        : isRoulette && !(Number(rouletteRounds) >= 1 && Number(rouletteMinutes) >= 1)
+          ? "Enter the number of rounds and the round timer."
+          : "";
+  const forecast = isRoulette ? rouletteForecast({ players: roster.length, courts, totalRounds: rouletteRounds, roundMinutes: rouletteMinutes }) : null;
+  // The games-per-player figure stored on the session: Roulette knows it
+  // exactly from rounds x courts; Progressive Skill estimates it from the
+  // duration; other modes keep the same estimate from the default 2 h / 15
+  // min (only TV Mode's progress bar reads it there).
+  const expectedGames = isRoulette && forecast
+    ? Math.max(1, forecast.gamesMax)
+    : Math.max(1, estimateGamesPerPlayer({ sessionDurationHours: Number(sessionDurationHours) || 0, courtsCount: courts, registeredPlayers: roster.length, avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0 }) || 1);
+  // Section numbers follow what is actually shown.
+  const playersStep = isTournament ? 6 : needsDuration || isRoulette ? 6 : 5;
 
   // Creating a new player always saves it to the database (this is what
   // makes the database grow from nothing — no separate migration step is
@@ -259,7 +290,7 @@ export default function CreateSessionScreen({
 
       <SectionLabel>1. Session name</SectionLabel>
       <input
-        style={styles.input}
+        style={{ ...styles.input, display: "block", width: "100%", boxSizing: "border-box" }}
         value={venue}
         onChange={(e) => setVenue(e.target.value)}
         placeholder="e.g. Ormoc City Saturday Open Play"
@@ -303,7 +334,7 @@ export default function CreateSessionScreen({
               lib/constants.js. Option text only: the stored value and the
               label shown in Scorer/reports are untouched. */}
           <select
-            style={styles.rotationSelect}
+            style={{ ...styles.rotationSelect, width: "100%", boxSizing: "border-box" }}
             value={rotationMode}
             onChange={(e) => setRotationMode(e.target.value)}
           >
@@ -328,9 +359,18 @@ export default function CreateSessionScreen({
             )}
           </select>
           {ROTATION_MODE_DESCRIPTIONS[rotationMode] && (
-            <p style={styles.editHint}>
-              <strong>{rotationModes.find((m) => m.value === rotationMode)?.label}:</strong> {ROTATION_MODE_DESCRIPTIONS[rotationMode]} The engine is fixed for the whole session.
-            </p>
+            <div style={styles.modeNote} data-testid="mode-note">
+              {/* one short line per sentence — easier to scan than a paragraph */}
+              <ul style={styles.modeNoteList}>
+                {ROTATION_MODE_DESCRIPTIONS[rotationMode]
+                  .split(/(?<=[.!?])\s+/)
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+              </ul>
+              <span style={styles.modeNoteFoot}>The rotation can't be changed once the session has started.</span>
+            </div>
           )}
         </>
       )}
@@ -405,12 +445,39 @@ export default function CreateSessionScreen({
         </>
       )}
 
-      {sessionType !== "tournament" && (
+      {isRoulette && (
+        <>
+          <SectionLabel>5. Rounds</SectionLabel>
+          <div style={styles.checkinRow}>
+            <label style={styles.settingsField}>
+              Number of rounds
+              <input type="number" min={1} style={{ ...styles.expectedGamesInput, width: 64 }} value={rouletteRounds} onChange={(e) => setRouletteRounds(e.target.value)} aria-label="Roulette number of rounds" />
+            </label>
+            <label style={styles.settingsField}>
+              Round timer (minutes)
+              <input type="number" min={1} style={{ ...styles.expectedGamesInput, width: 64 }} value={rouletteMinutes} onChange={(e) => setRouletteMinutes(e.target.value)} aria-label="Roulette round minutes" />
+            </label>
+          </div>
+          <div style={styles.sessionInfoCard}>
+            <div style={styles.sessionInfoItem}>
+              <span style={styles.sessionInfoLabel}>What to expect</span>
+              <span style={styles.sessionInfoValue} data-testid="roulette-forecast">
+                {forecast
+                  ? `${forecast.playPerRound} play on ${forecast.courtsUsed} court${forecast.courtsUsed === 1 ? "" : "s"}${forecast.sitPerRound > 0 ? `, ${forecast.sitPerRound} sit out` : ""} each round · ${forecast.gamesMin === forecast.gamesMax ? forecast.gamesMin : `${forecast.gamesMin}–${forecast.gamesMax}`} games per player · about ${forecast.playMinutes} min of play`
+                  : "Register at least 4 players to see the forecast."}
+              </span>
+            </div>
+          </div>
+          <p style={styles.editHint}>Both can still be changed in Session Settings after the session starts. Late arrivals join from the next round.</p>
+        </>
+      )}
+
+      {needsDuration && (
         <>
           <SectionLabel>5. Session duration</SectionLabel>
           <p style={styles.editHint}>
-            How long today's session will run, in hours (decimals allowed — e.g. 1.5, 2.5). Used below to estimate
-            how many games each player can expect to play.
+            How long today's session will run, in hours (decimals allowed — e.g. 1.5, 2.5). Progressive Skill uses the
+            expected games per player to decide when to move from mixed play to separated levels.
           </p>
           <div style={styles.checkinRow}>
             <label style={styles.settingsField}>
@@ -444,23 +511,33 @@ export default function CreateSessionScreen({
             <div style={styles.sessionInfoItem}>
               <span style={styles.sessionInfoLabel}>Expected Playing Opportunities</span>
               <span style={styles.sessionInfoValue}>
-                {estimateGamesPerPlayer({
-                  sessionDurationHours: Number(sessionDurationHours) || 0,
-                  courtsCount: courts,
-                  registeredPlayers: roster.length,
-                  avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0,
-                })}{" "}
-                Games
+                {roster.length === 0
+                  ? "Register players to see the estimate"
+                  : `${estimateGamesPerPlayer({
+                      sessionDurationHours: Number(sessionDurationHours) || 0,
+                      courtsCount: courts,
+                      registeredPlayers: roster.length,
+                      avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0,
+                    })} games per player`}
               </span>
             </div>
           </div>
         </>
       )}
 
-      <SectionLabel>6. Register players joining today ({roster.length})</SectionLabel>
+      <SectionLabel>{playersStep}. Register players joining today ({roster.length})</SectionLabel>
       <p style={styles.editHint}>
-        This is just the guest list — everyone still needs to Check In once they're actually at the courts.
-        Skill level is used to pair a beginner with an intermediate player as teammates.
+        This is just the guest list — everyone still needs to Check In once they're actually at the courts. You can
+        also add players after the session starts.{" "}
+        {isTournament
+          ? ""
+          : isRoulette
+            ? "Roulette draws everyone from one pool, so skill level isn't used."
+            : rotationMode === "adaptiveSkill"
+              ? "Skill level decides each player's division (Beginner or Intermediate)."
+              : rotationMode === "pointsAdaptive" || rotationMode === "adaptiveRanking"
+                ? "Matching uses each player's Open Play Points."
+                : "Skill level is used to balance the teams."}
       </p>
 
       {/* Today's Players — compact, near the top, so an organizer already
@@ -726,20 +803,13 @@ export default function CreateSessionScreen({
             courts,
             roster,
             rotationMode,
-            Math.max(
-              1,
-              estimateGamesPerPlayer({
-                sessionDurationHours: Number(sessionDurationHours) || 0,
-                courtsCount: courts,
-                registeredPlayers: roster.length,
-                avgMatchDurationMinutes: Number(avgMatchDurationMinutes) || 0,
-              }) || 1
-            ),
+            expectedGames,
             sessionType,
             sessionType === "tournament" ? tournamentFormat : null,
             sessionType === "tournament" && templateChoice === "template" && selectedTemplate
               ? templateService.applyTemplate(selectedTemplate)
-              : null
+              : null,
+            isRoulette ? { roulette: { totalRounds: Math.round(Number(rouletteRounds)), roundMinutes: Math.round(Number(rouletteMinutes)) } } : null
           )
         }
         disabled={!canStart}
@@ -747,6 +817,7 @@ export default function CreateSessionScreen({
         <LogIn size={16} strokeWidth={2.5} />
         {creating ? "Starting…" : "Start session"}
       </button>
+      {startBlockedReason && <p style={styles.startHint}>{startBlockedReason}</p>}
     </div>
   );
 }
