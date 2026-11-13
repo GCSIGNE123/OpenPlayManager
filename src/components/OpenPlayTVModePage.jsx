@@ -4,9 +4,9 @@ import { STORAGE_PREFIX } from "../lib/constants.js";
 import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { fetchVenue } from "../lib/venueModel.js";
 import { buildStandingsRows } from "../lib/performanceRating.js";
-import { computePodium } from "../lib/podium.js";
+import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
 import MedalIcon from "./MedalIcon.jsx";
-import PodiumPanel from "./PodiumPanel.jsx";
+import PodiumBoard from "./PodiumBoard.jsx";
 import { APP_NAME } from "../lib/brand.js";
 import { courtDisplayName } from "../lib/utils.js";
 import { tvStyles as ts, tvKeyframes, courtGridDimensions, courtSizeTier, upNextSizeTier, TV_LAYOUT_PRESETS } from "../tvOpenPlayStyles.js";
@@ -321,10 +321,14 @@ function UpNextColumn({ nextMatchups, players, courts }) {
 // differently on every TV and can't be styled).
 function StandingsColumn({ players, session, now }) {
   const rows = buildStandingsRows(players);
-  const podium = computePodium(session, now instanceof Date ? now.getTime() : now);
+  // Division Podiums: Beginner + Intermediate in a Skill Divisions session
+  // (stacked in this 30% column), the single podium otherwise; row medals
+  // follow the podium(s), see podiumMedalRanks.
+  const podiums = computePodiums(session, now instanceof Date ? now.getTime() : now);
+  const medalRanks = podiumMedalRanks(podiums);
   return (
     <div style={ts.column}>
-      <PodiumPanel podium={podium} dark />
+      <PodiumBoard podiums={podiums} dark />
       <h2 style={ts.columnTitle}>Standings</h2>
       {rows.length === 0 ? (
         <EmptyState title="Standings" body="Standings will appear after the first completed match." />
@@ -345,7 +349,7 @@ function StandingsColumn({ players, session, now }) {
               const rtg = row.performance.rating ?? "—";
               return (
                 <div key={row.id} style={ts.standingsRow(rank)} className="tv-rank-pop">
-                  <span style={ts.standingsRank}>{rank <= 3 ? <MedalIcon rank={rank} size={20} title={`${rank}`} /> : rank}</span>
+                  <span style={ts.standingsRank}>{medalRanks[row.id] ? <MedalIcon rank={medalRanks[row.id]} size={20} title={`${medalRanks[row.id]}`} /> : rank}</span>
                   <div style={ts.standingsPhotoRing(rank)}>
                     <Avatar player={row} size={40} />
                   </div>

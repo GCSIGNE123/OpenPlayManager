@@ -42,8 +42,14 @@ export function buildSessionReportExportTable(report) {
     );
   }
   rows.push(["Session Grade", `${grade.score} / 100 (${grade.label})`]);
-  for (const p of report.finalPodium || []) {
-    rows.push([`Podium: ${p.label}`, `${p.name} — ${p.wins}-${p.losses} (${Math.round((p.winPct || 0) * 100)}%, ${p.games} games)${p.out ? " — checked out early" : ""}`]);
+  // Division Podiums: one block per podium ("Beginner Podium: Champion" /
+  // "Intermediate Podium: Champion"); a report without `finalPodiums`
+  // (saved before divisions) falls back to the overall `finalPodium`.
+  const podiumGroups = report.finalPodiums && report.finalPodiums.length ? report.finalPodiums : [{ label: null, places: report.finalPodium || [] }];
+  for (const g of podiumGroups) {
+    for (const p of g.places || []) {
+      rows.push([`${g.label ? `${g.label} ` : ""}Podium: ${p.label}`, `${p.name} — ${p.wins}-${p.losses} (${Math.round((p.winPct || 0) * 100)}%, ${p.games} games)${p.out ? " — checked out early" : ""}`]);
+    }
   }
   playersNeedingAttention.forEach((p) => {
     rows.push([`Player Needing Attention: ${p.playerName}`, p.reasons.join("; ")]);

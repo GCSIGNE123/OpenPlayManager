@@ -20,7 +20,19 @@
 //   - FINAL: finalPodium() is the same computation with the time gate
 //     forced open, taken once at End Session for the saved report and the
 //     public final summary.
+//   - DIVISION PODIUMS (organizer direction, 13 Nov 2026): in a Skill
+//     Divisions session there is one podium PER DIVISION — a Beginner
+//     champion / runner-up / 3rd and an Intermediate champion / runner-up /
+//     3rd — replacing the single overall podium (comparing a beginner's
+//     record with an intermediate's isn't meaningful when they never meet
+//     on court). Same unlock, same min-games guard, same ordering, applied
+//     to each division's rows. A player stands in the division they are in
+//     NOW (a mid-session promotion carries their record with them). Every
+//     other rotation mode keeps the single podium. computePodiums /
+//     finalPodiums return the list of podiums a surface should show;
+//     computePodium / finalPodium remain the single-podium primitives.
 import { buildStandingsRows } from "./performanceRating.js";
+import { DIVISIONS, divisionOf, divisionLabel, sessionHasDivisions } from "./divisions.js";
 
 export const DEFAULT_PODIUM_UNLOCK_MINUTES = 60;
 export const DEFAULT_PODIUM_MIN_GAMES = 2;
@@ -49,6 +61,15 @@ export function isCheckedOut(player) {
   return player?.status === "CHECKED_OUT";
 }
 
+// One podium per division in Skill Divisions sessions, otherwise one.
+export const podiumIsDivided = (state) => sessionHasDivisions(state);
+
+const rowsFor = (state, division) => {
+  const rows = buildStandingsRows(state?.players || {});
+  if (!division) return rows;
+  return rows.filter((r) => divisionOf(state?.players?.[r.id] || r) === division);
+};
+
 function placesFrom(rows, minGames) {
   return rows
     .filter((r) => (r.gp || 0) >= minGames)
@@ -70,16 +91,21 @@ function placesFrom(rows, minGames) {
 }
 
 // The live view. `now` is injectable so the UI's minute ticker and the
-// verify scripts can drive it deterministically.
-export function computePodium(state, now = Date.now()) {
+// verify scripts can drive it deterministically. `division` (optional,
+// "beginner" | "intermediate") restricts the ranking to that division's
+// players — the podium then carries `division` / `divisionLabel` so the UI
+// can title it.
+export function computePodium(state, now = Date.now(), { division = null } = {}) {
   const { unlockMinutes, minGames } = podiumSettings(state);
   const startedAt = typeof state?.sessionStartedAt === "number" ? state.sessionStartedAt : null;
   const elapsedMinutes = startedAt ? Math.max(0, (now - startedAt) / 60000) : 0;
   const unlocked = startedAt !== null && elapsedMinutes >= unlockMinutes;
-  const rows = buildStandingsRows(state?.players || {});
+  const rows = rowsFor(state, division);
   const places = placesFrom(rows, minGames);
   return {
     final: false,
+    division,
+    divisionLabel: division ? divisionLabel(division) : null,
     unlocked,
     unlockMinutes,
     minGames,
@@ -90,14 +116,59 @@ export function computePodium(state, now = Date.now()) {
   };
 }
 
+// What a live surface shows: [Beginner podium, Intermediate podium] in a
+// Skill Divisions session, [the single podium] otherwise. The unlock
+// countdown is shared, so a surface renders the locked banner once.
+export function computePodiums(state, now = Date.now()) {
+  if (!podiumIsDivided(state)) return [computePodium(state, now)];
+  return DIVISIONS.map((d) => computePodium(state, now, { division: d.key }));
+}
+
 // End-of-session snapshot: same ranking, same min-games guard, time gate
 // forced open. Returned places carry no photos (the report and the public
 // summary must stay small and photo-free — see publicFinalSummary.js's
 // privacy allow-list).
-export function finalPodium(state) {
+export function finalPodium(state, { division = null } = {}) {
   const { minGames } = podiumSettings(state);
-  const rows = buildStandingsRows(state?.players || {});
-  return placesFrom(rows, minGames).map(({ photo, ...place }) => place);
+  return placesFrom(rowsFor(state, division), minGames).map(({ photo, ...place }) => place);
+}
+
+// The saved-report / public-summary shape: one group per podium —
+// [{ division: "beginner", label: "Beginner", places }, { division:
+// "intermediate", ... }] in a Skill Divisions session, [{ division: null,
+// label: null, places }] otherwise.
+export function finalPodiums(state) {
+  if (!podiumIsDivided(state)) return [{ division: null, label: null, places: finalPodium(state) }];
+  return DIVISIONS.map((d) => ({ division: d.key, label: d.label, places: finalPodium(state, { division: d.key }) }));
+}
+
+// playerId -> podium rank (1..3) across every podium a surface shows, so a
+// standings table can put the medal on the same people the podium(s) show
+// — with division podiums, a Beginner champion wears gold even when an
+// Intermediate sits above them in the overall table.
+export function podiumMedalRanks(podiums) {
+  const ranks = {};
+  for (const podium of podiums || []) {
+    for (const place of podium?.places || []) {
+      if (place.playerId) ranks[place.playerId] = place.rank;
+    }
+  }
+  return ranks;
+}
+
+// Turns a saved group list (finalPodiums) back into the panel shape
+// PodiumPanel / PodiumBoard render. Also accepts the pre-division report
+// field (a bare places array) so reports saved earlier still render.
+export function finalPodiumsForDisplay(groupsOrPlaces) {
+  if (!groupsOrPlaces || groupsOrPlaces.length === 0) return [];
+  const groups = Array.isArray(groupsOrPlaces[0]?.places) ? groupsOrPlaces : [{ division: null, label: null, places: groupsOrPlaces }];
+  return groups.map((g) => ({
+    final: true,
+    unlocked: true,
+    division: g.division || null,
+    divisionLabel: g.division ? g.label || divisionLabel(g.division) : null,
+    places: g.places || [],
+  }));
 }
 
 // Public allow-list for the spectator-facing final summary: display name
@@ -116,6 +187,20 @@ export function publicPodium(places) {
   }));
 }
 
+// Division podiums for the public summary. The division name is the one
+// deliberate addition to the spectator allow-list (organizer direction:
+// champions are declared per category, so the public page shows the
+// Beginner and Intermediate podiums by name) — still no ids, photos,
+// ratings or payment fields, and nothing about players who are not on a
+// podium.
+export function publicPodiums(groups) {
+  return (groups || []).map((g) => ({
+    division: g.division || null,
+    label: g.division ? g.label || divisionLabel(g.division) : null,
+    places: publicPodium(g.places),
+  }));
+}
+
 // One-line status copy shared by every surface, so the wording is identical
 // on the Live Board, Standings, TV Mode and the spectator page.
 export function podiumStatusText(podium) {
@@ -127,7 +212,9 @@ export function podiumStatusText(podium) {
       : `Running podium unlocks at ${podium.unlockMinutes} min of play — ${podium.minutesToGo} min to go.`;
   }
   if (podium.places.length === 0) {
-    return `Running podium — no one has ${podium.minGames}+ completed games yet.`;
+    return podium.divisionLabel
+      ? `No ${podium.divisionLabel} player has ${podium.minGames}+ completed games yet.`
+      : `Running podium — no one has ${podium.minGames}+ completed games yet.`;
   }
   return `Running podium — updates after every result (${podium.minGames}+ games to qualify).`;
 }

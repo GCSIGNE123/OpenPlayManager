@@ -27,6 +27,13 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-13 — Division Podiums** — in Skill Divisions sessions the
+  podium is one per category: a Beginner Champion / Runner-up / 3rd and an
+  Intermediate Champion / Runner-up / 3rd, side by side on the Live Board,
+  Standings and TV Mode, in the report and CSV, and in the public final
+  summary (spectator page follow-up in the Player repo). Same unlock and
+  qualifying rules per division; other modes keep the single podium. See
+  `FEATURES.md`.
 - **2026-11-13 — Same-Division Fixed Pairs** — in Skill Divisions a fixed
   pair must be two players of the same division; cross-division pairs are
   refused with the reason, the Partner dropdowns disable (not hide) the

@@ -13,7 +13,7 @@
 import { rotationModeLabelFor } from "./constants.js";
 import { derivePaymentStats } from "./queueManagement.js";
 import { buildStandingsRows } from "./performanceRating.js";
-import { finalPodium } from "./podium.js";
+import { finalPodium, finalPodiums } from "./podium.js";
 
 // ---------------------------------------------------------------------
 // Waiting-time tracking — called from PickleballOpenPlay.jsx's save(),
@@ -388,6 +388,10 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
     // ranking and min-games guard the live podium used, time gate forced
     // open. No photos (reports must stay small).
     finalPodium: finalPodium(state),
+    // Division Podiums — [{ division, label, places }] per podium shown
+    // (two in a Skill Divisions session, one otherwise). finalPodium above
+    // stays the overall top-3 for existing consumers.
+    finalPodiums: finalPodiums(state),
     finalStandings: buildStandingsRows(state.players).map((p) => ({
       playerId: p.id,
       playerName: p.name,

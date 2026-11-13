@@ -23,7 +23,7 @@
 // object.
 import { PUBLIC_FINAL_PREFIX } from "./constants.js";
 import { buildStandingsRows } from "./performanceRating.js";
-import { finalPodium, publicPodium } from "./podium.js";
+import { finalPodium, finalPodiums, publicPodium, publicPodiums } from "./podium.js";
 import { RoundRobinStandingsService } from "../engines/RoundRobinStandingsService.js";
 import { fetchTournament } from "./tournamentModel.js";
 
@@ -53,6 +53,12 @@ export function buildOpenPlayFinalSummary(state, { sessionCode = null, endedAt =
     // allow-list discipline as `standings` above. Additive: a viewer that
     // predates this field simply ignores it.
     podium: publicPodium(finalPodium(state)),
+    // Division Podiums — [{ division, label, places }] per podium (two in a
+    // Skill Divisions session). The division name is the one deliberate
+    // addition to the spectator allow-list (organizer direction: champions
+    // are declared per category). `podium` above stays for viewers that
+    // predate this field.
+    podiums: publicPodiums(finalPodiums(state)),
     standings,
   };
 }

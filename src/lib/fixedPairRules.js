@@ -22,14 +22,13 @@
 //      before.
 //
 // No React, no I/O — unit-testable under plain Node.
+import { DIVISION_MODES, divisionOf, divisionLabel } from "./divisions.js";
 
-export const SAME_DIVISION_PAIR_MODES = ["adaptiveSkill"];
+export const SAME_DIVISION_PAIR_MODES = DIVISION_MODES;
 
-// Anyone whose skill isn't "intermediate" plays in the Beginner division —
-// the same test AdaptiveSkillRotationEngine.generateMatchups uses to split
-// its pool, kept identical here on purpose.
-export const divisionOf = (player) => (player?.skill === "intermediate" ? "intermediate" : "beginner");
-export const divisionLabel = (division) => (division === "intermediate" ? "Intermediate" : "Beginner");
+// Division membership comes from lib/divisions.js — the same test
+// AdaptiveSkillRotationEngine.generateMatchups uses to split its pool.
+export { divisionOf, divisionLabel };
 export const sameDivision = (a, b) => divisionOf(a) === divisionOf(b);
 
 export function pairRuleApplies(state) {
