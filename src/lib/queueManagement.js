@@ -2,6 +2,7 @@ import { getRotationEngine, refreshNextMatchups, regenerateNextMatchups, maxUpco
 import { progressiveSkillPhaseFor } from "./progressiveSkillPhase.js";
 import { uid } from "./random.js";
 import { calibrationEngineContext } from "./calibrationProfile.js";
+import { fixedPairBlockReason } from "./fixedPairRules.js";
 
 // Smart Queue Management — see PROJECT.md/FEATURES.md. Every action here is
 // a pure, UI-agnostic `(state, ...) => newState` function — none of them
@@ -294,6 +295,10 @@ function setFixedPartnerCore(state, playerIdA, playerIdB) {
   const b = state.players[playerIdB];
   if (!a || !b) return state;
   if (a.partnerId === playerIdB && b.partnerId === playerIdA) return state;
+  // Same-Division Fixed Pairs (lib/fixedPairRules.js) — in a Skill Divisions
+  // session a Beginner + Intermediate pair is refused outright (no-op, same
+  // state object); the UI wrapper shows the reason. Other modes: unchanged.
+  if (fixedPairBlockReason(state, a, b)) return state;
 
   const players = { ...state.players };
   if (a.partnerId && players[a.partnerId]) {

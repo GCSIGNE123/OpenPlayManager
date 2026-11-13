@@ -27,6 +27,12 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-13 — Same-Division Fixed Pairs** — in Skill Divisions a fixed
+  pair must be two players of the same division; cross-division pairs are
+  refused with the reason, the Partner dropdowns disable (not hide) the
+  other division's names, and a promotion/relegation or manual level change
+  that splits a pair dissolves it with a notice. Other rotation modes are
+  unchanged. See `FEATURES.md`.
 - **2026-11-12 — Scorer Player Info** — every player row in the Scorer
   tab now shows level (BEG/INT), games played, waiting time, W–L, rating
   and a fixed-pair tag naming the partner, laid out as a two-line card

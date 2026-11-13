@@ -5,6 +5,7 @@ import { AdaptiveSkillRotationEngine } from "../engines/AdaptiveSkillRotationEng
 import { AdaptiveRankingRotationEngine } from "../engines/AdaptiveRankingRotationEngine.js";
 import { PointsAdaptiveMatchmakingEngine } from "../engines/PointsAdaptiveMatchmakingEngine.js";
 import { uid } from "./random.js";
+import { splitPairIfCrossDivision } from "./fixedPairRules.js";
 
 export { uid, shuffle } from "./random.js";
 
@@ -412,10 +413,18 @@ export function changePlayerSkill(state, playerId, newSkill, reason = "Manual ov
     return state;
   }
   const previousSkill = p.skill === "intermediate" ? "intermediate" : "beginner";
-  const players = {
-    ...state.players,
-    [playerId]: { ...p, skill: newSkill, streak: 0, lossStreak: 0 },
-  };
+  // Same-Division Fixed Pairs (lib/fixedPairRules.js) — a level change that
+  // leaves this player's fixed partner in the other division dissolves the
+  // pair, both sides. The wrapper in PickleballOpenPlay.jsx words the notice
+  // by comparing partnerId before/after, so this stays a plain state->state.
+  const { players } = splitPairIfCrossDivision(
+    {
+      ...state.players,
+      [playerId]: { ...p, skill: newSkill, streak: 0, lossStreak: 0 },
+    },
+    playerId,
+    state
+  );
   const nextMatchups = dissolveMatchupIfReserved(state.nextMatchups, playerId);
   const logEntry = {
     id: uid(),
