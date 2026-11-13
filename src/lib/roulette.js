@@ -57,9 +57,42 @@ const positiveIntOr = (v, fallback) => {
 };
 
 // State fields to spread into a NEW session's state ({} for other modes).
-export function createRouletteFields(rotationMode) {
+// `options` = what the organizer chose at Create Session ({ totalRounds,
+// roundMinutes }); anything missing or invalid falls back to the defaults.
+export function createRouletteFields(rotationMode, options = null) {
   if (rotationMode !== ROULETTE_MODE) return {};
-  return { roulette: { ...ROULETTE_DEFAULTS, round: 0, phase: ROULETTE_PHASES.WAITING, roundStartedAt: null, rounds: [] } };
+  return {
+    roulette: {
+      ...ROULETTE_DEFAULTS,
+      totalRounds: positiveIntOr(options?.totalRounds, ROULETTE_DEFAULTS.totalRounds),
+      roundMinutes: positiveIntOr(options?.roundMinutes, ROULETTE_DEFAULTS.roundMinutes),
+      round: 0,
+      phase: ROULETTE_PHASES.WAITING,
+      roundStartedAt: null,
+      rounds: [],
+    },
+  };
+}
+
+// What a Roulette session will look like for a given room — shown on Create
+// Session so the organizer sees the consequences of courts / rounds before
+// starting. null when a round can't be drawn at all (fewer than 4 players).
+export function rouletteForecast({ players, courts, totalRounds, roundMinutes }) {
+  const n = Math.max(0, Math.floor(Number(players) || 0));
+  const rounds = positiveIntOr(totalRounds, ROULETTE_DEFAULTS.totalRounds);
+  const minutes = positiveIntOr(roundMinutes, ROULETTE_DEFAULTS.roundMinutes);
+  const courtsUsed = Math.min(Math.max(0, Math.floor(Number(courts) || 0)), Math.floor(n / 4));
+  if (courtsUsed <= 0) return null;
+  const playPerRound = courtsUsed * 4;
+  const totalSlots = playPerRound * rounds;
+  return {
+    courtsUsed,
+    playPerRound,
+    sitPerRound: n - playPerRound,
+    gamesMin: Math.floor(totalSlots / n),
+    gamesMax: Math.ceil(totalSlots / n),
+    playMinutes: rounds * minutes,
+  };
 }
 
 // Always a complete object, whatever the stored record looks like.

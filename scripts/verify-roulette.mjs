@@ -10,7 +10,7 @@ import fs from "node:fs";
 import {
   ROULETTE_MODE, ROULETTE_DEFAULTS, ROULETTE_PHASES, isRouletteMode, createRouletteFields, rouletteOf, seededRandom, pairHistory, sitCounts,
   roulettePool, rouletteRepeats, drawRouletteRound, rouletteAdvance, redrawRouletteRound, startRouletteRound, rouletteClock, formatClock,
-  rouletteScoreProblem, rouletteStatusText,
+  rouletteScoreProblem, rouletteStatusText, rouletteForecast,
 } from "../src/lib/roulette.js";
 import { computeAlerts } from "../src/lib/alerts.js";
 import { getRotationEngine, refreshNextMatchups } from "../src/lib/utils.js";
@@ -62,6 +62,14 @@ function playWholeSession(n, courts, seed, over = {}) {
 console.log("\n1. Mode registration");
 assert("Roulette is a selectable standard mode, last in the list, never the default", ROTATION_MODES[ROTATION_MODES.length - 1].value === "roulette" && defaultState.rotationMode === "adaptiveSkill" && ROULETTE_MODE === "roulette");
 assert("it has a label and a plain-language description", /Roulette/.test(rotationModeLabelFor("roulette")) && /never the same partner twice/.test(ROTATION_MODE_DESCRIPTIONS.roulette) && /11 points or the round timer/.test(ROTATION_MODE_DESCRIPTIONS.roulette));
+assert("createRouletteFields honours Create Session's rounds / timer and falls back on garbage", createRouletteFields("roulette", { totalRounds: 8, roundMinutes: 9 }).roulette.totalRounds === 8 && createRouletteFields("roulette", { totalRounds: 8, roundMinutes: 9 }).roulette.roundMinutes === 9 && createRouletteFields("roulette", { totalRounds: "x", roundMinutes: 0 }).roulette.totalRounds === 12 && createRouletteFields("roulette", { roundMinutes: 0 }).roulette.roundMinutes === 11);
+assert("rouletteForecast: 22 players, 4 courts, 12 rounds of 11 min -> 16 play, 6 sit, 8-9 games, 132 min", JSON.stringify(rouletteForecast({ players: 22, courts: 4, totalRounds: 12, roundMinutes: 11 })) === JSON.stringify({ courtsUsed: 4, playPerRound: 16, sitPerRound: 6, gamesMin: 8, gamesMax: 9, playMinutes: 132 }));
+assert("rouletteForecast: 16 players / 4 courts -> nobody sits, 12 games each; 9 players / 4 courts -> 2 courts; under 4 players -> null", rouletteForecast({ players: 16, courts: 4, totalRounds: 12, roundMinutes: 11 }).sitPerRound === 0 && rouletteForecast({ players: 16, courts: 4, totalRounds: 12, roundMinutes: 11 }).gamesMin === 12 && rouletteForecast({ players: 9, courts: 4, totalRounds: 6, roundMinutes: 10 }).courtsUsed === 2 && rouletteForecast({ players: 3, courts: 4, totalRounds: 12, roundMinutes: 11 }) === null);
+{
+  const cs = strip(read("src/components/CreateSessionScreen.jsx"));
+  assert("Create Session: Session Duration only for Progressive Skill; Rounds section + forecast for Roulette", /const needsDuration = !isTournament && rotationMode === "progressiveSkill";/.test(cs) && /\{needsDuration && \(/.test(cs) && /\{isRoulette && \(/.test(cs) && /data-testid="roulette-forecast"/.test(cs));
+  assert("Create Session passes the Roulette choices to startSession, which seeds the session with them", /isRoulette \? \{ roulette: \{ totalRounds: Math\.round\(Number\(rouletteRounds\)\), roundMinutes: Math\.round\(Number\(rouletteMinutes\)\) \} \} : null/.test(cs) && /createRouletteFields\(rotationMode, sessionOptions\?\.roulette\)/.test(strip(read("src/PickleballOpenPlay.jsx"))));
+}
 assert("defaults: 12 rounds, 11 minutes, games to 11", ROULETTE_DEFAULTS.totalRounds === 12 && ROULETTE_DEFAULTS.roundMinutes === 11 && ROULETTE_DEFAULTS.gamePoints === 11);
 assert("createRouletteFields: fields for roulette, {} for every other mode", createRouletteFields("roulette").roulette.phase === P.WAITING && createRouletteFields("roulette").roulette.round === 0 && Object.keys(createRouletteFields("adaptiveSkill")).length === 0);
 assert("rouletteOf tolerates a missing / garbage record", rouletteOf({}).totalRounds === 12 && rouletteOf({ roulette: { totalRounds: "x", phase: "??", round: -3 } }).phase === P.WAITING && rouletteOf({ roulette: { totalRounds: "x" } }).round === 0);
@@ -206,7 +214,7 @@ console.log("\n8. Wiring");
   const app = strip(read("src/PickleballOpenPlay.jsx"));
   assert("save(): rouletteAdvance runs before matchup generation", /next = rouletteAdvance\(next\);/.test(app) && app.indexOf("next = rouletteAdvance(next);") < app.indexOf("const withMatchups = {"));
   assert("save(): the per-save engine refresh and auto-dispatch are skipped for Roulette", /isCalibrationPhase\(next\) \|\| isRouletteMode\(next\)\s*\? next\.nextMatchups \|\| \[\]/.test(app) && /!isRouletteMode\(withMatchups\) && withMatchups\.courtDispatchSettings\?\.autoFillCourts !== false/.test(app));
-  assert("new sessions get the Roulette fields", /\.\.\.createRouletteFields\(rotationMode\),/.test(app));
+  assert("new sessions get the Roulette fields", /\.\.\.createRouletteFields\(rotationMode, sessionOptions\?\.roulette\),/.test(app));
   assert("endMatch refuses a tied Roulette score before touching any stats", /const rouletteProblem = rouletteScoreProblem\(state, scoreA, scoreB\);\s*if \(rouletteProblem\) \{\s*releaseGuard\(\);/.test(app) && app.indexOf("const rouletteProblem") < app.indexOf("let players = { ...state.players };"));
   assert("Regenerate = Redraw in Roulette (with Undo snapshot); Generate remaining courts is disabled", /if \(isRouletteMode\(state\)\) \{\s*if \(rouletteOf\(state\)\.phase !== ROULETTE_PHASES\.DRAWN\) return;\s*setRegenerateSnapshot\(state\.nextMatchups \|\| \[\]\);\s*save\(redrawRouletteRound\(state\)\);/.test(app) && /if \(isRouletteMode\(state\)\) return;/.test(app));
   assert("Start Round action saves the started round", /const startRouletteRound = \(\) => \{\s*const next = startRouletteRoundAction\(state, \{ isCourtReserved \}\);\s*if \(next === state\) return;/.test(app) && /onStartRouletteRound=\{startRouletteRound\}/.test(app));

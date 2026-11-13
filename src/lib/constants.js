@@ -161,7 +161,7 @@ export const ROTATION_MODE_DESCRIPTIONS = {
   progressiveSkill:
     "Starts everyone mixed together (mentorship), then gradually separates Beginners from Intermediates as the session progresses. Use this for clinics or sessions that begin social and end competitive.",
   roulette:
-    "Round-based. Every round the whole room is drawn at once — random partners and opponents from one mixed pool, never the same partner twice, as few repeat opponents as possible — and everyone plays at the same time; sit-outs rotate so nobody rests twice before everyone has rested once. Games go to 11 points or the round timer (11 minutes), whichever comes first. You can edit or redraw each round before starting it. Players are ranked individually. Use this for a social mixer with a set number of rounds.",
+    "Every round the whole room is drawn at once and plays at the same time. Random partners and opponents from one mixed pool: never the same partner twice, as few repeat opponents as possible. Sit-outs rotate, so nobody rests twice before everyone has rested once. Games go to 11 points or the round timer, whichever comes first. You can edit or redraw each round before starting it. Players are ranked individually. Use this for a social mixer with a set number of rounds.",
   adaptiveRanking: "Matches players within nearby Open Play Points while balancing recent play and wait time.",
   pointsAdaptive: "Organizer builds Rounds 1 and 2 by hand; from Round 3 the system matches players from ONE waiting pool by Open Play Points, fairness (rest, wait, games) and variety — no Beginner/Intermediate split.",
 };

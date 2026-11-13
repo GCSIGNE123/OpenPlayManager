@@ -1158,6 +1158,36 @@ export const styles = {
     color: "var(--color-text-faint)",
     margin: "0 0 10px 0",
   },
+  // Create Session — the selected rotation's explanation
+  modeNote: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "var(--color-text-muted)",
+    margin: "8px 0 4px 0",
+    padding: "10px 12px",
+    borderRadius: 8,
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+  },
+  modeNoteList: {
+    margin: 0,
+    paddingLeft: 18,
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+  },
+  modeNoteFoot: {
+    display: "block",
+    marginTop: 6,
+    fontSize: 11.5,
+    color: "var(--color-text-faint)",
+  },
+  startHint: {
+    fontSize: 12,
+    color: "var(--color-text-faint)",
+    textAlign: "center",
+    margin: "8px 0 0 0",
+  },
   playerSearchInput: {
     width: "100%",
     marginBottom: 10,
