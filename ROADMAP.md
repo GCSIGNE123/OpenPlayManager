@@ -27,6 +27,14 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-14 — Roulette mode, part 1** — a new round-based rotation:
+  every round is drawn at once from one mixed pool (random partners and
+  opponents, never the same partner twice, minimal repeat opponents,
+  rotating sit-outs), reviewed/edited/redrawn by the organizer, then
+  started together on a round clock (games to 11 or 11 minutes). Part 2
+  (win-percentage standings, final podium, Final Match award) and the
+  spectator page follow; King of the Court after that. See `FEATURES.md`.
+
 - **2026-11-13 — Organizer Alerts** — a notification bell in the Scorer
   tab (red badge + chime) for: a player waiting 15+ min, the same four
   players queued again (unless manually set), a fixed pair split in the

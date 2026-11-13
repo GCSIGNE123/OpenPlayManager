@@ -32,6 +32,7 @@ export default function SessionSettingsDialog({
   showResultGrouping,
   podiumUnlockMinutes,
   podiumMinGames,
+  roulette, // Roulette sessions only: { totalRounds, roundMinutes, round } — undefined otherwise
   onSave,
   onClose,
 }) {
@@ -70,6 +71,8 @@ export default function SessionSettingsDialog({
   // Running Podium — see lib/podium.js. Rotation-mode-agnostic, always shown.
   const [podiumUnlockDraft, setPodiumUnlockDraft] = useState(podiumUnlockMinutes ?? 60);
   const [podiumMinGamesDraft, setPodiumMinGamesDraft] = useState(podiumMinGames ?? 2);
+  const [rouletteRoundsDraft, setRouletteRoundsDraft] = useState(roulette?.totalRounds ?? 12);
+  const [rouletteMinutesDraft, setRouletteMinutesDraft] = useState(roulette?.roundMinutes ?? 11);
 
   const [resultGroupingDraft, setResultGroupingDraft] = useState(RESULT_GROUPING_OPTIONS.some((o) => o.value === resultGrouping) ? resultGrouping : "off");
 
@@ -128,6 +131,17 @@ export default function SessionSettingsDialog({
       // only written for Skill Divisions sessions — other modes keep whatever
       // value the session already had (the engine ignores it anyway)
       ...(showResultGrouping ? { resultGrouping: resultGroupingDraft } : {}),
+      // Roulette sessions only. Rounds can never drop below the round
+      // already drawn/played; the timer change applies from the next clock.
+      ...(roulette
+        ? {
+            roulette: {
+              ...roulette.raw,
+              totalRounds: Math.max(roulette.round || 1, Math.round(Number(rouletteRoundsDraft)) || 12),
+              roundMinutes: Math.max(1, Math.round(Number(rouletteMinutesDraft)) || 11),
+            },
+          }
+        : {}),
     });
     onClose();
   };
@@ -285,6 +299,25 @@ export default function SessionSettingsDialog({
               ))}
             </select>
             <p style={styles.editHint}>{RESULT_GROUPING_OPTIONS.find((o) => o.value === resultGroupingDraft)?.description}</p>
+          </div>
+        )}
+
+        {roulette && (
+          <div style={styles.dialogField}>
+            <label style={styles.dialogLabel}>Roulette Rounds</label>
+            <p style={styles.dialogReadOnlyValue}>
+              Every round is drawn at once (random partners and opponents, sit-outs rotated). A game ends at 11 points or when the round timer runs out, whichever comes first; a tie at the buzzer is settled by one more point.
+            </p>
+            <div style={styles.dialogThresholdRow}>
+              <label style={styles.settingsField}>
+                Number of rounds
+                <input type="number" min={Math.max(1, roulette.round || 1)} style={styles.expectedGamesInput} value={rouletteRoundsDraft} onChange={(e) => setRouletteRoundsDraft(e.target.value)} aria-label="Roulette number of rounds" />
+              </label>
+              <label style={styles.settingsField}>
+                Round timer (minutes)
+                <input type="number" min={1} style={styles.expectedGamesInput} value={rouletteMinutesDraft} onChange={(e) => setRouletteMinutesDraft(e.target.value)} aria-label="Roulette round minutes" />
+              </label>
+            </div>
           </div>
         )}
 

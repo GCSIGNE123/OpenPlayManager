@@ -174,7 +174,7 @@ console.log("\n8. Malformed shadow input/result never affects production matchma
 console.log("\n9-10. Adaptive Skill stays the real engine; adaptiveRanking stays unselectable");
 {
   assert("getRotationEngine('adaptiveSkill') is still AdaptiveSkillRotationEngine", getRotationEngine("adaptiveSkill") instanceof AdaptiveSkillRotationEngine);
-  assert("adaptiveRanking is NOT in ROTATION_MODES (not selectable)", !ROTATION_MODES.some((m) => m.value === "adaptiveRanking") && ROTATION_MODES.length === 4);
+  assert("adaptiveRanking is NOT in ROTATION_MODES (not selectable)", !ROTATION_MODES.some((m) => m.value === "adaptiveRanking") && ROTATION_MODES.length === 5);
   const { rt, timers } = mkRuntime();
   const s = makeState();
   assert("notify ignores sessions that are not running Adaptive Skill Rotation", rt.notify({ ...s, rotationMode: "continuous" }) === null && rt.notify({ ...s, rotationMode: "adaptiveRanking" }) === null && rt.notify({ ...s, sessionType: "tournament" }) === null && timers.length === 0);

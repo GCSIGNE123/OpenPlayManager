@@ -7,6 +7,7 @@ import { buildStandingsRows } from "../lib/performanceRating.js";
 import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
 import MedalIcon from "./MedalIcon.jsx";
 import PodiumBoard from "./PodiumBoard.jsx";
+import RoulettePanel from "./RoulettePanel.jsx";
 import { APP_NAME } from "../lib/brand.js";
 import { courtDisplayName } from "../lib/utils.js";
 import { tvStyles as ts, tvKeyframes, courtGridDimensions, courtSizeTier, upNextSizeTier, TV_LAYOUT_PRESETS } from "../tvOpenPlayStyles.js";
@@ -504,6 +505,8 @@ export default function OpenPlayTVModePage({ sessionCode, onExit }) {
           switching yet) — enabling it later is exactly
           selectLayoutPreset(activeCourtCount) in place of this constant,
           nothing else changes. */}
+      {/* Roulette sessions: round n of N + the round clock, read-only (renders nothing in other modes) */}
+      <RoulettePanel state={session} dark />
       <div style={ts.body(TV_LAYOUT_PRESETS.standard)}>
         <LiveCourtsColumn courts={session.courts} players={session.players} />
         <UpNextColumn nextMatchups={session.nextMatchups} players={session.players} courts={session.courts} />

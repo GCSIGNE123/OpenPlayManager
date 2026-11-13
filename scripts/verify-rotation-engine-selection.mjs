@@ -50,7 +50,7 @@ console.log("\n2. Session configured for Adaptive Ranking uses Adaptive Ranking"
   const out = refreshNextMatchups(arr.map((p) => p.id), mapOf(arr), [], getRotationEngine("adaptiveRanking"), null, Infinity, null, []);
   assert("its matchups carry ranking metadata (Points window / reasons)", out.length === 1 && out[0].ranking && Array.isArray(out[0].reasons));
   assert("the Create Session selector offers BOTH Adaptive Skill and Adaptive Ranking", ["adaptiveSkill", "adaptiveRanking"].every((v) => SELECTABLE_ROTATION_MODES.some((m) => m.value === v)));
-  assert("Adaptive Ranking is never the default (default is Skill Divisions/adaptiveSkill, listed first)", defaultState.rotationMode === "adaptiveSkill" && SELECTABLE_ROTATION_MODES[0].value === ROTATION_MODES[0].value && ROTATION_MODES[0].value === "adaptiveSkill" && ROTATION_MODES.length === 4);
+  assert("Adaptive Ranking is never the default (default is Skill Divisions/adaptiveSkill, listed first)", defaultState.rotationMode === "adaptiveSkill" && SELECTABLE_ROTATION_MODES[0].value === ROTATION_MODES[0].value && ROTATION_MODES[0].value === "adaptiveSkill" && ROTATION_MODES.length === 5);
   assert("both engines have an organizer explanation label", ROTATION_MODE_DESCRIPTIONS.adaptiveRanking.includes("Points") && ROTATION_MODE_DESCRIPTIONS.adaptiveSkill.includes("skill division"));
   assert("the live session label resolves for Adaptive Ranking (not the raw value)", rotationModeLabelFor("adaptiveRanking") !== "adaptiveRanking" && /Adaptive Ranking/.test(rotationModeLabelFor("adaptiveRanking")));
 }

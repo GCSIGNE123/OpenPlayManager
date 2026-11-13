@@ -58,6 +58,7 @@ import {
   editMatchHistoryScore,
 } from "./lib/queueManagement.js";
 import { fixedPairBlockReason, splitPairIfCrossDivision, pairDissolvedText } from "./lib/fixedPairRules.js";
+import { createRouletteFields, isRouletteMode, rouletteAdvance, rouletteOf, redrawRouletteRound, startRouletteRound as startRouletteRoundAction, rouletteScoreProblem, ROULETTE_PHASES } from "./lib/roulette.js";
 import {
   selectNextDispatchableMatchup,
   dispatchAvailableCourts,
@@ -466,6 +467,11 @@ export default function PickleballOpenPlay() {
       // organizer (manual) court while Rounds 1-2 are being calibrated; a
       // no-op for every other rotation mode.
       next = applyPhaseGate(next);
+      // Roulette (lib/roulette.js) — the round state machine: starts the
+      // round clock when a drawn round goes on court, closes the round when
+      // every court is done, and draws the next one. A no-op (same object)
+      // for every other rotation mode and whenever nothing changed.
+      next = rouletteAdvance(next);
       // On Break / Left (PickleKing Player's Open Play Availability
       // feature) — see lib/utils.js's dissolveMatchupsForPausedPlayers for
       // why this needs its own step here, right alongside
@@ -516,7 +522,9 @@ export default function PickleballOpenPlay() {
       const queueingNotYetStarted = next.queueingStarted === false;
       const withMatchups = {
         ...next,
-        nextMatchups: queueingNotYetStarted || next.queueingStopped || isCalibrationPhase(next)
+        // Roulette draws whole rounds in rouletteAdvance above — the
+        // per-save engine refresh never runs for it.
+        nextMatchups: queueingNotYetStarted || next.queueingStopped || isCalibrationPhase(next) || isRouletteMode(next)
           ? next.nextMatchups || []
           : refreshNextMatchups(
               autoQueueIds,
@@ -554,7 +562,9 @@ export default function PickleballOpenPlay() {
         // while stopped, regardless of the Auto-fill Courts setting;
         // manual dispatch (fillCourt/fillAllCourts/generateRemainingCourts)
         // is untouched and keeps working from whatever's already queued.
-        autoFillCourts: !withMatchups.queueingStopped && !isCalibrationPhase(withMatchups) && withMatchups.courtDispatchSettings?.autoFillCourts !== false,
+        // Roulette: a drawn round waits for the organizer's review and
+        // "Start Round" — never auto-dispatched.
+        autoFillCourts: !withMatchups.queueingStopped && !isCalibrationPhase(withMatchups) && !isRouletteMode(withMatchups) && withMatchups.courtDispatchSettings?.autoFillCourts !== false,
         isCourtReserved,
       });
       let withDispatch = {
@@ -1138,6 +1148,7 @@ export default function PickleballOpenPlay() {
         tournamentId: null, // see lib/tournamentModel.js — points to a separate Tournament KV record once a schedule is generated
         rotationMode,
         ...createPhaseFields(rotationMode), // Points-Based Adaptive Matchmaking only: session phase / calibration / round lock ({} for every other mode)
+        ...createRouletteFields(rotationMode), // Roulette only: rounds / round timer / round state ({} for every other mode) — see lib/roulette.js
         expectedGamesPerPlayer,
         adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
         skillChangeLog: [],
@@ -1752,6 +1763,7 @@ export default function PickleballOpenPlay() {
     // Points-Based Adaptive Matchmaking: Rounds 1-2 are organizer-built — the
     // system must not generate or deploy anything until calibration is done.
     if (isCalibrationPhase(state)) return;
+    if (isRouletteMode(state)) return; // Roulette draws whole rounds itself (lib/roulette.js) — never engine-generated
     shadowHintRef.current = "manual_regenerate";
     const manualIds = manuallyReservedIds(state.courts);
     const queueIds = state.queueIds.filter((id) => !manualIds.has(id));
@@ -1902,6 +1914,15 @@ export default function PickleballOpenPlay() {
     // the finished score by the time that button is ever clickable).
     const preMatchState = courtsOverride ? { ...state, courts: sourceCourts } : state;
     const { teamA, teamB, scoreA, scoreB } = court;
+    // Roulette — a game must have a winner (a tie at the buzzer is settled
+    // by one more point), so a tied score is never recorded.
+    const rouletteProblem = rouletteScoreProblem(state, scoreA, scoreB);
+    if (rouletteProblem) {
+      releaseGuard();
+      setSkillChangeMsg(rouletteProblem);
+      setTimeout(() => setSkillChangeMsg(""), 6000);
+      return;
+    }
     const playedIds = [...teamA, ...teamB];
     let players = { ...state.players };
     const aWon = scoreA > scoreB;
@@ -2290,6 +2311,15 @@ export default function PickleballOpenPlay() {
   // save).
   const regenerateMatchups = () => {
     if (isCalibrationPhase(state)) return; // calibration rounds are organizer-built (see generateRemainingCourts)
+    // Roulette — "Regenerate" means "Redraw this round": same sit-out
+    // rotation and pairing rules, a fresh random draw. Only before the
+    // round has started; Undo regenerate restores the previous draw.
+    if (isRouletteMode(state)) {
+      if (rouletteOf(state).phase !== ROULETTE_PHASES.DRAWN) return;
+      setRegenerateSnapshot(state.nextMatchups || []);
+      save(redrawRouletteRound(state));
+      return;
+    }
     shadowHintRef.current = "manual_regenerate";
     // Stop Queueing — "Regenerate matchups" explicitly builds NEW matchups
     // from scratch, so it's a no-op while queueing is stopped (see the
@@ -2327,6 +2357,15 @@ export default function PickleballOpenPlay() {
   const startQueuing = () => {
     if (state.queueingStarted) return;
     save({ ...state, queueingStarted: true });
+  };
+
+  // Roulette — "Start Round": every drawn matchup goes on a court, live, at
+  // the same moment; save()'s rouletteAdvance then starts the round clock.
+  const startRouletteRound = () => {
+    const next = startRouletteRoundAction(state, { isCourtReserved });
+    if (next === state) return;
+    clearOneShotSnapshots(); // a started round can't be un-drawn by Undo regenerate
+    save(next);
   };
 
   // restores nextMatchups to how it looked right before the last
@@ -3091,6 +3130,7 @@ export default function PickleballOpenPlay() {
                   onToggleQueueing={toggleQueueing}
                   queueingStarted={state.queueingStarted}
                   onStartQueuing={startQueuing}
+                  onStartRouletteRound={startRouletteRound}
                   pendingCourtRemovals={state.pendingCourtRemovals || 0}
                   nextMatchupId={state.nextMatchupId}
                   onSetNextMatchup={setNextMatchup}

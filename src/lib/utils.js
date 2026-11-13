@@ -544,7 +544,15 @@ const adaptiveSkillEngine = new AdaptiveSkillRotationEngine();
 const adaptiveRankingEngine = new AdaptiveRankingRotationEngine();
 const pointsAdaptiveEngine = new PointsAdaptiveMatchmakingEngine();
 
+// Roulette (lib/roulette.js) draws whole rounds itself, from save()'s
+// rouletteAdvance — never through the engine interface. This inert engine
+// is what every engine-driven path (refresh / regenerate / generate
+// remaining courts) gets in that mode, so none of them can ever slip a
+// Continuous-Queue matchup into a Roulette round.
+const noAutoEngine = { generateMatchups: () => [] };
+
 export function getRotationEngine(rotationMode) {
+  if (rotationMode === "roulette") return noAutoEngine;
   if (rotationMode === "progressiveSkill") return progressiveSkillEngine;
   if (rotationMode === "adaptiveSkill") return adaptiveSkillEngine;
   // Adaptive Ranking Rotation — separate, experimental mode (see
