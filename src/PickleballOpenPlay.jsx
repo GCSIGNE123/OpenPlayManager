@@ -57,6 +57,7 @@ import {
   applyPendingCourtRemovals,
   editMatchHistoryScore,
 } from "./lib/queueManagement.js";
+import { fixedPairBlockReason, splitPairIfCrossDivision, pairDissolvedText } from "./lib/fixedPairRules.js";
 import {
   selectNextDispatchableMatchup,
   dispatchAvailableCourts,
@@ -2019,6 +2020,18 @@ export default function PickleballOpenPlay() {
     const skillChangeLog = skillChangeEntries.length
       ? [...skillChangeEntries, ...(state.skillChangeLog || [])].slice(0, 50)
       : state.skillChangeLog;
+    // Same-Division Fixed Pairs (lib/fixedPairRules.js) — an automatic
+    // promotion/relegation that leaves a fixed partner behind in the other
+    // division dissolves that pair, both sides, right here in the same
+    // `players` copy endMatch is already building (the live court is not
+    // touched — the pair only ever mattered for FUTURE matchmaking).
+    const dissolvedPairNotices = [];
+    skillChangeEntries.forEach((e) => {
+      const split = splitPairIfCrossDivision(players, e.playerId, state);
+      if (!split.partner) return;
+      Object.assign(players, split.players);
+      dissolvedPairNotices.push(pairDissolvedText(e.playerName, split.partner.name));
+    });
     if (skillChangeEntries.length) {
       const msg = skillChangeEntries
         .map((e) =>
@@ -2026,9 +2039,10 @@ export default function PickleballOpenPlay() {
             ? `${e.playerName} has been promoted to Intermediate.`
             : `${e.playerName} has been moved to Beginner.`
         )
+        .concat(dissolvedPairNotices)
         .join(" ");
       setSkillChangeMsg(msg);
-      setTimeout(() => setSkillChangeMsg(""), 4000);
+      setTimeout(() => setSkillChangeMsg(""), dissolvedPairNotices.length ? 6000 : 4000);
     }
 
     // the phase this match was actually played under — computed from
@@ -2420,6 +2434,15 @@ export default function PickleballOpenPlay() {
   // action in the Waiting Players panel; takes effect immediately for that
   // pair, at any point during the session, no session-wide setting needed.
   const setFixedPartner = (playerIdA, playerIdB) => {
+    // Same-Division Fixed Pairs (lib/fixedPairRules.js) — in a Skill Divisions
+    // session a Beginner + Intermediate pair is refused; say why (same toast
+    // slot the skill-change notices use) and leave the state untouched.
+    const blocked = fixedPairBlockReason(state, state.players[playerIdA], state.players[playerIdB]);
+    if (blocked) {
+      setSkillChangeMsg(blocked);
+      setTimeout(() => setSkillChangeMsg(""), 5000);
+      return;
+    }
     // Adaptive Ranking Rotation treats a fixed pair as a STRICT constraint, so
     // in that mode already-built upcoming matchups that would split the pair
     // are dissolved (lib/queueManagement.js); every other mode is unchanged.
@@ -2478,12 +2501,17 @@ export default function PickleballOpenPlay() {
       affectedPlayer: entry.playerName,
     });
     save(next);
+    // Same-Division Fixed Pairs — changePlayerSkill (lib/utils.js) dissolves a
+    // pair the override just split; tell the organizer in the same toast.
+    const previousPartnerId = state.players[id]?.partnerId;
+    const pairRemoved = previousPartnerId && !next.players[id]?.partnerId;
     setSkillChangeMsg(
-      newSkill === "intermediate"
+      (newSkill === "intermediate"
         ? `${entry.playerName} has been promoted to Intermediate.`
-        : `${entry.playerName} has been moved to Beginner.`
+        : `${entry.playerName} has been moved to Beginner.`) +
+        (pairRemoved ? ` ${pairDissolvedText(entry.playerName, state.players[previousPartnerId]?.name || "partner")}` : "")
     );
-    setTimeout(() => setSkillChangeMsg(""), 4000);
+    setTimeout(() => setSkillChangeMsg(""), pairRemoved ? 6000 : 4000);
     notifyIfHeldMatchDissolved(next, reason);
   };
 

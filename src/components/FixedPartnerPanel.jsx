@@ -1,6 +1,7 @@
 import { Link2 } from "lucide-react";
 import { styles } from "../styles.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
+import { fixedPairBlockReason, divisionLabel, divisionOf } from "../lib/fixedPairRules.js";
 import SectionLabel from "./SectionLabel.jsx";
 
 // Fixed Partner — mid-session — see PROJECT.md/FEATURES.md and
@@ -55,11 +56,17 @@ export default function FixedPartnerPanel({ players, state, onSetPartner, onClea
                 <option value="">+ Partner</option>
                 {roster
                   .filter((other) => other.id !== p.id)
-                  .map((other) => (
-                    <option key={other.id} value={other.id}>
-                      {other.name}
-                    </option>
-                  ))}
+                  .map((other) => {
+                    // Same-Division Fixed Pairs (lib/fixedPairRules.js) — same
+                    // disabled-with-reason treatment as WaitingPlayersPanel.
+                    const blocked = Boolean(fixedPairBlockReason(state, p, other));
+                    return (
+                      <option key={other.id} value={other.id} disabled={blocked}>
+                        {other.name}
+                        {blocked ? ` — ${divisionLabel(divisionOf(other))}, other division` : ""}
+                      </option>
+                    );
+                  })}
               </select>
             </li>
           );

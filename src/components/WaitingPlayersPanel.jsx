@@ -4,6 +4,7 @@ import { styles } from "../styles.js";
 import { calculatePerformanceRating } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
+import { fixedPairBlockReason, divisionLabel, divisionOf } from "../lib/fixedPairRules.js";
 import SectionLabel from "./SectionLabel.jsx";
 import WaitingTimer from "./WaitingTimer.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
@@ -107,11 +108,18 @@ export default function WaitingPlayersPanel({
                           <option value="">+ Partner</option>
                           {players
                             .filter((other) => other.id !== p.id)
-                            .map((other) => (
-                              <option key={other.id} value={other.id}>
-                                {other.name}
-                              </option>
-                            ))}
+                            .map((other) => {
+                              // Same-Division Fixed Pairs (lib/fixedPairRules.js) — the
+                              // other division's names stay listed but disabled, with the
+                              // reason, so the organizer sees WHY someone can't be picked.
+                              const blocked = Boolean(fixedPairBlockReason(state, p, other));
+                              return (
+                                <option key={other.id} value={other.id} disabled={blocked}>
+                                  {other.name}
+                                  {blocked ? ` — ${divisionLabel(divisionOf(other))}, other division` : ""}
+                                </option>
+                              );
+                            })}
                         </select>
                       )}
                       {onSkipPlayer && (

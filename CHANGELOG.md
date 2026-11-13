@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-11-13
+
+### Added
+- **Same-Division Fixed Pairs (Skill Divisions)** — organizer request: "disallow setting of players as fixed pairs when they are not of the same category". New pure module `lib/fixedPairRules.js` (`fixedPairBlockReason`, `splitPairIfCrossDivision`, `divisionOf`, `pairRuleApplies`). In a Skill Divisions session (`rotationMode === "adaptiveSkill"`) a Beginner + Intermediate fixed pair is refused: `setFixedPartner` (lib/queueManagement.js) is a no-op for it, the app wrapper shows why ("Guil is Beginner and Rina is Intermediate — fixed pairs must be in the same division.") in the existing Scorer toast slot, and both Partner dropdowns (Active Players, Fixed Partner panel) keep the other division's names listed but **disabled with the reason** instead of hiding them. A level change that splits an existing pair — manual → INT / → BEG (`changePlayerSkill`, lib/utils.js) or an automatic promotion/relegation in `endMatch` — **dissolves the pair on both sides** and says so in the same toast ("Fixed pair Guil & Anjo removed — they are now in different divisions."). Scoped on purpose: Progressive Skill Rotation's mentorship phase pairs a beginner *with* an intermediate and Continuous Queue mixes levels, so those modes (and tournaments) accept any pair exactly as before. 38 regression checks (`scripts/verify-same-division-pairs.mjs`).
+
 ## 2026-11-12
 
 ### Added
