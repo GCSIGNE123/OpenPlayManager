@@ -361,7 +361,7 @@ console.log("\n16. Existing rotation modes are unchanged");
   assert("adaptiveRanking -> the new engine", getRotationEngine("adaptiveRanking") instanceof AdaptiveRankingRotationEngine);
   const { ROTATION_MODES, EXPERIMENTAL_ROTATION_MODES, defaultState } = await import("../src/lib/constants.js");
   assert("the new mode is NOT in ROTATION_MODES (not selectable) and NOT the default", !ROTATION_MODES.some((m) => m.value === "adaptiveRanking") && defaultState.rotationMode !== "adaptiveRanking" && defaultState.rotationMode === "adaptiveSkill" && EXPERIMENTAL_ROTATION_MODES[0].value === "adaptiveRanking");
-  assert("ROTATION_MODES still lists exactly the 4 original modes (Skill Divisions first since 2026-11-12)", ROTATION_MODES.map((m) => m.value).join(",") === "adaptiveSkill,continuous,winnerPool,progressiveSkill");
+  assert("ROTATION_MODES lists the 4 original modes + Roulette (Skill Divisions first since 2026-11-12, Roulette added 2026-11-14)", ROTATION_MODES.map((m) => m.value).join(",") === "adaptiveSkill,continuous,winnerPool,progressiveSkill,roulette");
 }
 
 const teamsOf = (m) => [m.teamA, m.teamB];

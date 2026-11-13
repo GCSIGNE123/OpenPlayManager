@@ -5,6 +5,7 @@ import { computePodiums } from "../lib/podium.js";
 import { useNow } from "../lib/useNow.js";
 import CourtCard from "./CourtCard.jsx";
 import PodiumBoard from "./PodiumBoard.jsx";
+import RoulettePanel from "./RoulettePanel.jsx";
 import QueueList from "./QueueList.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 
@@ -31,6 +32,8 @@ export default function BoardView({ state }) {
   return (
     <div>
       <PodiumBoard podiums={podiums} />
+      {/* Roulette sessions: round n of N + the round clock, read-only (renders nothing in other modes) */}
+      <RoulettePanel state={state} />
       {showsRandomFirstRoundNotice(state) && (
         <div style={styles.infoBanner}>
           <Info size={15} strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 1 }} />

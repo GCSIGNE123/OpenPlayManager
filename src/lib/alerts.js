@@ -29,6 +29,7 @@
 import { getPlayerQueueStatus, courtDisplayName } from "./utils.js";
 import { QUEUE_STATUSES } from "./constants.js";
 import { fixedPairBlockReason } from "./fixedPairRules.js";
+import { isRouletteMode, rouletteOf, rouletteRepeats, ROULETTE_PHASES } from "./roulette.js";
 
 export const ALERT_LONG_WAIT_MINUTES = 15;
 export const ALERT_GAMES_BEHIND = 2;
@@ -38,6 +39,7 @@ export const ALERT_KINDS = {
   repeatFoursome: { label: "Same four again", severity: "info" },
   pairSplit: { label: "Fixed pair split", severity: "warn" },
   gamesBehind: { label: "Games behind", severity: "warn" },
+  rouletteRepeat: { label: "Roulette repeat", severity: "info" },
 };
 
 const sameFour = (a, b) => a.length === 4 && b.length === 4 && [...a].sort().join("|") === [...b].sort().join("|");
@@ -152,6 +154,29 @@ export function computeAlerts(state, now = Date.now()) {
         detail: `${nameOf(players, most.id)} is ${most.where} with ${players[most.id].games} games while ${nameOf(players, id)} waits with ${games}.`,
         playerIds: [id, most.id],
         gap,
+      });
+    }
+  }
+
+  // 5. Roulette — the drawn (not yet started) round repeats a partner (only
+  //    possible after a manual edit, or when no other seating exists) or an
+  //    opponent pairing (expected late in a session; shown so the organizer
+  //    can swap if they want). One alert per round, re-raised if the draw
+  //    changes.
+  if (isRouletteMode(state) && rouletteOf(state).phase === ROULETTE_PHASES.DRAWN) {
+    const repeats = rouletteRepeats(nextMatchups, history);
+    if (repeats.length > 0) {
+      const pairText = (x) => `${nameOf(players, x.ids[0])} ${x.kind === "partner" ? "&" : "vs"} ${nameOf(players, x.ids[1])}`;
+      const partnerRepeats = repeats.filter((x) => x.kind === "partner");
+      const opponentRepeats = repeats.filter((x) => x.kind === "opponent");
+      const round = rouletteOf(state).round;
+      alerts.push({
+        id: `rouletteRepeat:${round}:${repeats.map((x) => `${x.kind[0]}${[...x.ids].sort().join("+")}`).sort().join(",")}`,
+        kind: "rouletteRepeat",
+        severity: partnerRepeats.length ? "warn" : "info",
+        title: `Round ${round} draw: ${partnerRepeats.length ? `${partnerRepeats.length} repeat partner pair${partnerRepeats.length === 1 ? "" : "s"}` : `${opponentRepeats.length} repeat opponent pairing${opponentRepeats.length === 1 ? "" : "s"}`}`,
+        detail: `${[...partnerRepeats, ...opponentRepeats].map(pairText).join("; ")}. ${partnerRepeats.length ? "Swap a player or Redraw before starting." : "As few as this round allows — swap or Redraw if you prefer."}`,
+        playerIds: [...new Set(repeats.flatMap((x) => x.ids))],
       });
     }
   }

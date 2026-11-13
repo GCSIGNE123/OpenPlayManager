@@ -32,7 +32,7 @@ const byKind = (alerts, k) => alerts.filter((a) => a.kind === k);
 
 console.log("\n0. constants");
 assert("15 minutes, 2 games", ALERT_LONG_WAIT_MINUTES === 15 && ALERT_GAMES_BEHIND === 2);
-assert("four kinds with labels + severities", Object.keys(ALERT_KINDS).join() === "longWait,repeatFoursome,pairSplit,gamesBehind" && Object.values(ALERT_KINDS).every((k) => k.label && ["warn", "info"].includes(k.severity)));
+assert("the four organizer alerts + Roulette's repeat alert, with labels + severities", Object.keys(ALERT_KINDS).join() === "longWait,repeatFoursome,pairSplit,gamesBehind,rouletteRepeat" && Object.values(ALERT_KINDS).every((k) => k.label && ["warn", "info"].includes(k.severity)));
 assert("waitMinutesFor uses lastMatchEndAt, then checkedInAt, else 0", waitMinutesFor({ lastMatchEndAt: NOW - 17 * M, checkedInAt: NOW - 40 * M }, NOW) === 17 && waitMinutesFor({ checkedInAt: NOW - 16 * M }, NOW) === 16 && waitMinutesFor({}, NOW) === 0);
 
 console.log("\n1. long wait (15+ min)");

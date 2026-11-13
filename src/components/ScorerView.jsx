@@ -12,6 +12,8 @@ import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import AlertBell from "./AlertBell.jsx";
+import RoulettePanel from "./RoulettePanel.jsx";
+import { isRouletteMode, rouletteOf } from "../lib/roulette.js";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import FixedPartnerPanel from "./FixedPartnerPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
@@ -165,6 +167,7 @@ export default function ScorerView({
   queueingStopped,
   queueingStarted,
   onStartQueuing,
+  onStartRouletteRound,
   onToggleQueueing,
   pendingCourtRemovals,
   nextMatchupId,
@@ -226,6 +229,7 @@ export default function ScorerView({
   // takeNextDeployableMatchup/regenerateNextMatchups).
   const canFillCourt = nextMatchups.some((m) => !m.held);
   const canRegenerate = nextMatchups.some((m) => !m.locked && !m.held);
+  const roulette = isRouletteMode(state);
   const canAddCourt = state.courts.length < 8;
   // Dynamic Court Count — see PROJECT.md/FEATURES.md. Removal is always
   // available (down to 1 court) — it no longer requires the last court to
@@ -406,23 +410,30 @@ export default function ScorerView({
               Start Queuing
             </button>
           )}
-          <button
-            style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt || queueingStarted === false ? styles.btnDisabled : {}) }}
-            onClick={generateRemainingCourts}
-            disabled={!hasOpenAutomaticCourt || queueingStarted === false}
-            title={queueingStarted === false ? "Click Start Queuing first" : "Rebuild matchups (ignoring anyone on a Manual court) and fill every open automatic court right away"}
-          >
-            <Wand2 size={14} strokeWidth={2.5} />
-            Generate remaining courts
-          </button>
-          <button
-            style={{ ...styles.primaryBtn, ...(!canFillCourt ? styles.btnDisabled : {}) }}
-            onClick={fillAllCourts}
-            disabled={!canFillCourt}
-          >
-            <Shuffle size={16} strokeWidth={2.5} />
-            Fill all open courts
-          </button>
+          {/* Roulette draws and starts whole rounds from its own panel
+              (RoulettePanel below) — the per-court generate/fill buttons
+              don't apply to it. */}
+          {!roulette && (
+            <button
+              style={{ ...styles.secondaryBtn, margin: 0, ...(!hasOpenAutomaticCourt || queueingStarted === false ? styles.btnDisabled : {}) }}
+              onClick={generateRemainingCourts}
+              disabled={!hasOpenAutomaticCourt || queueingStarted === false}
+              title={queueingStarted === false ? "Click Start Queuing first" : "Rebuild matchups (ignoring anyone on a Manual court) and fill every open automatic court right away"}
+            >
+              <Wand2 size={14} strokeWidth={2.5} />
+              Generate remaining courts
+            </button>
+          )}
+          {!roulette && (
+            <button
+              style={{ ...styles.primaryBtn, ...(!canFillCourt ? styles.btnDisabled : {}) }}
+              onClick={fillAllCourts}
+              disabled={!canFillCourt}
+            >
+              <Shuffle size={16} strokeWidth={2.5} />
+              Fill all open courts
+            </button>
+          )}
           {onToggleQueueing && (
             <button
               style={{ ...styles.secondaryBtn, margin: 0 }}
@@ -457,6 +468,8 @@ export default function ScorerView({
         <div style={styles.confirmMsg}>{queueMsg}</div>
       )}
       {latecomerUndoError && <div style={styles.confirmMsg}>{latecomerUndoError}</div>}
+
+      <RoulettePanel state={state} controls onStartRound={onStartRouletteRound} onRedraw={regenerateMatchups} />
 
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
@@ -753,6 +766,7 @@ export default function ScorerView({
           showResultGrouping={rotationMode === "adaptiveSkill"}
           podiumUnlockMinutes={state.podiumUnlockMinutes}
           podiumMinGames={state.podiumMinGames}
+          roulette={roulette ? { ...rouletteOf(state), raw: state.roulette || {} } : undefined}
           onSave={updateSessionSettings}
           onClose={() => setSettingsDialogOpen(false)}
         />
