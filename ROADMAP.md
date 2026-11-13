@@ -27,6 +27,12 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-13 — Organizer Alerts** — a notification bell in the Scorer
+  tab (red badge + chime) for: a player waiting 15+ min, the same four
+  players queued again (unless manually set), a fixed pair split in the
+  next queue, and a waiting player 2+ games behind someone on court or
+  queued. Pure `lib/alerts.js`, derived every 30 s, never stored. See
+  `FEATURES.md`.
 - **2026-11-13 — Division Podiums** — in Skill Divisions sessions the
   podium is one per category: a Beginner Champion / Runner-up / 3rd and an
   Intermediate Champion / Runner-up / 3rd, side by side on the Live Board,

@@ -11,6 +11,7 @@ import NextMatchupCard from "./NextMatchupCard.jsx";
 import ProgressiveSkillPanel from "./ProgressiveSkillPanel.jsx";
 import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
+import AlertBell from "./AlertBell.jsx";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import FixedPartnerPanel from "./FixedPartnerPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
@@ -270,6 +271,9 @@ export default function ScorerView({
       <div style={styles.sessionInfoCard}>
         <div style={styles.sessionInfoHeadRow}>
           <SectionLabel>Session Information</SectionLabel>
+          <div style={styles.sessionInfoHeadActions}>
+          {/* Organizer Alerts — see lib/alerts.js / components/AlertBell.jsx */}
+          <AlertBell state={state} />
           <button
             style={styles.iconBtn}
             onClick={() => setSettingsDialogOpen(true)}
@@ -278,6 +282,7 @@ export default function ScorerView({
           >
             <Settings size={14} strokeWidth={2.5} />
           </button>
+          </div>
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Rotation Mode</span>
