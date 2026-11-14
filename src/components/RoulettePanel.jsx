@@ -4,6 +4,7 @@ import { styles } from "../styles.js";
 import { useNow } from "../lib/useNow.js";
 import { ROULETTE_PHASES, formatClock, isRouletteMode, rouletteClock, rouletteOf, roulettePool, rouletteRepeats, rouletteStatusText } from "../lib/roulette.js";
 import { playChime } from "./AlertBell.jsx";
+import RouletteFinalCard from "./RouletteFinalCard.jsx";
 
 // Roulette (random-draw rounds) — the round banner. See lib/roulette.js for
 // the rules (pure, tested); this component only shows the round state:
@@ -17,7 +18,7 @@ import { playChime } from "./AlertBell.jsx";
 // The clock is a render-only 1-second tick; the buzzer is the same Web
 // Audio chime the alert bell uses, sounded three times when the clock hits
 // zero (Scorer only). Renders nothing outside Roulette sessions.
-export default function RoulettePanel({ state, controls = false, dark = false, onStartRound, onRedraw }) {
+export default function RoulettePanel({ state, controls = false, dark = false, onStartRound, onRedraw, onCreateFinal, onSaveFinalScore, onClearFinalResult, onRemoveFinal }) {
   const active = isRouletteMode(state);
   const now = useNow(active ? 1000 : 60000);
   const ctxRef = useRef(null);
@@ -58,6 +59,14 @@ export default function RoulettePanel({ state, controls = false, dark = false, o
             {clock.expired ? "TIME" : formatClock(clock.remainingMs)}
           </span>
         )}
+        {controls && r.phase === P.PLAYING && (state.nextMatchups || []).length > 0 && (
+          <span style={styles.rouletteActions}>
+            <button style={styles.primaryBtn} onClick={onStartRound} title="Put the matchups that are still waiting onto the courts that are free now">
+              <Play size={14} strokeWidth={2.5} />
+              Start remaining courts
+            </button>
+          </span>
+        )}
         {controls && r.phase === P.DRAWN && (
           <span style={styles.rouletteActions}>
             <button style={{ ...styles.secondaryBtn, margin: 0 }} onClick={onRedraw} title="Throw this draw away and draw the round again (same sit-out rotation and pairing rules)">
@@ -89,6 +98,8 @@ export default function RoulettePanel({ state, controls = false, dark = false, o
           <span style={styles.rouletteLabel(dark)}>Repeat opponents</span> {opponentRepeats.map((x) => `${name(x.ids[0])} vs ${name(x.ids[1])}`).join("; ")} — as few as this round allows.
         </div>
       )}
+      {/* The separate Final Match award (#1 & #4 vs #2 & #3) — offered once every round is played */}
+      <RouletteFinalCard state={state} controls={controls} dark={dark} onCreate={onCreateFinal} onSaveScore={onSaveFinalScore} onClearResult={onClearFinalResult} onRemove={onRemoveFinal} />
       {controls && r.phase === P.DRAWN && (
         <div style={styles.rouletteHint(dark)}>Edit the draw in Next matchups (substitute or swap players) before starting — nothing goes on court until you press Start Round.</div>
       )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Check, FileJson, FileSpreadsheet, Printer, X } from "lucide-react";
 import { styles } from "../styles.js";
 import PodiumBoard from "./PodiumBoard.jsx";
+import RouletteFinalCard from "./RouletteFinalCard.jsx";
 import { finalPodiumsForDisplay } from "../lib/podium.js";
 import SectionLabel from "./SectionLabel.jsx";
 import { ExportService } from "../engines/ExportService.js";
@@ -196,6 +197,12 @@ export default function SessionAnalyticsReport({ report, onConfirm, onCancel, on
         {podiums.some((p) => p.places.length > 0) && (
           <div style={styles.analyticsSection}>
             <PodiumBoard podiums={podiums} />
+          </div>
+        )}
+
+        {report.rouletteFinal && (
+          <div style={styles.analyticsSection}>
+            <RouletteFinalCard view={report.rouletteFinal} />
           </div>
         )}
 

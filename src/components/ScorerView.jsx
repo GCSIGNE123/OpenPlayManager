@@ -13,7 +13,7 @@ import SectionLabel from "./SectionLabel.jsx";
 import SessionSettingsDialog from "./SessionSettingsDialog.jsx";
 import AlertBell from "./AlertBell.jsx";
 import RoulettePanel from "./RoulettePanel.jsx";
-import { isRouletteMode, rouletteOf } from "../lib/roulette.js";
+import { isRouletteMode, rouletteOf, createRouletteFinal, setRouletteFinalScore, clearRouletteFinal } from "../lib/roulette.js";
 import WaitingPlayersPanel from "./WaitingPlayersPanel.jsx";
 import FixedPartnerPanel from "./FixedPartnerPanel.jsx";
 import CheckoutConfirmDialog from "./CheckoutConfirmDialog.jsx";
@@ -168,6 +168,7 @@ export default function ScorerView({
   queueingStarted,
   onStartQueuing,
   onStartRouletteRound,
+  onRouletteChange, // (fn) => save(fn(state)) for the pure lib/roulette.js Final Match actions
   onToggleQueueing,
   pendingCourtRemovals,
   nextMatchupId,
@@ -358,7 +359,8 @@ export default function ScorerView({
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Current Round</span>
-          <span style={styles.sessionInfoValue}>{currentRound}</span>
+          {/* Roulette counts real rounds (n of N); other modes count matches played + 1 */}
+          <span style={styles.sessionInfoValue}>{roulette ? `${Math.max(1, rouletteOf(state).round)} of ${rouletteOf(state).totalRounds}` : currentRound}</span>
         </div>
       </div>
       {usesPhases(state) && (
@@ -469,7 +471,16 @@ export default function ScorerView({
       )}
       {latecomerUndoError && <div style={styles.confirmMsg}>{latecomerUndoError}</div>}
 
-      <RoulettePanel state={state} controls onStartRound={onStartRouletteRound} onRedraw={regenerateMatchups} />
+      <RoulettePanel
+        state={state}
+        controls
+        onStartRound={onStartRouletteRound}
+        onRedraw={regenerateMatchups}
+        onCreateFinal={() => onRouletteChange?.((s) => createRouletteFinal(s))}
+        onSaveFinalScore={(a, b) => onRouletteChange?.((s) => setRouletteFinalScore(s, a, b))}
+        onClearFinalResult={() => onRouletteChange?.((s) => clearRouletteFinal(s, { resultOnly: true }))}
+        onRemoveFinal={() => onRouletteChange?.((s) => clearRouletteFinal(s))}
+      />
 
       <div style={styles.scorerToolbar}>
         <SectionLabel>Courts</SectionLabel>
@@ -632,7 +643,10 @@ export default function ScorerView({
               isNext={m.id === nextMatchupId}
               onSetNextMatchup={() => onSetNextMatchup(m.id)}
               isLatecomerPriority={m.id === latecomerPriority?.matchupId}
-              onApprove={i === 0 && nextOpenCourtIndex !== -1 ? () => fillCourt(nextOpenCourtIndex) : null}
+              // Roulette starts the whole round at once from its panel
+              // (Start Round) — approving one matchup would start the round
+              // clock with the other courts still empty.
+              onApprove={!roulette && i === 0 && nextOpenCourtIndex !== -1 ? () => fillCourt(nextOpenCourtIndex) : null}
             />
           ))}
         </>

@@ -12,8 +12,9 @@
 // this sprint (see FEATURES.md).
 import { rotationModeLabelFor } from "./constants.js";
 import { derivePaymentStats } from "./queueManagement.js";
-import { buildStandingsRows } from "./performanceRating.js";
+import { buildStandingsRows, standingsOrderFor } from "./performanceRating.js";
 import { finalPodium, finalPodiums } from "./podium.js";
+import { rouletteFinalView } from "./roulette.js";
 
 // ---------------------------------------------------------------------
 // Waiting-time tracking — called from PickleballOpenPlay.jsx's save(),
@@ -392,7 +393,10 @@ export function computeSessionAnalyticsReport(state, generatedAt = Date.now()) {
     // (two in a Skill Divisions session, one otherwise). finalPodium above
     // stays the overall top-3 for existing consumers.
     finalPodiums: finalPodiums(state),
-    finalStandings: buildStandingsRows(state.players).map((p) => ({
+    // Roulette — the separate Final Match award (names, seeds, result); null
+    // for other modes or when no Final Match was created.
+    rouletteFinal: rouletteFinalView(state),
+    finalStandings: buildStandingsRows(state.players, { order: standingsOrderFor(state) }).map((p) => ({
       playerId: p.id,
       playerName: p.name,
       gp: p.gp,

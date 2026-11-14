@@ -41,6 +41,8 @@
 import { uid } from "./random.js";
 import { isEligibleForMatchmaking, manuallyReservedIds } from "./utils.js";
 import { dispatchAvailableCourts } from "./courtDispatch.js";
+import { buildStandingsRows } from "./performanceRating.js";
+import { isOrganizerPlayer, podiumSettings } from "./podium.js";
 
 export const ROULETTE_MODE = "roulette";
 export const ROULETTE_DEFAULTS = { totalRounds: 12, roundMinutes: 11, gamePoints: 11 };
@@ -299,7 +301,12 @@ export function redrawRouletteRound(state, rng = Math.random) {
 // clock starts in rouletteAdvance (save()) when it sees the courts occupied.
 export function startRouletteRound(state, { isCourtReserved } = {}) {
   if (!isRouletteMode(state)) return state;
-  if (rouletteOf(state).phase !== ROULETTE_PHASES.DRAWN) return state;
+  // DRAWN: the normal case. PLAYING with matchups still queued: part of the
+  // round couldn't start with the rest (a court was busy or reserved) —
+  // the same button starts the remaining matchups on whatever is free now.
+  const phase = rouletteOf(state).phase;
+  const remaining = phase === ROULETTE_PHASES.PLAYING && (state.nextMatchups || []).length > 0;
+  if (phase !== ROULETTE_PHASES.DRAWN && !remaining) return state;
   const result = dispatchAvailableCourts({ courts: state.courts, nextMatchups: state.nextMatchups, queueIds: state.queueIds, players: state.players, autoFillCourts: true, isCourtReserved });
   if (result.dispatched.length === 0) return state;
   const started = new Set(result.dispatched.map((d) => d.courtNumber));
@@ -328,6 +335,89 @@ export function rouletteScoreProblem(state, scoreA, scoreB) {
   if (!isRouletteMode(state)) return null;
   if (scoreA === scoreB) return "Roulette games can't end tied — play one more point to decide it, then enter the final score.";
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// THE FINAL MATCH (organizer direction, 14 Nov 2026)
+//
+// After the last round the round standings are FINAL — Champion, Runner-up
+// and 3rd Place come from them (lib/podium.js). The Final Match is a
+// separate award: the top four play one more game, #1 & #4 against #2 & #3
+// (the standard balanced pairing), and its winners are the "Final Match
+// Winners". It is deliberately NOT played through a court: it is stored on
+// state.roulette.final and scored here, so it never touches a player's
+// games / wins / points and can never move the standings or the podium.
+// ---------------------------------------------------------------------------
+
+// The four players who would contest the Final Match right now: the top of
+// the Roulette standings (win percentage, then point difference, then
+// points), with the podium's own eligibility (min games, not an organizer)
+// and still present (a checked-out player can't play a final).
+export function rouletteFinalists(state) {
+  if (!isRouletteMode(state)) return [];
+  const players = state.players || {};
+  const { minGames } = podiumSettings(state);
+  return buildStandingsRows(players, { order: "winPct" })
+    .filter((r) => (r.gp || 0) >= minGames && !isOrganizerPlayer(players[r.id]) && players[r.id]?.status !== "CHECKED_OUT")
+    .slice(0, 4)
+    .map((r, i) => ({ id: r.id, name: r.name, seed: i + 1 }));
+}
+
+// Creates the Final Match from the current standings (only once every round
+// has been played and four finalists exist). Seeds are frozen on the record.
+export function createRouletteFinal(state, now = Date.now()) {
+  if (!isRouletteMode(state)) return state;
+  const r = rouletteOf(state);
+  if (r.phase !== ROULETTE_PHASES.COMPLETE) return state;
+  const f = rouletteFinalists(state);
+  if (f.length < 4) return state;
+  const side = (a, b) => [a, b].map((x) => ({ id: x.id, name: x.name, seed: x.seed }));
+  return { ...state, roulette: { ...state.roulette, final: { teamA: side(f[0], f[3]), teamB: side(f[1], f[2]), scoreA: null, scoreB: null, winner: null, createdAt: now, decidedAt: null } } };
+}
+
+// Why a Final Match score can't be saved (null = fine).
+export function rouletteFinalScoreProblem(scoreA, scoreB) {
+  const a = Number(scoreA);
+  const b = Number(scoreB);
+  if (scoreA === "" || scoreB === "" || scoreA === null || scoreB === null || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return "Enter both scores as whole numbers.";
+  if (a === b) return "The Final Match can't end tied — play one more point to decide it.";
+  return null;
+}
+
+export function setRouletteFinalScore(state, scoreA, scoreB, now = Date.now()) {
+  if (!isRouletteMode(state) || !state.roulette?.final) return state;
+  if (rouletteFinalScoreProblem(scoreA, scoreB)) return state;
+  const a = Number(scoreA);
+  const b = Number(scoreB);
+  return { ...state, roulette: { ...state.roulette, final: { ...state.roulette.final, scoreA: a, scoreB: b, winner: a > b ? "A" : "B", decidedAt: now } } };
+}
+
+// Removes the Final Match entirely (to rebuild it from the standings) —
+// or, with { resultOnly: true }, just its result so the score can be re-entered.
+export function clearRouletteFinal(state, { resultOnly = false } = {}) {
+  if (!isRouletteMode(state) || !state.roulette?.final) return state;
+  if (resultOnly) return { ...state, roulette: { ...state.roulette, final: { ...state.roulette.final, scoreA: null, scoreB: null, winner: null, decidedAt: null } } };
+  const { final: _removed, ...rest } = state.roulette;
+  return { ...state, roulette: rest };
+}
+
+// Display / report / public shape: names, seeds and the result only — no
+// ids, so it can go straight into the saved report and the public summary.
+export function rouletteFinalView(state) {
+  const f = isRouletteMode(state) ? state.roulette?.final : null;
+  if (!f) return null;
+  const side = (team) => (team || []).map((p) => ({ name: p.name, seed: p.seed }));
+  const decided = f.winner === "A" || f.winner === "B";
+  const winners = decided ? side(f.winner === "A" ? f.teamA : f.teamB) : [];
+  return {
+    teamA: side(f.teamA),
+    teamB: side(f.teamB),
+    scoreA: decided ? f.scoreA : null,
+    scoreB: decided ? f.scoreB : null,
+    winner: decided ? f.winner : null,
+    winners,
+    winnersText: winners.map((p) => p.name).join(" & "),
+  };
 }
 
 // One-line status for the Scorer panel, Live Board and TV.

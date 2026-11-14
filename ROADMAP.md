@@ -27,6 +27,11 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-14 — Roulette mode, part 2** — standings by win percentage
+  (then point difference, then points), the podium opening as the Final
+  Podium after the last round, and the separate Final Match award (#1 & #4
+  vs #2 & #3) that never affects records or the podium; in the report, CSV
+  and public summary. Spectator page and King of the Court follow.
 - **2026-11-14 — Roulette mode, part 1** — a new round-based rotation:
   every round is drawn at once from one mixed pool (random partners and
   opponents, never the same partner twice, minimal repeat opponents,

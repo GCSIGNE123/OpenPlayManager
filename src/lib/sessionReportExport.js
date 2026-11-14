@@ -51,6 +51,13 @@ export function buildSessionReportExportTable(report) {
       rows.push([`${g.label ? `${g.label} ` : ""}Podium: ${p.label}`, `${p.name} — ${p.wins}-${p.losses} (${Math.round((p.winPct || 0) * 100)}%, ${p.games} games)${p.out ? " — checked out early" : ""}`]);
     }
   }
+  // Roulette — the separate Final Match award.
+  if (report.rouletteFinal) {
+    const f = report.rouletteFinal;
+    const side = (team) => team.map((p) => `#${p.seed} ${p.name}`).join(" & ");
+    rows.push(["Final Match", `${side(f.teamA)} vs ${side(f.teamB)}${f.winner ? ` — ${f.scoreA}-${f.scoreB}` : " — not played"}`]);
+    if (f.winner) rows.push(["Final Match Winners", f.winnersText]);
+  }
   playersNeedingAttention.forEach((p) => {
     rows.push([`Player Needing Attention: ${p.playerName}`, p.reasons.join("; ")]);
   });

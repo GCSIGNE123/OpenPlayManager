@@ -2360,6 +2360,13 @@ export default function PickleballOpenPlay() {
     save({ ...state, queueingStarted: true });
   };
 
+  // Roulette — the Final Match actions are pure state -> state functions in
+  // lib/roulette.js (create / score / clear); this just saves what they return.
+  const applyRouletteChange = (fn) => {
+    const next = fn(state);
+    if (next && next !== state) save(next);
+  };
+
   // Roulette — "Start Round": every drawn matchup goes on a court, live, at
   // the same moment; save()'s rouletteAdvance then starts the round clock.
   const startRouletteRound = () => {
@@ -3132,6 +3139,7 @@ export default function PickleballOpenPlay() {
                   queueingStarted={state.queueingStarted}
                   onStartQueuing={startQueuing}
                   onStartRouletteRound={startRouletteRound}
+                  onRouletteChange={applyRouletteChange}
                   pendingCourtRemovals={state.pendingCourtRemovals || 0}
                   nextMatchupId={state.nextMatchupId}
                   onSetNextMatchup={setNextMatchup}

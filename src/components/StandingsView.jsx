@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { styles } from "../styles.js";
-import { buildStandingsRows } from "../lib/performanceRating.js";
+import { buildStandingsRows, standingsOrderFor } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
 import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
@@ -85,7 +85,8 @@ export default function StandingsView({ players, state }) {
   // buildStandingsRows already returns rows in the default order (rating,
   // then wins, then point differential, then name) — an active column sort
   // just re-orders that same row set.
-  const rows = buildStandingsRows(sourcePlayers);
+  // Roulette sessions order by win percentage (standingsOrderFor).
+  const rows = buildStandingsRows(sourcePlayers, { order: standingsOrderFor(state) });
 
   const activeColumn = SORT_COLUMNS.find((c) => c.key === sortKey);
   if (activeColumn) {

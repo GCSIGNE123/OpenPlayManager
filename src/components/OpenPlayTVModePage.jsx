@@ -3,7 +3,7 @@ import { Maximize, LogOut } from "lucide-react";
 import { STORAGE_PREFIX } from "../lib/constants.js";
 import { parseStorageChangePayload } from "../lib/realtimeStorageEvents.js";
 import { fetchVenue } from "../lib/venueModel.js";
-import { buildStandingsRows } from "../lib/performanceRating.js";
+import { buildStandingsRows, standingsOrderFor } from "../lib/performanceRating.js";
 import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
 import MedalIcon from "./MedalIcon.jsx";
 import PodiumBoard from "./PodiumBoard.jsx";
@@ -321,7 +321,7 @@ function UpNextColumn({ nextMatchups, players, courts }) {
 // Medals are the hand-drawn MedalIcon rather than emoji (which render
 // differently on every TV and can't be styled).
 function StandingsColumn({ players, session, now }) {
-  const rows = buildStandingsRows(players);
+  const rows = buildStandingsRows(players, { order: standingsOrderFor(session) });
   // Division Podiums: Beginner + Intermediate in a Skill Divisions session
   // (stacked in this 30% column), the single podium otherwise; row medals
   // follow the podium(s), see podiumMedalRanks.
