@@ -38,7 +38,14 @@ export function calculatePerformanceRating(player) {
 // with at least one recorded game — a 0-game player has nothing to rank.
 // Sort precedence: rating, then wins, then point differential, then name —
 // unchanged from StandingsView's own pre-extraction default order.
-export function buildStandingsRows(players) {
+// Which ordering a session's standings use. Roulette ranks players by WIN
+// PERCENTAGE (organizer direction, 14 Nov 2026: sit-outs mean players end
+// on 8 or 9 games, so a percentage is fairer than a wins count or the
+// volume-weighted rating), then point difference, then points scored.
+// Every other mode keeps the rating order.
+export const standingsOrderFor = (state) => (state?.rotationMode === "roulette" ? "winPct" : "rating");
+
+export function buildStandingsRows(players, { order = "rating" } = {}) {
   const rows = Object.values(players)
     .filter((p) => (p.games || 0) > 0)
     .map((p) => ({
@@ -50,6 +57,13 @@ export function buildStandingsRows(players) {
       diff: (p.pointsFor || 0) - (p.pointsAgainst || 0),
       performance: calculatePerformanceRating(p),
     }));
+  if (order === "winPct") {
+    rows.sort(
+      (a, b) =>
+        (b.performance.winPct ?? 0) - (a.performance.winPct ?? 0) || b.diff - a.diff || (b.pointsFor || 0) - (a.pointsFor || 0) || a.name.localeCompare(b.name)
+    );
+    return rows;
+  }
   rows.sort(
     (a, b) =>
       (b.performance.rating ?? 0) - (a.performance.rating ?? 0) || b.wins - a.wins || b.diff - a.diff || a.name.localeCompare(b.name)

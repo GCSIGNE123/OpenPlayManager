@@ -22,7 +22,8 @@
 // summary from scratch (an allow-list), never by copying a session/player
 // object.
 import { PUBLIC_FINAL_PREFIX } from "./constants.js";
-import { buildStandingsRows } from "./performanceRating.js";
+import { buildStandingsRows, standingsOrderFor } from "./performanceRating.js";
+import { rouletteFinalView } from "./roulette.js";
 import { finalPodium, finalPodiums, publicPodium, publicPodiums } from "./podium.js";
 import { RoundRobinStandingsService } from "../engines/RoundRobinStandingsService.js";
 import { fetchTournament } from "./tournamentModel.js";
@@ -38,7 +39,7 @@ const labelOf = (x) => (typeof x === "string" ? x : x?.label ?? null);
 
 export function buildOpenPlayFinalSummary(state, { sessionCode = null, endedAt = Date.now() } = {}) {
   const players = state?.players || {};
-  const standings = buildStandingsRows(players)
+  const standings = buildStandingsRows(players, { order: standingsOrderFor(state) })
     .slice(0, MAX_OPEN_PLAY_STANDINGS)
     .map((r, i) => ({ rank: i + 1, name: r.name, wins: r.wins, losses: r.losses, diff: r.diff }));
   return {
@@ -59,6 +60,9 @@ export function buildOpenPlayFinalSummary(state, { sessionCode = null, endedAt =
     // are declared per category). `podium` above stays for viewers that
     // predate this field.
     podiums: publicPodiums(finalPodiums(state)),
+    // Roulette — the separate Final Match award: seeds, names and the score
+    // only (rouletteFinalView carries no ids). null when there isn't one.
+    finalMatch: rouletteFinalView(state),
     standings,
   };
 }

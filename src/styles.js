@@ -3198,6 +3198,52 @@ export const styles = {
     fontSize: 11.5,
     color: dark ? "rgba(255,255,255,0.6)" : "var(--color-text-faint)",
   }),
+  // Roulette Final Match card (components/RouletteFinalCard.jsx)
+  rouletteFinal: (dark) => ({
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: 4,
+    padding: dark ? "12px 16px" : "10px 12px",
+    borderRadius: 10,
+    background: dark ? "rgba(247,148,29,0.12)" : "var(--color-surface)",
+    border: dark ? "1px solid rgba(247,148,29,0.5)" : "1.5px solid var(--color-secondary)",
+  }),
+  rouletteFinalTitle: (dark) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontFamily: "'Anton', sans-serif",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    fontSize: dark ? 20 : 14,
+    color: dark ? "#F7941D" : "var(--color-secondary-text)",
+  }),
+  rouletteFinalTeams: (dark) => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    fontSize: dark ? 22 : 15,
+    fontWeight: 700,
+    color: dark ? "#fff" : "var(--color-text)",
+  }),
+  rouletteFinalVs: {
+    fontFamily: "'Space Mono', monospace",
+    fontWeight: 700,
+    opacity: 0.75,
+  },
+  rouletteFinalWinners: (dark) => ({
+    fontSize: dark ? 20 : 14,
+    fontWeight: 800,
+    color: dark ? "#F7941D" : "var(--court)",
+  }),
+  rouletteFinalScoreRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   // Organizer Alerts bell (components/AlertBell.jsx)
   alertBellWrap: {
     position: "relative",

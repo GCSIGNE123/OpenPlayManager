@@ -31,7 +31,7 @@
 //     other rotation mode keeps the single podium. computePodiums /
 //     finalPodiums return the list of podiums a surface should show;
 //     computePodium / finalPodium remain the single-podium primitives.
-import { buildStandingsRows } from "./performanceRating.js";
+import { buildStandingsRows, standingsOrderFor } from "./performanceRating.js";
 import { DIVISIONS, divisionOf, divisionLabel, sessionHasDivisions } from "./divisions.js";
 
 export const DEFAULT_PODIUM_UNLOCK_MINUTES = 60;
@@ -75,7 +75,9 @@ export const isOrganizerPlayer = (player) => player?.paymentStatus === "paid" &&
 
 const rowsFor = (state, division) => {
   const players = state?.players || {};
-  const rows = buildStandingsRows(players).filter((r) => !isOrganizerPlayer(players[r.id]));
+  // standingsOrderFor: Roulette sessions rank by win percentage, so their
+  // podium does too — the podium is always the top of the Standings table.
+  const rows = buildStandingsRows(players, { order: standingsOrderFor(state) }).filter((r) => !isOrganizerPlayer(players[r.id]));
   if (!division) return rows;
   return rows.filter((r) => divisionOf(players[r.id] || r) === division);
 };
@@ -109,11 +111,16 @@ export function computePodium(state, now = Date.now(), { division = null } = {})
   const { unlockMinutes, minGames } = podiumSettings(state);
   const startedAt = typeof state?.sessionStartedAt === "number" ? state.sessionStartedAt : null;
   const elapsedMinutes = startedAt ? Math.max(0, (now - startedAt) / 60000) : 0;
-  const unlocked = startedAt !== null && elapsedMinutes >= unlockMinutes;
+  // Roulette: once every round has been played the standings are final, so
+  // the podium opens (and reads "Final Podium") without waiting for the
+  // time gate. Read straight off the record to keep this module free of a
+  // lib/roulette.js import.
+  const rouletteComplete = state?.rotationMode === "roulette" && state?.roulette?.phase === "complete";
+  const unlocked = rouletteComplete || (startedAt !== null && elapsedMinutes >= unlockMinutes);
   const rows = rowsFor(state, division);
   const places = placesFrom(rows, minGames);
   return {
-    final: false,
+    final: rouletteComplete,
     division,
     divisionLabel: division ? divisionLabel(division) : null,
     unlocked,
