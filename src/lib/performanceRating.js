@@ -70,3 +70,9 @@ export function buildStandingsRows(players, { order = "rating" } = {}) {
   );
   return rows;
 }
+
+// Displays (Standings, the waiting list) show a dash instead of a rating
+// until a player has this many games — one lost first game used to show an
+// orange "0". Display only: the rating itself and standings order are
+// unchanged. Same number as the podium's default minimum (podiumMinGames).
+export const RATING_MIN_GAMES = 2;

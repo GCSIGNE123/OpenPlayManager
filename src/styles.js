@@ -2183,6 +2183,8 @@ export const styles = {
   // two teams side by side don't fit a phone (Team B printed over Team A).
   // Each team keeps a workable minimum width and the pair stacks when the
   // card is narrower than two of them; desktop stays side by side.
+  // Standings / waiting list: shown instead of a rating badge until a player has RATING_MIN_GAMES games
+  ratingPending: { color: "var(--color-text-faint)", fontWeight: 700 },
   matchupTeamsStackable: {
     display: "flex",
     flexWrap: "wrap",

@@ -45,7 +45,7 @@ export default function BoardView({ state }) {
       )}
       <div style={styles.courtGrid}>
         {state.courts.map((court, i) => (
-          <CourtCard key={i} court={court} players={state.players} readOnly />
+          <CourtCard key={i} court={court} players={state.players} readOnly hidePayment />
         ))}
       </div>
       <SectionLabel>Waiting queue</SectionLabel>

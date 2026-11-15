@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { styles } from "../styles.js";
-import { buildStandingsRows, standingsOrderFor } from "../lib/performanceRating.js";
+import { RATING_MIN_GAMES, buildStandingsRows, standingsOrderFor } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
 import { computePodiums, podiumMedalRanks } from "../lib/podium.js";
@@ -170,12 +170,16 @@ export default function StandingsView({ players, state }) {
                 {p.diff > 0 ? `+${p.diff}` : p.diff}
               </span>
               <span style={styles.standingsRatingCol}>
-                <span
-                  style={styles.ratingBadge(p.performance.rating)}
-                  title={`${Math.round(p.performance.winPct * 100)}% win rate`}
-                >
-                  {p.performance.rating === null ? "—" : p.performance.rating}
-                </span>
+                {p.performance.rating === null || (p.gp || 0) < RATING_MIN_GAMES ? (
+                  <span style={styles.ratingPending} title={`Rating shows after ${RATING_MIN_GAMES} games`}>—</span>
+                ) : (
+                  <span
+                    style={styles.ratingBadge(p.performance.rating)}
+                    title={`${Math.round(p.performance.winPct * 100)}% win rate`}
+                  >
+                    {p.performance.rating}
+                  </span>
+                )}
               </span>
             </div>
           ))}

@@ -265,6 +265,8 @@ export default function ScorerView({
       ? RESULT_GROUPING_OPTIONS.find((o) => o.value === state.resultGrouping)?.label?.replace(" (recommended)", "") || state.resultGrouping
       : null;
   const totalPlayers = Object.keys(state.players || {}).length;
+  // players on an occupied court right now (live, calling or finished-awaiting-End)
+  const onCourtCount = (state.courts || []).filter((c) => c.status !== "open").reduce((n, c) => n + (c.teamA || []).length + (c.teamB || []).length, 0);
   // matches matchHistory's own round numbering (see endMatch: `round:
   // (state.matchHistory || []).length + 1`) — the round the next completed
   // match would be recorded under, i.e. "what round are we currently on"
@@ -315,8 +317,13 @@ export default function ScorerView({
               (playing + held + upcoming + waiting) — no new persisted
               field, computed fresh every render from state.players/courts/
               nextMatchups exactly like getPlayerQueueStatus already is. */}
-          <span style={styles.sessionInfoLabel}>In-Court Players</span>
+          {/* label was "In-Court Players", which read as "on court" — it counts everyone checked in */}
+          <span style={styles.sessionInfoLabel}>Checked In</span>
           <span style={styles.sessionInfoValue}>{countInCourtPlayers(state)}</span>
+        </div>
+        <div style={styles.sessionInfoItem}>
+          <span style={styles.sessionInfoLabel}>On Court</span>
+          <span style={styles.sessionInfoValue}>{onCourtCount}</span>
         </div>
         <div style={styles.sessionInfoItem}>
           <span style={styles.sessionInfoLabel}>Courts</span>
@@ -350,17 +357,18 @@ export default function ScorerView({
           </span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Players</span>
+          <span style={styles.sessionInfoLabel}>Registered</span>
           <span style={styles.sessionInfoValue}>{totalPlayers}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Waiting Players</span>
+          <span style={styles.sessionInfoLabel}>Waiting</span>
           <span style={styles.sessionInfoValue}>{waitingCount}</span>
         </div>
         <div style={styles.sessionInfoItem}>
-          <span style={styles.sessionInfoLabel}>Current Round</span>
-          {/* Roulette counts real rounds (n of N); other modes count matches played + 1 */}
-          <span style={styles.sessionInfoValue}>{roulette ? `${Math.max(1, rouletteOf(state).round)} of ${rouletteOf(state).totalRounds}` : currentRound}</span>
+          {/* Roulette and Points-Based Matchmaking play real rounds; every other
+              mode is continuous, where "round" was just the match count + 1 */}
+          <span style={styles.sessionInfoLabel}>{roulette || usesPhases(state) ? "Current Round" : "Matches Played"}</span>
+          <span style={styles.sessionInfoValue}>{roulette ? `${Math.max(1, rouletteOf(state).round)} of ${rouletteOf(state).totalRounds}` : usesPhases(state) ? currentRound : (matchHistory || []).length}</span>
         </div>
       </div>
       {usesPhases(state) && (
