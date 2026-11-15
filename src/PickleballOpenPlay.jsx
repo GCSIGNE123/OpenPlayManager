@@ -58,6 +58,7 @@ import {
   editMatchHistoryScore,
 } from "./lib/queueManagement.js";
 import { fixedPairBlockReason, splitPairIfCrossDivision, pairDissolvedText } from "./lib/fixedPairRules.js";
+import { stampCourtClocks } from "./lib/courtClock.js";
 import { createRouletteFields, isRouletteMode, rouletteAdvance, rouletteOf, redrawRouletteRound, startRouletteRound as startRouletteRoundAction, rouletteScoreProblem, ROULETTE_PHASES } from "./lib/roulette.js";
 import {
   selectNextDispatchableMatchup,
@@ -602,6 +603,9 @@ export default function PickleballOpenPlay() {
       // when isActivity is true (the default) — see save()'s own doc comment
       // above and lib/constants.js's defaultState.lastActivityAt.
       const now = Date.now();
+      // Court Play Clock (lib/courtClock.js) — stamp `liveSince` on any court
+      // whose game just went live; same array back when nothing changed.
+      withDispatch = { ...withDispatch, courts: stampCourtClocks(stateRef.current.courts, withDispatch.courts, now) };
       const withStamp = {
         ...withDispatch,
         updatedAt: now,
