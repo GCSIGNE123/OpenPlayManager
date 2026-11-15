@@ -79,6 +79,20 @@ export default function AlertBell({ state }) {
   const rungRef = useRef(null); // ids we've already chimed for this page load
   const ctxRef = useRef(null);
   const wrapRef = useRef(null);
+  // On a phone the bell is not at the screen edge, so a panel hung from its
+  // right side ran off the left of the screen. Below 520px the panel is
+  // pinned to the viewport instead, just under the bell.
+  const [narrowPlacement, setNarrowPlacement] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const place = () => {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      setNarrowPlacement(rect && window.innerWidth < 520 ? { position: "fixed", top: Math.round(rect.bottom + 6), left: 8, right: 8, width: "auto" } : null);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
 
   const unseen = unseenAlerts(alerts, seenIds);
 
@@ -137,7 +151,7 @@ export default function AlertBell({ state }) {
         )}
       </button>
       {open && (
-        <div style={styles.alertPanel} role="dialog" aria-label="Alerts">
+        <div style={{ ...styles.alertPanel, ...narrowPlacement }} role="dialog" aria-label="Alerts">
           <div style={styles.alertPanelHead}>
             <span style={styles.alertPanelTitle}>Alerts</span>
             <span style={styles.alertPanelActions}>

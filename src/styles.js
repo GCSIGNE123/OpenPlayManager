@@ -613,11 +613,19 @@ export const styles = {
     background: active ? "var(--ball)" : "var(--coral)",
     display: "inline-block",
   }),
+  // The tab strip scrolls sideways on its own on a narrow screen. Without
+  // this the strip (wider than a phone) stretched the whole app shell, and
+  // tapping a far-right tab slid the header and page content off-screen.
   nav: {
     display: "flex",
     gap: 4,
+    overflowX: "auto",
+    scrollbarWidth: "none",
+    WebkitOverflowScrolling: "touch",
   },
   navBtn: {
+    flexShrink: 0,
+    whiteSpace: "nowrap",
     background: "transparent",
     border: "none",
     color: "rgba(243,241,228,0.65)",
@@ -1571,6 +1579,7 @@ export const styles = {
   },
   input: {
     flex: 1,
+    minWidth: 0, // lets two inputs share a row on a phone instead of running off the edge
     padding: "11px 14px",
     borderRadius: 8,
     border: "1.5px solid var(--line)",
@@ -2169,6 +2178,23 @@ export const styles = {
     fontSize: 12,
     color: "var(--coral)",
     flexShrink: 0,
+  },
+  // Scorer's Next Match card: its player rows carry badges and buttons, so
+  // two teams side by side don't fit a phone (Team B printed over Team A).
+  // Each team keeps a workable minimum width and the pair stacks when the
+  // card is narrower than two of them; desktop stays side by side.
+  matchupTeamsStackable: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+  },
+  matchupTeamStackable: {
+    flex: "1 1 240px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    minWidth: 0,
   },
   emptyQueue: { color: "var(--color-text-faint)", fontSize: 13.5 },
   loginWrap: {
