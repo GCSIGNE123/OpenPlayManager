@@ -205,8 +205,8 @@ export default function NextMatchupCard({
       ) : (
         <div>
           {label === "Next up" && <span style={styles.dialogLabel}>NEXT MATCH PROPOSAL</span>}
-          <div style={styles.matchupTeams}>
-            <div style={styles.matchupTeam}>
+          <div style={styles.matchupTeamsStackable}>
+            <div style={styles.matchupTeamStackable}>
               {matchup.teamA.map((id, i) => (
                 <PlayerChip
                   key={id}
@@ -221,7 +221,7 @@ export default function NextMatchupCard({
               ))}
             </div>
             <span style={styles.matchupVs}>VS</span>
-            <div style={styles.matchupTeam}>
+            <div style={styles.matchupTeamStackable}>
               {matchup.teamB.map((id, i) => (
                 <PlayerChip
                   key={id}
