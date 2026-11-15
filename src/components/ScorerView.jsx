@@ -778,6 +778,7 @@ export default function ScorerView({
           matchmakingPriority={matchmakingPriority}
           resultGrouping={state.resultGrouping}
           showResultGrouping={rotationMode === "adaptiveSkill"}
+          mixedDivisionMatches={state.mixedDivisionMatches}
           podiumUnlockMinutes={state.podiumUnlockMinutes}
           podiumMinGames={state.podiumMinGames}
           roulette={roulette ? { ...rouletteOf(state), raw: state.roulette || {} } : undefined}

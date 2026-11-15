@@ -27,6 +27,9 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-15 — Mixed matches in Skill Divisions** — stuck players of one
+  category play Beginner + Intermediate vs Beginner + Intermediate instead
+  of waiting for their own category's court (session setting, on by default).
 - **2026-11-15 — Court play clock** — courts record when their game went
   live (`liveSince`), so the spectator page can show time of play per court.
 - **2026-11-14 — Roulette mode, part 2** — standings by win percentage

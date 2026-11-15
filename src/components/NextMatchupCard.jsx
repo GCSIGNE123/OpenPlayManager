@@ -330,7 +330,11 @@ function describeMatchQuality(matchup, players) {
   const lines = [];
 
   const skill = players[a1]?.skill || players[b1]?.skill;
-  lines.push(skill ? `Skill balance: both teams are ${skill} division` : "Skill balance: same-division matchup");
+  if (matchup.mixedDivision || matchup.fairness?.mixedDivision) {
+    lines.push("Skill balance: mixed match — one Beginner and one Intermediate on each team");
+  } else {
+    lines.push(skill ? `Skill balance: both teams are ${skill} division` : "Skill balance: same-division matchup");
+  }
 
   const partnerRepeat =
     (players[a1]?.recentPartnerIds || []).includes(a2) || (players[b1]?.recentPartnerIds || []).includes(b2);
