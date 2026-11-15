@@ -190,9 +190,39 @@ export function describeResultGroup(ids, players) {
   return "mixed";
 }
 
-// Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Beginners only ever
-// play Beginners, Intermediates only ever play Intermediates — this engine
-// never builds a mixed-skill team. Do NOT replace or duplicate the existing
+// ---------------------------------------------------------------------
+// MIXED MATCHES (Beginner + Intermediate vs Beginner + Intermediate) —
+// organizer request (Nov 2026), session setting `mixedDivisionMatches`.
+// Two waiting players of one category used to stay stuck until a court of
+// THEIR category finished, even while the other category's courts kept
+// turning over. With the setting on, generateMatchups may build ONE mixed
+// match per call (tryMixedMatch):
+//   - the "stuck pair": the two solo players a category could not place
+//     in a same-category four (fixed pairs are never split, and never play
+//     mixed). Three unplaced players wait for a fourth instead — unless the
+//     category has fewer than four players in the whole session, when the
+//     two longest-waiting of them play mixed;
+//   - plus the other category's two highest-priority solo players;
+//   - always one Beginner and one Intermediate on EACH team — never two
+//     Intermediates against two Beginners.
+// Same-category play stays the rule. The mixed match is only used when it
+// would be queued within the room available right now AND either
+//   (a) nobody loses a place because of it (it uses a spare slot), or
+//   (b) both stuck players have waited at least
+//       MIXED_MATCH_WAIT_GAP_MINUTES longer than every player it bumps.
+// It is also skipped when it would leave exactly one player of the other
+// category unplaced (a lone player can't be rescued by a later mixed match).
+// The other category's remaining players are re-planned normally (Stage 1
+// + Stage 2, unchanged). Mixed games count like any other game for each
+// player (standings, streaks, promotion) — both sides are equally mixed.
+// Off (undefined on sessions saved before this field existed) is exactly
+// the pre-feature behaviour.
+// ---------------------------------------------------------------------
+export const MIXED_MATCH_WAIT_GAP_MINUTES = 5;
+
+// Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Beginners play
+// Beginners and Intermediates play Intermediates; the ONE exception is the
+// optional mixed match described above (one of each category per team). Do NOT replace or duplicate the existing
 // fairness engine: TEAM formation (who partners with whom) is always
 // BalancedRotationEngine's own partner-recency logic, reused unmodified via
 // its public buildTeams — so partners keep rotating every match, exactly as
@@ -246,10 +276,27 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     // spanning Beginner and Intermediate is never force-paired — Adaptive
     // Skill Rotation's Beginner/Intermediate separation is structurally
     // untouched by this option.
-    const beginnerMatchups = this.generateDivisionMatchups(beginnerIds, players, recentMatchups, resultGrouping);
-    const intermediateMatchups = this.generateDivisionMatchups(intermediateIds, players, recentMatchups, resultGrouping);
+    const beginnerPlan = this.planDivision(beginnerIds, players, recentMatchups, resultGrouping);
+    const intermediatePlan = this.planDivision(intermediateIds, players, recentMatchups, resultGrouping);
+    const sameDivision = [...beginnerPlan.matchups, ...intermediatePlan.matchups];
 
-    const merged = [...beginnerMatchups, ...intermediateMatchups].map((m) => {
+    // Mixed Matches — see the MIXED MATCHES header. `room` (how many new
+    // matchups the caller will keep, see refreshNextMatchups) bounds what
+    // counts as "would actually be queued now".
+    if (context.mixedDivisionMatches === true) {
+      const room = Number.isFinite(context.room) ? context.room : Infinity;
+      const mixed = this.tryMixedMatch({ beginnerIds, intermediateIds, beginnerPlan, intermediatePlan, players, recentMatchups, resultGrouping, room });
+      if (mixed) return mixed;
+    }
+
+    return this.rankMatchups(sameDivision, players);
+  }
+
+  // Ranks matchups from both divisions on one shared scale, best-first
+  // (extracted unchanged from generateMatchups so the mixed-match check can
+  // rank an alternative plan the same way).
+  rankMatchups(matchups, players) {
+    const merged = matchups.map((m) => {
       const ids = [...m.teamA, ...m.teamB];
       return {
         m,
@@ -293,7 +340,14 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
   // untouched, so every other rotation mode still goes through its
   // original buildTeams/pairLeftovers path exactly as before.
   generateDivisionMatchups(pool, players, recentMatchups = null, resultGrouping = "off") {
-    const { groups, groupNotes } = this.selectFairnessGroups(pool, players, resultGrouping);
+    return this.planDivision(pool, players, recentMatchups, resultGrouping).matchups;
+  }
+
+  // Same as generateDivisionMatchups, but also returns who could NOT be
+  // placed in a same-category four (`leftover`, in stack-priority order) —
+  // the mixed-match check needs that.
+  planDivision(pool, players, recentMatchups = null, resultGrouping = "off") {
+    const { groups, groupNotes, leftover } = this.selectFairnessGroups(pool, players, resultGrouping);
 
     const matchups = [];
     groups.forEach((quartet, i) => {
@@ -308,7 +362,95 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
       }
     });
 
-    return matchups;
+    return { matchups, leftover };
+  }
+
+  // Solo players (not in a mutually-fixed pair) of `ids`, in Stage 1's own
+  // priority order: longest wait, then fewest games, then earliest stamp.
+  rankedSolos(ids, players, now = Date.now()) {
+    const { remaining } = this.divisionEngine.extractFixedPartnerTeams(ids, players);
+    return [...remaining].sort(
+      (a, b) =>
+        this.waitMinutesFor(b, players, now) - this.waitMinutesFor(a, players, now) ||
+        (players[a]?.games || 0) - (players[b]?.games || 0) ||
+        this.sinceStamp(a, players) - this.sinceStamp(b, players)
+    );
+  }
+
+  // Mixed Matches — see the MIXED MATCHES header comment. Returns the full
+  // ranked matchup list of the alternative plan (mixed match included) when
+  // the mixed match is justified, otherwise null (caller keeps the plain
+  // same-category plan).
+  tryMixedMatch({ beginnerIds, intermediateIds, beginnerPlan, intermediatePlan, players, recentMatchups, resultGrouping, room }) {
+    if (!(room > 0)) return null;
+    const now = Date.now();
+    const boundIds = (ranked) => new Set(ranked.slice(0, room).flatMap((m) => [...m.teamA, ...m.teamB]));
+    const baseline = boundIds(this.rankMatchups([...beginnerPlan.matchups, ...intermediatePlan.matchups], players));
+
+    // a category is "stuck" when it leaves at least two solo players unplaced
+    // checked-in players of each category in the whole session (on court included)
+    const everyone = Object.values(players).filter((p) => p && p.checkedIn);
+    const intermediateCount = everyone.filter((p) => p.skill === "intermediate").length;
+    const sides = [
+      { stuckPlan: beginnerPlan, otherPool: intermediateIds, categorySize: everyone.length - intermediateCount },
+      { stuckPlan: intermediatePlan, otherPool: beginnerIds, categorySize: intermediateCount },
+    ]
+      .map((side) => ({ ...side, stuck: this.rankedSolos(side.stuckPlan.leftover, players, now).slice(0, 2) }))
+      // Exactly two unplaced: they play mixed. Three unplaced wait for a
+      // fourth of their own category instead (sending two of them off
+      // scatters a small category across courts and strands the third —
+      // measured: longer waits, not shorter) — UNLESS that category has
+      // fewer than four players in the whole session, in which case a
+      // same-category four can never happen and mixing is their only game.
+      .filter((side) => side.stuck.length === 2 && (side.stuckPlan.leftover.length === 2 || side.categorySize < 4))
+      .map((side) => ({ ...side, stuckWait: Math.min(...side.stuck.map((id) => this.waitMinutesFor(id, players, now))) }))
+      .sort((a, b) => b.stuckWait - a.stuckWait); // the longer-stuck pair gets first try
+
+    for (const { stuckPlan, otherPool, stuck, stuckWait } of sides) {
+      const partners = this.rankedSolos(otherPool, players, now).slice(0, 2);
+      if (partners.length < 2) continue;
+      const mixed = this.buildMixedMatchup(stuck, partners, players, recentMatchups);
+      const otherPlan = this.planDivision(otherPool.filter((id) => !partners.includes(id)), players, recentMatchups, resultGrouping);
+      // never strand a lone player: taking two partners out of three
+      // unplaced players would leave one behind who can't be helped by a
+      // later mixed match (that needs two) — those three wait for a fourth
+      if (otherPlan.leftover.length === 1) continue;
+      const ranked = this.rankMatchups([mixed, ...stuckPlan.matchups, ...otherPlan.matchups], players);
+      const alternative = boundIds(ranked);
+      if (!stuck.every((id) => alternative.has(id))) continue; // no room for the mixed match right now
+      const bumped = [...baseline].filter((id) => !alternative.has(id));
+      const fair = bumped.every((id) => stuckWait - this.waitMinutesFor(id, players, now) >= MIXED_MATCH_WAIT_GAP_MINUTES);
+      if (fair) return ranked;
+    }
+    return null;
+  }
+
+  // One player of each category per team. Of the two possible pairings the
+  // better-scoring one wins (partner/opponent diversity, same scoring as
+  // any other four).
+  buildMixedMatchup(stuck, partners, players, recentMatchups = null) {
+    const [s1, s2] = stuck;
+    const [p1, p2] = partners;
+    const options = shuffle([
+      [[s1, p1], [s2, p2]],
+      [[s1, p2], [s2, p1]],
+    ]);
+    let best = options[0];
+    let bestScore = -Infinity;
+    for (const option of options) {
+      const score = this.scoreQuartetSplit(option[0], option[1], players, recentMatchups);
+      if (score > bestScore) {
+        bestScore = score;
+        best = option;
+      }
+    }
+    return {
+      id: uid(),
+      teamA: best[0],
+      teamB: best[1],
+      mixedDivision: true,
+      fairness: this.describeFairness([...stuck, ...partners], players, { mixedDivision: true }),
+    };
   }
 
   // Rotation Redesign R2 — Opponent-Aware Team Formation, Adaptive Skill
@@ -568,7 +710,9 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     const groupingOn = normalizeResultGrouping(note?.resultGrouping) !== "off";
     const courtLabel = resultGroup === "winners" ? "Winners' court" : resultGroup === "losers" ? "Losers' court" : null;
     let reason = "Fairness priority: these are the longest-waiting eligible players.";
-    if (note?.guardRelaxed) {
+    if (note?.mixedDivision) {
+      reason = "Mixed match: one Beginner and one Intermediate on each team, so waiting players aren't held up until their own category's game ends.";
+    } else if (note?.guardRelaxed) {
       reason = "Fairness note: the rest guard was relaxed because there weren't enough eligible alternatives waiting substantially longer.";
     } else if (note?.usedResultGrouping) {
       // Result Grouping reordered inside the fairness window — say so, and
@@ -587,6 +731,7 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
       usedLookahead: Boolean(note?.usedLookahead),
       guardRelaxed: Boolean(note?.guardRelaxed),
       usedResultGrouping: Boolean(note?.usedResultGrouping),
+      mixedDivision: Boolean(note?.mixedDivision), // Beginner + Intermediate vs Beginner + Intermediate — see MIXED MATCHES
       resultGroup, // "winners" | "losers" | "mixed" | "fresh" — descriptive only
       reason,
     };

@@ -137,8 +137,11 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
 //   - calibration: Points-Based Adaptive Matchmaking only (null otherwise)
 //   - resultGrouping: Result Grouping (Skill Divisions only — every other
 //     engine ignores the field, same as an engine that doesn't read `phase`)
+//   - mixedDivisionMatches: Mixed Matches (Skill Divisions only) — lets two
+//     stuck players of one category play Beginner + Intermediate vs
+//     Beginner + Intermediate; see AdaptiveSkillRotationEngine's header
 function rotationEngineContext(s) {
-  return { ...(calibrationEngineContext(s) || {}), resultGrouping: s.resultGrouping };
+  return { ...(calibrationEngineContext(s) || {}), resultGrouping: s.resultGrouping, mixedDivisionMatches: s.mixedDivisionMatches === true };
 }
 
 export default function PickleballOpenPlay() {
@@ -1156,6 +1159,7 @@ export default function PickleballOpenPlay() {
         ...createRouletteFields(rotationMode, sessionOptions?.roulette), // Roulette only: rounds / round timer / round state ({} for every other mode) — see lib/roulette.js
         expectedGamesPerPlayer,
         adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
+        mixedDivisionMatches: defaultState.mixedDivisionMatches, // Mixed Matches (Skill Divisions only; every other mode ignores it) — on for new sessions, editable in Session Settings
         skillChangeLog: [],
         queueActivityLog: [],
         courtDispatchSettings: { ...defaultState.courtDispatchSettings },

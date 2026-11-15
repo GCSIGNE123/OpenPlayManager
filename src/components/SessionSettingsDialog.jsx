@@ -30,6 +30,7 @@ export default function SessionSettingsDialog({
   matchmakingPriority,
   resultGrouping,
   showResultGrouping,
+  mixedDivisionMatches, // Skill Divisions only — shown together with Result Grouping
   podiumUnlockMinutes,
   podiumMinGames,
   roulette, // Roulette sessions only: { totalRounds, roundMinutes, round } — undefined otherwise
@@ -74,6 +75,7 @@ export default function SessionSettingsDialog({
   const [rouletteRoundsDraft, setRouletteRoundsDraft] = useState(roulette?.totalRounds ?? 12);
   const [rouletteMinutesDraft, setRouletteMinutesDraft] = useState(roulette?.roundMinutes ?? 11);
 
+  const [mixedDivisionDraft, setMixedDivisionDraft] = useState(mixedDivisionMatches === true);
   const [resultGroupingDraft, setResultGroupingDraft] = useState(RESULT_GROUPING_OPTIONS.some((o) => o.value === resultGrouping) ? resultGrouping : "off");
 
   // Voice list — window.speechSynthesis.getVoices() is frequently empty
@@ -130,7 +132,7 @@ export default function SessionSettingsDialog({
       podiumMinGames: Math.max(1, Number(podiumMinGamesDraft) || 2),
       // only written for Skill Divisions sessions — other modes keep whatever
       // value the session already had (the engine ignores it anyway)
-      ...(showResultGrouping ? { resultGrouping: resultGroupingDraft } : {}),
+      ...(showResultGrouping ? { resultGrouping: resultGroupingDraft, mixedDivisionMatches: mixedDivisionDraft } : {}),
       // Roulette sessions only. Rounds can never drop below the round
       // already drawn/played; the timer change applies from the next clock.
       ...(roulette
@@ -299,6 +301,19 @@ export default function SessionSettingsDialog({
               ))}
             </select>
             <p style={styles.editHint}>{RESULT_GROUPING_OPTIONS.find((o) => o.value === resultGroupingDraft)?.description}</p>
+          </div>
+        )}
+
+        {showResultGrouping && (
+          <div style={styles.dialogField}>
+            <label style={styles.dialogLabel}>Mixed matches</label>
+            <label style={styles.settingsCheckboxRow}>
+              <input type="checkbox" checked={mixedDivisionDraft} onChange={(e) => setMixedDivisionDraft(e.target.checked)} aria-label="Allow mixed matches when players are stuck waiting" />
+              Allow mixed matches when players are stuck waiting
+            </label>
+            <p style={styles.editHint}>
+              When two players of one category are waiting and can't form a match of their own category, they play Beginner + Intermediate vs Beginner + Intermediate instead of waiting for their category's court. Same-category matches still come first, and nobody who has waited about as long is bumped. Mixed games count as normal wins and losses. Changes apply from the next matchup generated.
+            </p>
           </div>
         )}
 

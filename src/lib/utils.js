@@ -698,7 +698,10 @@ export function refreshNextMatchups(queueIds, players, existingMatchups, engine 
   // Redesign R1/R2) is read only by AdaptiveSkillRotationEngine, as a soft
   // team-formation scoring signal — every other engine ignores the extra
   // context field entirely, same as an engine that doesn't read `phase`.
-  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, priority: matchmakingPriority, recentMatchups, ...(extraContext || {}) }, true);
+  // `room` — how many new matchups will be kept below — is read only by
+  // AdaptiveSkillRotationEngine's Mixed Matches check; every other engine
+  // ignores it.
+  const newMatchups = engine.generateMatchups({ waitingIds, players, existingMatchups, phase, priority: matchmakingPriority, recentMatchups, room, ...(extraContext || {}) }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...existingMatchups, ...ordered.slice(0, room)];
 }
@@ -723,7 +726,7 @@ export function regenerateNextMatchups(queueIds, players, existingMatchups, engi
   const waitingIds = queueIds.filter((id) => isEligibleForMatchmaking(players[id]));
   const newMatchups = room === 0
     ? []
-    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, priority: matchmakingPriority, recentMatchups, ...(extraContext || {}) }, true);
+    : engine.generateMatchups({ waitingIds, players, existingMatchups: protectedMatchups, phase, priority: matchmakingPriority, recentMatchups, room, ...(extraContext || {}) }, true);
   const ordered = sortMatchupsByPriority(newMatchups, players, matchmakingPriority);
   return [...protectedMatchups, ...ordered.slice(0, room)];
 }
