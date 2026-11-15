@@ -25,7 +25,8 @@ export default function AdminLogin({ onBack, adminPin, setAdminPin, tryAdminLogi
         Enter as organizer
       </button>
       {adminPinError && <div style={styles.pinError}>{adminPinError}</div>}
-      <p style={styles.loginNote}>Demo PIN: 918273 — a real deploy would use a real owner login.</p>
+      {/* never print the PIN here — this screen is public */}
+      <p style={styles.loginNote}>For PickleKing organizers only.</p>
     </div>
   );
 }
