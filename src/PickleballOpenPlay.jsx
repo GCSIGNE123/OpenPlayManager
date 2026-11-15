@@ -1159,6 +1159,7 @@ export default function PickleballOpenPlay() {
         ...createRouletteFields(rotationMode, sessionOptions?.roulette), // Roulette only: rounds / round timer / round state ({} for every other mode) — see lib/roulette.js
         expectedGamesPerPlayer,
         adaptiveSkillThresholds: { ...defaultState.adaptiveSkillThresholds },
+        resultGrouping: defaultState.resultGrouping, // Result Grouping (Skill Divisions only) — "prefer" for new sessions; was documented as the default but never actually written here, so new sessions ran with it off until set in Session Settings
         mixedDivisionMatches: defaultState.mixedDivisionMatches, // Mixed Matches (Skill Divisions only; every other mode ignores it) — on for new sessions, editable in Session Settings
         skillChangeLog: [],
         queueActivityLog: [],

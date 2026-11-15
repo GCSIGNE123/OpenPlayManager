@@ -224,6 +224,7 @@ console.log("\n11. Wiring — the session setting reaches the engine through ref
   const app = read("src/PickleballOpenPlay.jsx");
   assert("the app forwards state.resultGrouping in BOTH the save() refresh and the manual regenerate (rotationEngineContext)", (app.match(/rotationEngineContext\((next|state)\)/g) || []).length === 2 && /resultGrouping: s\.resultGrouping/.test(app));
   assert("defaultState.resultGrouping is 'prefer' (new sessions), and the constant agrees", defaultState.resultGrouping === "prefer" && DEFAULT_RESULT_GROUPING === "prefer");
+  assert("a newly created session is actually written with that default", /resultGrouping: defaultState\.resultGrouping,/.test(read("src/PickleballOpenPlay.jsx")));
   assert("RESULT_GROUPING_OPTIONS lists exactly the engine's modes", RESULT_GROUPING_OPTIONS.map((o) => o.value).join(",") === RESULT_GROUPING_MODES.join(","));
   const dlg = read("src/components/SessionSettingsDialog.jsx");
   assert("Session Settings has the control, gated on showResultGrouping, and saves resultGrouping", /showResultGrouping &&/.test(dlg) && /aria-label="Result Grouping"/.test(dlg) && /resultGrouping: resultGroupingDraft/.test(dlg));
