@@ -158,7 +158,7 @@ export default function SessionSettingsDialog({
           </button>
         </div>
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Venue name</label>
           <input
             style={styles.input}
@@ -169,12 +169,12 @@ export default function SessionSettingsDialog({
           {!venueValid && <p style={styles.editWarning}>Venue name can't be empty.</p>}
         </div>
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Rotation mode</label>
           <p style={styles.dialogReadOnlyValue}>{rotationModeLabel} — chosen at session creation, not editable here</p>
         </div>
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Expected games per player</label>
           <input
             type="number"
@@ -186,7 +186,7 @@ export default function SessionSettingsDialog({
         </div>
 
         {showThresholds && (
-          <div style={styles.dialogField}>
+          <div style={styles.settingsDialogField}>
             <label style={styles.dialogLabel}>Progressive Skill phase boundaries (%)</label>
             <div style={styles.dialogThresholdRow}>
               <label style={styles.settingsField}>
@@ -216,7 +216,7 @@ export default function SessionSettingsDialog({
         )}
 
         {showAdaptiveThresholds && (
-          <div style={styles.dialogField}>
+          <div style={styles.settingsDialogField}>
             <label style={styles.dialogLabel}>Skill Divisions — promotion / relegation thresholds</label>
             <div style={styles.dialogThresholdRow}>
               <label style={styles.settingsField}>
@@ -243,7 +243,7 @@ export default function SessionSettingsDialog({
           </div>
         )}
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Held Player Reminder</label>
           <p style={styles.dialogReadOnlyValue}>
             Nudges the facilitator about a player who's stayed held a while — never affects matchmaking or player priority.
@@ -283,7 +283,7 @@ export default function SessionSettingsDialog({
         </div>
 
         {showResultGrouping && (
-          <div style={styles.dialogField}>
+          <div style={styles.settingsDialogField}>
             <label style={styles.dialogLabel}>Winners' / losers' courts (Result Grouping)</label>
             <p style={styles.dialogReadOnlyValue}>
               Inside each skill division, group players coming off a win onto one court and players coming off a loss onto another. Fairness stays first: the longest-waiting player is never skipped and the rest guard always applies. Changes apply from the next matchup generated.
@@ -305,7 +305,7 @@ export default function SessionSettingsDialog({
         )}
 
         {showResultGrouping && (
-          <div style={styles.dialogField}>
+          <div style={styles.settingsDialogField}>
             <label style={styles.dialogLabel}>Mixed matches</label>
             <label style={styles.settingsCheckboxRow}>
               <input type="checkbox" checked={mixedDivisionDraft} onChange={(e) => setMixedDivisionDraft(e.target.checked)} aria-label="Allow mixed matches when players are stuck waiting" />
@@ -318,7 +318,7 @@ export default function SessionSettingsDialog({
         )}
 
         {roulette && (
-          <div style={styles.dialogField}>
+          <div style={styles.settingsDialogField}>
             <label style={styles.dialogLabel}>Roulette Rounds</label>
             <p style={styles.dialogReadOnlyValue}>
               Every round is drawn at once (random partners and opponents, sit-outs rotated). A game ends at 11 points or when the round timer runs out, whichever comes first; a tie at the buzzer is settled by one more point.
@@ -336,7 +336,7 @@ export default function SessionSettingsDialog({
           </div>
         )}
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Running Podium</label>
           <p style={styles.dialogReadOnlyValue}>
             Champion, Runner-up and 3rd Place appear on the Live Board, Standings, TV Mode and the spectator page once the session has run this long, and update after every result. Players who check out keep their place (tagged "out").
@@ -367,7 +367,7 @@ export default function SessionSettingsDialog({
           </div>
         </div>
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Matchmaking Priority</label>
           <p style={styles.dialogReadOnlyValue}>
             A reusable ordering policy, not a rotation mode — works alongside whichever Rotation Mode is active. Only changes which already-built matchups get courts first when there isn't room for everyone; never changes who's teamed with whom.
@@ -386,7 +386,7 @@ export default function SessionSettingsDialog({
           </select>
         </div>
 
-        <div style={styles.dialogField}>
+        <div style={styles.settingsDialogField}>
           <label style={styles.dialogLabel}>Smart Court Dispatch</label>
           <label style={styles.settingsCheckboxRow}>
             <input

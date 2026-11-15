@@ -1,8 +1,8 @@
-import { Link2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Link2 } from "lucide-react";
 import { styles } from "../styles.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { fixedPairBlockReason, divisionLabel, divisionOf } from "../lib/fixedPairRules.js";
-import SectionLabel from "./SectionLabel.jsx";
 
 // Fixed Partner — mid-session — see PROJECT.md/FEATURES.md and
 // lib/queueManagement.js's setFixedPartner/clearFixedPartner (both reused
@@ -25,15 +25,27 @@ import SectionLabel from "./SectionLabel.jsx";
 // currently-playing player's live match and an already-built next matchup
 // are completely unaffected by a partner change made here.
 export default function FixedPartnerPanel({ players, state, onSetPartner, onClearPartner }) {
+  const [open, setOpen] = useState(false);
   if (!onSetPartner || !onClearPartner) return null;
   const roster = Object.values(players || {})
     .filter((p) => p.checkedIn && p.status !== "CHECKED_OUT")
     .sort((a, b) => a.name.localeCompare(b.name));
   if (roster.length === 0) return null;
+  const pairsSet = roster.filter((p) => p.partnerId && players?.[p.partnerId]).length / 2;
 
+  // Collapsed by default: the full roster is long and is only needed to
+  // set or clear a partner for someone already playing or queued.
   return (
     <>
-      <SectionLabel>Fixed Partner — all checked-in players ({roster.length})</SectionLabel>
+      <button type="button" style={styles.fixedPartnerToggle} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
+        Fixed Partner — all checked-in players ({roster.length})
+        <span style={styles.fixedPartnerToggleHint}>
+          {pairsSet > 0 ? `${Math.floor(pairsSet)} pair${Math.floor(pairsSet) === 1 ? "" : "s"} set · ` : ""}
+          {open ? "Hide" : "Show"}
+        </span>
+      </button>
+      {open && (
       <ul style={styles.rosterList}>
         {roster.map((p) => {
           const queueStatus = getPlayerQueueStatus(p, state);
@@ -72,6 +84,7 @@ export default function FixedPartnerPanel({ players, state, onSetPartner, onClea
           );
         })}
       </ul>
+      )}
     </>
   );
 }

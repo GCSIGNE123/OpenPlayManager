@@ -669,10 +669,13 @@ export const styles = {
   // page width, stacked vertically, instead of a multi-column card grid —
   // see PROJECT.md/FEATURES.md. Facilitators run 20-40+ player sessions and
   // need every court's names/score/actions readable without squinting.
+  // Courts: two per row once each can be 480px wide (wide desktop), one per
+  // row otherwise (phones, tablets, the 900px column) — same cards either way.
   courtGrid: {
-    display: "flex",
-    flexDirection: "column",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 480px), 1fr))",
     gap: 12,
+    alignItems: "start",
   },
   courtOpenRow: {
     display: "flex",
@@ -683,7 +686,11 @@ export const styles = {
   courtLiveRow: {
     display: "flex",
     alignItems: "stretch",
-    gap: 20,
+    // 20px between the two teams side by side; only 6px once they wrap onto
+    // two lines (phones, two-per-row courts) — the 1px divider then sits on
+    // its own line, so a 20px row gap was counted twice (a big empty band)
+    columnGap: 20,
+    rowGap: 6,
     flexWrap: "wrap",
     width: "100%",
     boxSizing: "border-box",
@@ -1329,7 +1336,7 @@ export const styles = {
     marginTop: 12,
   },
   standingsTable: {
-    maxWidth: 480,
+    maxWidth: 760,
   },
   standingsHeadRow: {
     display: "flex",
@@ -1428,6 +1435,46 @@ export const styles = {
     gap: 6,
     cursor: "pointer",
   },
+  // "End match early" while a game is live — a rare, interrupting action, so
+  // an outline button instead of the full orange bar (which stays for the
+  // everyday "End match & requeue players" once a winner is declared)
+  endMatchEarlyBtn: {
+    flex: "0 1 auto",
+    marginLeft: "auto",
+    background: "transparent",
+    color: "var(--color-text-faint)",
+    border: "1.5px solid var(--line)",
+    borderRadius: 7,
+    padding: "7px 12px",
+    fontWeight: 600,
+    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    cursor: "pointer",
+  },
+  // Fixed Partner panel header (collapsed by default)
+  fixedPartnerToggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    background: "transparent",
+    border: "1.5px solid var(--line)",
+    borderRadius: 8,
+    padding: "10px 12px",
+    margin: "18px 0 8px 0",
+    fontFamily: "'Space Mono', monospace",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--ink)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  fixedPartnerToggleHint: { marginLeft: "auto", fontFamily: "'Inter', sans-serif", textTransform: "none", letterSpacing: 0, fontWeight: 600, color: "var(--color-text-faint)" },
   checkinWrap: { maxWidth: 480 },
   checkinRow: { display: "flex", gap: 8 },
   historyToolbar: {
@@ -3451,6 +3498,15 @@ export const styles = {
     gap: 5,
     marginBottom: 14,
   },
+  // Session Settings only: a quiet line between settings — the dialog is long
+  settingsDialogField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginBottom: 14,
+    paddingBottom: 14,
+    borderBottom: "1px solid var(--color-border)",
+  },
   dialogLabel: {
     fontSize: 11.5,
     fontWeight: 700,
@@ -3458,10 +3514,15 @@ export const styles = {
     color: "var(--color-text-muted)",
     textTransform: "uppercase",
   },
+  // Session Settings / Share Live descriptions: often a <p>, whose default
+  // 1em margins plus the old 9px padding left uneven empty bands between a
+  // label and its control
   dialogReadOnlyValue: {
-    fontSize: 13.5,
+    fontSize: 13,
+    lineHeight: 1.45,
     color: "var(--color-text-faint)",
-    padding: "9px 0",
+    margin: 0,
+    padding: "2px 0",
   },
   dialogThresholdRow: {
     display: "flex",

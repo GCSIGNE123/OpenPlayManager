@@ -37,6 +37,15 @@ body {
   padding: 16px;
 }
 
+/* Desktop: use more of a wide screen so courts can sit two per row (see
+   styles.courtGrid). Screens with their own narrow max-width (sign-in,
+   Create Session, Check In forms) stay centred at their own width. */
+@media (min-width: 1200px) {
+  #root {
+    max-width: 1240px;
+  }
+}
+
 @media (max-width: 640px) {
   #root {
     padding: 0;
