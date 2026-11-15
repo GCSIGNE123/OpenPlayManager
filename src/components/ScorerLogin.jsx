@@ -14,7 +14,8 @@ export default function ScorerLogin({
   title = "Umpire / Scorer access",
   subtitle = "Enter your scorer PIN to manage courts and update live scores.",
   buttonLabel = "Enter as scorer",
-  note = "Demo PIN: 1234 — a real version would use per-umpire accounts.",
+  // never put the PIN in this note — the screen is visible to anyone with the session code
+  note = "Ask the session organizer for the PIN.",
 }) {
   return (
     <div style={styles.loginWrap}>
