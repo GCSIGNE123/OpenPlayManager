@@ -531,10 +531,7 @@ export default function CourtCard({
                 </button>
               )}
               <button
-                style={{
-                  ...styles.endMatchBtn,
-                  ...(court.status !== "finished" ? { opacity: 0.55 } : {}),
-                }}
+                style={court.status === "finished" ? styles.endMatchBtn : styles.endMatchEarlyBtn}
                 onClick={onEnd}
               >
                 {court.status === "finished" ? (
