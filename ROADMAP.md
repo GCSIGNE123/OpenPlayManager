@@ -27,6 +27,8 @@ them, not replace their core algorithms:
 
 ## Recently shipped
 
+- **2026-11-15 — Court play clock** — courts record when their game went
+  live (`liveSince`), so the spectator page can show time of play per court.
 - **2026-11-14 — Roulette mode, part 2** — standings by win percentage
   (then point difference, then points), the podium opening as the Final
   Podium after the last round, and the separate Final Match award (#1 & #4

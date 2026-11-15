@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-11-15
+
+### Added
+- **Court play clock (start time per game)** — every court now records when its game went live: `liveSince` (epoch ms), stamped in `save()` by the new `stampCourtClocks(prevCourts, courts, now)` in `lib/courtClock.js`. A court gets a fresh stamp when it becomes live, or when a live court is given a new game (fewer than 3 of the same players as the previous save); it keeps its stamp across score updates, a single player swap and page reloads, and the stamp is cleared when the court is no longer live or finished. Purely additive data — nothing in Pro reads it yet; the Player app's spectator page uses it to show time of play per court. `courtElapsedText(court, now)` formats it as m:ss. Regression script: `scripts/verify-court-clock.mjs` (15 checks).
+
 ## 2026-11-14
 
 ### Added
