@@ -5,7 +5,7 @@
 //
 // Usage: node scripts/verify-mixed-matches.mjs
 import fs from "node:fs";
-import { AdaptiveSkillRotationEngine, MIXED_MATCH_WAIT_GAP_MINUTES } from "../src/engines/AdaptiveSkillRotationEngine.js";
+import { AdaptiveSkillRotationEngine, MIXED_MATCH_WAIT_GAP_MINUTES, countMixedCourts, isMixedFour } from "../src/engines/AdaptiveSkillRotationEngine.js";
 import { refreshNextMatchups, maxUpcomingMatchups } from "../src/lib/utils.js";
 import { defaultState } from "../src/lib/constants.js";
 
@@ -191,7 +191,28 @@ console.log("\n6. Through refreshNextMatchups (what save() calls)");
   assert("an existing mixed match is kept as is on the next refresh", again[0] === on[0]);
 }
 
-console.log("\n7. Wiring");
+console.log("\n7. One mixed match at a time");
+{
+  const players = build(["B:14", "B:13", "I:0", "I:0", "I:0", "I:0"]);
+  const base = { waitingIds: Object.keys(players), players, existingMatchups: [], room: 1, resultGrouping: "off", mixedDivisionMatches: true };
+  let ok = true;
+  for (let i = 0; i < REPS; i++) ok = ok && !engine.generateMatchups({ ...base, activeMixedMatches: 1 }, true).some((m) => isMixed(players, m));
+  assert("while a mixed match is on a court, no second one is built", ok);
+  ok = true;
+  for (let i = 0; i < REPS; i++) ok = ok && engine.generateMatchups({ ...base, activeMixedMatches: 0 }, true).some((m) => isMixed(players, m));
+  assert("once that court is free again, mixing is allowed again", ok);
+  const more = build(["B:14", "B:13", "I:0", "I:0", "I:0", "I:0", "B:9", "I:9", "B:9", "I:9"]);
+  const queued = [{ id: "q", teamA: ["B7", "I8"], teamB: ["B9", "I10"] }];
+  ok = true;
+  for (let i = 0; i < REPS; i++) ok = ok && !engine.generateMatchups({ waitingIds: Object.keys(more), players: more, existingMatchups: queued, room: 2, resultGrouping: "off", mixedDivisionMatches: true }, true).some((m) => isMixed(more, m));
+  assert("while a mixed match is waiting in the queue, no second one is built", ok);
+  const courts = [{ number: 1, status: "live", teamA: ["B1", "I3"], teamB: ["B2", "I4"] }, { number: 2, status: "live", teamA: ["I5", "I6"], teamB: ["I3", "I4"] }, { number: 3, status: "open", teamA: ["B1", "I3"], teamB: [] }, { number: 4, status: "dispatching", teamA: ["B1", "B2"], teamB: ["I5", "I6"] }];
+  assert("countMixedCourts counts occupied courts whose players span both categories", countMixedCourts(courts, players) === 2 && countMixedCourts([], players) === 0 && countMixedCourts(null, players) === 0);
+  assert("isMixedFour ignores unknown ids", isMixedFour(["B1", "B2", "nobody"], players) === false && isMixedFour(["B1", "I3"], players) === true);
+  assert("save() passes the number of mixed courts to the engine", /activeMixedMatches: s\.mixedDivisionMatches === true \? countMixedCourts\(s\.courts, s\.players\) : 0/.test(read("src/PickleballOpenPlay.jsx")));
+}
+
+console.log("\n8. Wiring");
 {
   const app = read("src/PickleballOpenPlay.jsx");
   const dlg = read("src/components/SessionSettingsDialog.jsx");

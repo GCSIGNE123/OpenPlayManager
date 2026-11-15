@@ -215,10 +215,30 @@ export function describeResultGroup(ids, players) {
 // The other category's remaining players are re-planned normally (Stage 1
 // + Stage 2, unchanged). Mixed games count like any other game for each
 // player (standings, streaks, promotion) — both sides are equally mixed.
+// Only ONE mixed match exists at a time (on court or queued) — see the cap
+// in generateMatchups.
 // Off (undefined on sessions saved before this field existed) is exactly
 // the pre-feature behaviour.
 // ---------------------------------------------------------------------
 export const MIXED_MATCH_WAIT_GAP_MINUTES = 5;
+
+// True when the given players span both categories (a mixed match).
+export function isMixedFour(ids, players) {
+  let beginners = 0;
+  let intermediates = 0;
+  for (const id of ids) {
+    if (!players[id]) continue;
+    if (players[id].skill === "intermediate") intermediates++;
+    else beginners++;
+  }
+  return beginners > 0 && intermediates > 0;
+}
+
+// How many occupied courts currently hold a mixed match — what the caller
+// passes as context.activeMixedMatches (see the one-at-a-time cap).
+export function countMixedCourts(courts, players) {
+  return (courts || []).filter((c) => c && c.status !== "open" && isMixedFour([...(c.teamA || []), ...(c.teamB || [])], players || {})).length;
+}
 
 // Adaptive Skill Rotation — see PROJECT.md/FEATURES.md. Beginners play
 // Beginners and Intermediates play Intermediates; the ONE exception is the
@@ -283,7 +303,14 @@ export class AdaptiveSkillRotationEngine extends RotationEngine {
     // Mixed Matches — see the MIXED MATCHES header. `room` (how many new
     // matchups the caller will keep, see refreshNextMatchups) bounds what
     // counts as "would actually be queued now".
-    if (context.mixedDivisionMatches === true) {
+    // ONE mixed match at a time: none is built while another is still on a
+    // court (context.activeMixedMatches, counted by the caller from the
+    // courts) or already waiting in the queue. Without this cap one mixed
+    // match leaves two players of the OTHER category unplaced, who then
+    // trigger the next one, and a session with slow court turnover drifts
+    // into mostly mixed play (seen in a GUI run: all four courts mixed).
+    const queuedMixed = (existingMatchups || []).some((m) => isMixedFour([...(m.teamA || []), ...(m.teamB || [])], players));
+    if (context.mixedDivisionMatches === true && !queuedMixed && !(context.activeMixedMatches > 0)) {
       const room = Number.isFinite(context.room) ? context.room : Infinity;
       const mixed = this.tryMixedMatch({ beginnerIds, intermediateIds, beginnerPlan, intermediatePlan, players, recentMatchups, resultGrouping, room });
       if (mixed) return mixed;

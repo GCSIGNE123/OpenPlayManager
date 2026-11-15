@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2026-11-16
+
+### Security
+- **PINs no longer printed on the sign-in screens** — the Organizer Access screen showed a "Demo PIN" line with the admin PIN, and the Scorer / Payment PIN screens showed the scorer PIN, to anyone who opened the site. Both lines are replaced with neutral notes (`AdminLogin.jsx`, `ScorerLogin.jsx`'s default `note`). The PINs are still client-side constants (to be changed and moved server-side — P0 before monetization); `scripts/verify-no-pin-on-screen.mjs` (3 checks) fails if any screen file contains a PIN / access-code value, a "Demo PIN" hint, or renders one of the constants.
+
+### Fixed
+- **Phone layout (GUI review at 390px / 360px)** — (1) the tab strip was wider than a phone and stretched the whole app shell, so tapping Payment / History / Messages slid the header and page up to 252px off-screen; `styles.nav` now scrolls on its own and tabs no longer shrink or wrap. (2) Scorer's Next Match card printed Team B over Team A's badges; its teams now use `matchupTeamsStackable` / `matchupTeamStackable` and stack when the card is narrow (desktop unchanged). (3) Create Session's "Last name" box ran off the right edge; `styles.input` gets `minWidth: 0`. (4) The Alerts panel opened partly off the left edge; below 520px `AlertBell.jsx` pins it to the viewport under the bell. Verified in a browser at 390px, 360px and 1280px; `scripts/verify-phone-layout.mjs` (7 checks).
+- **Mixed matches: only one at a time** — one mixed match left two players of the other category unplaced, who then triggered the next, so a session with slow court turnover drifted into mostly mixed play (GUI run: all four courts mixed at once). The engine now builds no mixed match while one is on a court (`context.activeMixedMatches`, from the new `countMixedCourts(courts, players)`) or already queued (`isMixedFour`). Replaying the same session through the real screens: never more than one at a time over 16 match ends. `scripts/verify-mixed-matches.mjs` now 40 checks.
+
 ## 2026-11-15
 
 ### Fixed

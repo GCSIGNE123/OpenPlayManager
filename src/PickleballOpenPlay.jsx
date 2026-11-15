@@ -5,6 +5,7 @@ import { APP_NAME, FOOTER_TEXT } from "./lib/brand.js";
 import { ACCESS_PREFIX, ACTIVE_SESSION_STORAGE_KEY, ADMIN_PIN, DEV_ACCESS_CODE, RANKING_POINTS_MODES, SELECTABLE_ROTATION_MODES, SCORER_PIN, SESSION_TYPES, STORAGE_PREFIX, TOURNAMENT_FORMATS, defaultState, emptyCourt, resetCourtForNextMatch } from "./lib/constants.js";
 import { resolveDatabaseCheckIn, emptyPlayerRecord, savePlayerRecord, fetchPlayer } from "./lib/playerDatabase.js";
 import { supabase } from "./lib/supabaseClient.js";
+import { countMixedCourts } from "./engines/AdaptiveSkillRotationEngine.js";
 import { uploadPlayerPhoto } from "./lib/photoStorage.js";
 import { resolveRealtimeUpdate } from "./lib/realtimeStorageEvents.js";
 import { applyRankingDelta, applyProvisionalRankingDelta, playersNeedingRankingSnapshot, snapshotSessionRankings } from "./lib/rankingSnapshot.js";
@@ -141,7 +142,13 @@ function rateOpenPlayMatch(teamA, teamB, aWon, bWon) {
 //     stuck players of one category play Beginner + Intermediate vs
 //     Beginner + Intermediate; see AdaptiveSkillRotationEngine's header
 function rotationEngineContext(s) {
-  return { ...(calibrationEngineContext(s) || {}), resultGrouping: s.resultGrouping, mixedDivisionMatches: s.mixedDivisionMatches === true };
+  return {
+    ...(calibrationEngineContext(s) || {}),
+    resultGrouping: s.resultGrouping,
+    mixedDivisionMatches: s.mixedDivisionMatches === true,
+    // one mixed match at a time — the engine builds no new one while this is above 0
+    activeMixedMatches: s.mixedDivisionMatches === true ? countMixedCourts(s.courts, s.players) : 0,
+  };
 }
 
 export default function PickleballOpenPlay() {
