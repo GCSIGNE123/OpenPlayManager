@@ -89,7 +89,7 @@ assert("actions grouped right: skill override, partner select, Skip, Prioritize,
 assert("Check Out + remove wrap as one unit", /styles\.rosterExitGroup/.test(waiting));
 assert("stats row: waiting timer, GP, W–L, RTG", /<WaitingTimer player=\{p\} \/>/.test(waiting) && /rosterStatLabel\}>GP</.test(waiting) && /rosterStatLabel\}>W–L</.test(waiting) && /rosterStatLabel\}>RTG</.test(waiting));
 assert("GP reads the player's games (0 when unset)", /\{p\.games \|\| 0\}/.test(waiting));
-assert("rating badge kept (with an em-dash placeholder before the first game)", /ratingBadge\(performance\.rating\)/.test(waiting) && /performance\.rating === null \?/.test(waiting));
+assert("rating badge kept (with an em-dash placeholder until RATING_MIN_GAMES games — see verify-clarity-labels.mjs)", /ratingBadge\(performance\.rating\)/.test(waiting) && /performance\.rating === null \|\| \(p\.games \|\| 0\) < RATING_MIN_GAMES \?/.test(waiting));
 {
   // Every handler the old flat row wired must still be wired — a layout
   // change must not drop a control.

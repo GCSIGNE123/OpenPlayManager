@@ -23,13 +23,13 @@ export default function QueueList({ queueIds, players, nextMatchups }) {
           <div style={styles.matchupTeams}>
             <div style={styles.matchupTeam}>
               {m.teamA.map((id) => (
-                <PlayerChip key={id} player={players[id]} />
+                <PlayerChip key={id} player={players[id]} hidePayment />
               ))}
             </div>
             <span style={styles.matchupVs}>VS</span>
             <div style={styles.matchupTeam}>
               {m.teamB.map((id) => (
-                <PlayerChip key={id} player={players[id]} />
+                <PlayerChip key={id} player={players[id]} hidePayment />
               ))}
             </div>
           </div>

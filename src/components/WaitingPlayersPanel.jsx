@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link2, LogOut, Pause, Play, SkipForward, Zap, X } from "lucide-react";
 import { styles } from "../styles.js";
-import { calculatePerformanceRating } from "../lib/performanceRating.js";
+import { RATING_MIN_GAMES, calculatePerformanceRating } from "../lib/performanceRating.js";
 import { getPlayerQueueStatus } from "../lib/utils.js";
 import { QUEUE_STATUSES } from "../lib/constants.js";
 import { fixedPairBlockReason, divisionLabel, divisionOf } from "../lib/fixedPairRules.js";
@@ -184,7 +184,7 @@ export default function WaitingPlayersPanel({
                     </span>
                     <span style={styles.rosterStat}>
                       <span style={styles.rosterStatLabel}>RTG</span>
-                      {performance.rating === null ? (
+                      {performance.rating === null || (p.games || 0) < RATING_MIN_GAMES ? (
                         <span style={{ ...styles.rosterStatValue, color: "var(--color-text-faint)" }}>—</span>
                       ) : (
                         <span

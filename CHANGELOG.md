@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-11-16
 
+### Changed
+- **Clearer labels and less on public screens (GUI review)** — Scorer's Session information: "In-Court Players" (which counted everyone checked in) is now **Checked In**, with a new **On Court** count beside it; "Players" is **Registered**, "Waiting Players" is **Waiting**. Continuous modes show **Matches Played** instead of "Current Round" (which was just matches + 1); Roulette and Points-Based Matchmaking keep Current Round. History numbers entries **Match N** (endMatch records one entry per match in every mode, so "Round N — 1 game" was misleading). The paid / unpaid tag ("UP", "P-C"…) no longer shows on the Live Board courts or the queue lists on Live Board and Check In — screens players can see; the Payment tab is unchanged (`CourtCard`'s new `hidePayment` prop, `QueueList`). Standings and the waiting list show a dash instead of a rating until a player has `RATING_MIN_GAMES` (2) games — one lost first game showed an orange "0"; display only, order unchanged. `scripts/verify-clarity-labels.mjs` (9 checks); `verify-scorer-player-info.mjs`'s rating check updated to the new placeholder rule.
+
 ### Security
 - **PINs no longer printed on the sign-in screens** — the Organizer Access screen showed a "Demo PIN" line with the admin PIN, and the Scorer / Payment PIN screens showed the scorer PIN, to anyone who opened the site. Both lines are replaced with neutral notes (`AdminLogin.jsx`, `ScorerLogin.jsx`'s default `note`). The PINs are still client-side constants (to be changed and moved server-side — P0 before monetization); `scripts/verify-no-pin-on-screen.mjs` (3 checks) fails if any screen file contains a PIN / access-code value, a "Demo PIN" hint, or renders one of the constants.
 

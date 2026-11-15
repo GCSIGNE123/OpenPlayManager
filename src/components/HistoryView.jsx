@@ -195,7 +195,7 @@ function RoundCard({ round, matches, players, expanded, onToggle, onSelectPlayer
     <div style={styles.historyRoundCard}>
       <button style={styles.historyRoundHead} onClick={onToggle}>
         {expanded ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
-        <span>Round {round}</span>
+        <span>Match {round}</span>
         <span style={styles.historyRoundCount}>
           {matches.length} game{matches.length === 1 ? "" : "s"}
         </span>
@@ -262,7 +262,7 @@ function PlayerHistoryPanel({ playerId, players, matchHistory, onClose }) {
           return (
             <div key={`${m.round}-${m.court}`} style={styles.historyPlayerRow}>
               <span style={styles.historyRoundTag}>
-                Round {m.round} · Court {m.court}
+                Match {m.round} · Court {m.court}
               </span>
               <span>Partner: {players[partnerId]?.name || "—"}</span>
               <span>Opponents: {opponentIds.map((id) => players[id]?.name || "Unknown").join(", ")}</span>
@@ -373,16 +373,16 @@ export default function HistoryView({ matchHistory, players, canEdit = false, on
             <Search size={14} strokeWidth={2.5} />
             <input
               style={styles.historySearchInput}
-              placeholder="Search by player, round, or court…"
+              placeholder="Search by player, match, or court…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <select style={styles.rotationSelect} value={roundFilter} onChange={(e) => setRoundFilter(e.target.value)}>
-            <option value="">All rounds</option>
+            <option value="">All matches</option>
             {rounds.map((r) => (
               <option key={r} value={r}>
-                Round {r}
+                Match {r}
               </option>
             ))}
           </select>
